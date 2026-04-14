@@ -6,6 +6,8 @@ import { useParams } from 'next/navigation';
 import { Lobby } from '@/components/Lobby';
 import { RoleRevealModal } from '@/components/RoleRevealModal';
 import { SessionTakeoverAlert } from '@/components/SessionTakeoverAlert';
+import { VideoRoom } from '@/components/video';
+import { useLiveKit } from '@/hooks/useLiveKit';
 import { useRoom } from '@/hooks/useRoom';
 import { usePlayer } from '@/hooks/usePlayer';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
@@ -18,6 +20,7 @@ export default function RoomPage() {
   const router = useRouter();
   const { isRegistered, isLoading: playerLoading } = usePlayer();
   const { room, isLoading: roomLoading, error, isConnected, rolesInPlay, sessionTakenOver, leave, refresh } = useRoom(code);
+  const { disconnect: disconnectVideo } = useLiveKit();
 
   // T035: Activity heartbeat for disconnect detection
   useHeartbeat({ enabled: isRegistered && !roomLoading && !sessionTakenOver });
@@ -201,6 +204,7 @@ export default function RoomPage() {
    * Handle leaving the room
    */
   const handleLeave = async () => {
+    disconnectVideo();
     const success = await leave();
     if (success) {
       router.push('/');
@@ -261,10 +265,13 @@ export default function RoomPage() {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 bg-avalon-midnight min-h-screen">
-      <div className="w-full max-w-lg animate-fade-in">
+      <div className="w-full max-w-lg animate-fade-in space-y-4">
+        {/* Video Room */}
+        <VideoRoom roomCode={code} />
+
         {/* Error Display */}
         {roleError && (
-          <div className="mb-6 p-4 bg-evil/20 border border-evil/50 rounded-lg animate-slide-up">
+          <div className="p-4 bg-evil/20 border border-evil/50 rounded-lg animate-slide-up">
             <p className="text-evil-light text-sm text-center">{roleError}</p>
           </div>
         )}
