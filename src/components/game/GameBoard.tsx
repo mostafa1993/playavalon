@@ -24,6 +24,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { getPhaseName, getPhaseDescription } from '@/lib/domain/game-state-machine';
 import { getQuestRequirement } from '@/lib/domain/quest-config';
+import { Copy, Check } from 'lucide-react';
 
 interface GameBoardProps {
   gameId: string;
@@ -263,7 +264,7 @@ export function GameBoard({ gameId }: GameBoardProps) {
               {roomCode}
             </span>
             <span className={`text-xs transition-all ${copied ? 'text-good' : 'text-avalon-text-muted group-hover:text-avalon-gold'}`}>
-              {copied ? '✓' : '📋'}
+              {copied ? <Check size={14} /> : <Copy size={14} />}
             </span>
           </button>
         </div>

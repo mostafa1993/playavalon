@@ -131,7 +131,7 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
           {/* Perimeter: 2*(98+98) = 392 */}
           {/* Background track (dim) */}
           <rect
-            x="1" y="1" width="98" height="98" rx="3" ry="3"
+            x="1" y="1" width="98" height="98" rx="1" ry="1"
             fill="none"
             stroke={ringColor}
             strokeWidth="2"
@@ -139,7 +139,7 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
           />
           {/* Progress ring — shrinks */}
           <rect
-            x="1" y="1" width="98" height="98" rx="3" ry="3"
+            x="1" y="1" width="98" height="98" rx="1" ry="1"
             fill="none"
             stroke={ringColor}
             strokeWidth="2"

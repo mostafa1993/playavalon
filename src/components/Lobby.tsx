@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Copy, Check } from 'lucide-react';
 import { PlayerList } from './PlayerList';
 import { RolesInPlay } from './RolesInPlay';
 import { LadyOfLakeBadge } from './LadyOfLakeBadge';
@@ -79,7 +80,7 @@ export function Lobby({
                 }
               `}
             >
-              {copied ? '✓' : '📋'}
+              {copied ? <Check size={14} /> : <Copy size={14} />}
             </span>
           </button>
         </div>
