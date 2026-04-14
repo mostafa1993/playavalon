@@ -370,7 +370,7 @@ export default function RoomPage() {
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
       {/* Floating top bar — transparent, overlays content */}
       {videoConnected && (
-        <div className="fixed top-2 left-1/2 -translate-x-1/2 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
+        <div className="fixed top-2 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
           <ViewModeToggle />
           <div className="flex items-center gap-2">
             <ChatPanel />
