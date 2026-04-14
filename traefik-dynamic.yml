@@ -1,0 +1,15 @@
+http:
+  routers:
+    livekit:
+      rule: "Host(`livekit.playavalon.fun`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: livekit
+
+  services:
+    livekit:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:7880"

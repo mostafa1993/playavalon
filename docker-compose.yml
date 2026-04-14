@@ -4,6 +4,7 @@ services:
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
+      - --providers.file.filename=/etc/traefik/dynamic.yml
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
@@ -13,16 +14,18 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
+      - ./traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
     restart: unless-stopped
 
   app:
     build: .
     env_file: .env
     depends_on:
-      - livekit
       - redis
     labels:
       - traefik.enable=true
@@ -33,17 +36,10 @@ services:
 
   livekit:
     image: livekit/livekit-server:latest
-    ports:
-      - "7881:7881"
-      - "50000-60000:50000-60000/udp"
+    network_mode: host
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml
     command: ["--config", "/etc/livekit.yaml", "--keys", "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"]
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.livekit.rule=Host(`livekit.playavalon.fun`)
-      - traefik.http.routers.livekit.tls.certresolver=letsencrypt
-      - traefik.http.services.livekit.loadbalancer.server.port=7880
     restart: unless-stopped
 
   redis:
