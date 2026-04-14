@@ -105,7 +105,7 @@ export function VideoGrid({ participants, seatNumbers, fullscreen = false, curre
             <VideoTile
               participant={participant}
               seatNumber={seatNumbers?.get(participant.identity)}
-              fillContainer
+
               isCurrentSpeaker={currentSpeaker === participant.identity}
               timerColor={currentSpeaker === participant.identity ? timerColor : null}
               timerProgress={currentSpeaker === participant.identity ? timerProgress : null}

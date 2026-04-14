@@ -18,8 +18,6 @@ interface VideoTileProps {
   participant: Participant;
   /** Seat number (1-based) shown as prefix to name during game */
   seatNumber?: number;
-  /** If true, fill the parent container instead of using fixed aspect ratio */
-  fillContainer?: boolean;
   /** Timer color for speaking turn: green/yellow/red or null */
   timerColor?: 'green' | 'yellow' | 'red' | null;
   /** Timer progress 0-1 (1=full, 0=empty) or null */
@@ -30,7 +28,7 @@ interface VideoTileProps {
   timeRemaining?: number | null;
 }
 
-export function VideoTile({ participant, seatNumber, fillContainer = false, timerColor, timerProgress, isCurrentSpeaker = false, timeRemaining }: VideoTileProps) {
+export function VideoTile({ participant, seatNumber, timerColor, timerProgress, isCurrentSpeaker = false, timeRemaining }: VideoTileProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const isSpeaking = useIsSpeaking(participant);
   // Force re-render when tracks change on this participant
@@ -127,24 +125,25 @@ export function VideoTile({ participant, seatNumber, fillContainer = false, time
       {isCurrentSpeaker && (
         <svg
           className="absolute inset-0 w-full h-full z-10 pointer-events-none"
-          viewBox="0 0 100 100"
+          viewBox="0 0 200 200"
           preserveAspectRatio="none"
         >
+          {/* Perimeter of a 190x190 rect with rx=12: approx 2*(190+190) = 760 */}
           {/* Background track (dim) */}
           <rect
-            x="1" y="1" width="98" height="98" rx="6" ry="6"
+            x="5" y="5" width="190" height="190" rx="4" ry="4"
             fill="none"
             stroke={ringColor}
-            strokeWidth="2.5"
-            strokeOpacity="0.2"
+            strokeWidth="10"
+            strokeOpacity="0.15"
           />
           {/* Progress ring — shrinks clockwise */}
           <rect
-            x="1" y="1" width="98" height="98" rx="6" ry="6"
+            x="5" y="5" width="190" height="190" rx="4" ry="4"
             fill="none"
             stroke={ringColor}
-            strokeWidth="2.5"
-            strokeDasharray={`${progress * 392} ${392}`}
+            strokeWidth="10"
+            strokeDasharray={`${progress * 760} ${760}`}
             strokeLinecap="round"
             style={{ transition: 'stroke-dasharray 0.3s linear, stroke 0.5s ease' }}
           />
@@ -180,8 +179,8 @@ export function VideoTile({ participant, seatNumber, fillContainer = false, time
         </div>
       )}
 
-      {/* Name bar */}
-      <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 flex items-center gap-1.5">
+      {/* Name bar — z-20 to sit above the timer ring */}
+      <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 flex items-center gap-1.5 z-20">
         {isSpeaking && (
           <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
         )}
