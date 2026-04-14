@@ -25,9 +25,11 @@ interface VideoRoomProps {
   fullscreen?: boolean;
   /** If true, don't render the header bar and controls (parent handles them) */
   hideControls?: boolean;
+  /** If true, render only the join buttons (no wrapper box) */
+  inline?: boolean;
 }
 
-export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscreen = false, hideControls = false }: VideoRoomProps) {
+export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscreen = false, hideControls = false, inline = false }: VideoRoomProps) {
   const {
     room,
     isConnected,
@@ -81,8 +83,55 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
     };
   }, [room]);
 
+  // Join buttons — shared between inline and full modes
+  const joinButtons = (
+    <>
+      <button
+        disabled={isJoining}
+        onClick={async () => {
+          setIsJoining(true);
+          try {
+            await connect(roomCode, { enableCamera: true, enableMic: true });
+          } finally {
+            setIsJoining(false);
+          }
+        }}
+        className="px-3 py-1.5 bg-avalon-gold text-avalon-midnight rounded-lg text-xs font-medium hover:bg-avalon-gold-light transition-colors disabled:opacity-50"
+      >
+        {isJoining ? 'Joining...' : 'Join with video'}
+      </button>
+      <button
+        disabled={isJoining}
+        onClick={async () => {
+          setIsJoining(true);
+          try {
+            await connect(roomCode, { enableCamera: false, enableMic: true });
+          } finally {
+            setIsJoining(false);
+          }
+        }}
+        className="px-3 py-1.5 bg-avalon-dark-lighter text-avalon-text rounded-lg text-xs font-medium hover:bg-avalon-dark-border transition-colors disabled:opacity-50"
+      >
+        {isJoining ? 'Joining...' : 'Audio only'}
+      </button>
+    </>
+  );
+
   // Not connected — show join button
   if (!isConnected) {
+    if (inline) {
+      // Just the buttons, no wrapper
+      return (
+        <div className="flex gap-2">
+          {connectionState === ConnectionState.Connecting ? (
+            <span className="text-avalon-text-muted text-xs">Connecting...</span>
+          ) : (
+            joinButtons
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col items-center justify-center gap-3 p-6 bg-avalon-navy rounded-lg border border-avalon-dark-border">
         {connectionState === ConnectionState.Connecting ? (
@@ -97,34 +146,7 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
               <p className="text-red-400 text-xs">{error}</p>
             )}
             <div className="flex gap-2">
-              <button
-                disabled={isJoining}
-                onClick={async () => {
-                  setIsJoining(true);
-                  try {
-                    await connect(roomCode, { enableCamera: true, enableMic: true });
-                  } finally {
-                    setIsJoining(false);
-                  }
-                }}
-                className="px-4 py-2 bg-avalon-gold text-avalon-midnight rounded-lg text-sm font-medium hover:bg-avalon-gold-light transition-colors disabled:opacity-50"
-              >
-                {isJoining ? 'Joining...' : 'Join with video'}
-              </button>
-              <button
-                disabled={isJoining}
-                onClick={async () => {
-                  setIsJoining(true);
-                  try {
-                    await connect(roomCode, { enableCamera: false, enableMic: true });
-                  } finally {
-                    setIsJoining(false);
-                  }
-                }}
-                className="px-4 py-2 bg-avalon-dark-lighter text-avalon-text rounded-lg text-sm font-medium hover:bg-avalon-dark-border transition-colors disabled:opacity-50"
-              >
-                {isJoining ? 'Joining...' : 'Join audio only'}
-              </button>
+              {joinButtons}
             </div>
           </>
         )}

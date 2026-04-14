@@ -368,9 +368,9 @@ export default function RoomPage() {
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
-      {/* Fixed top bar — same as game page */}
+      {/* Floating top bar — transparent, overlays content */}
       {videoConnected && (
-        <div className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-1.5 bg-avalon-navy border-b border-avalon-dark-border z-50">
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
           <ViewModeToggle />
           <div className="flex items-center gap-2">
             <ChatPanel />
@@ -379,8 +379,8 @@ export default function RoomPage() {
         </div>
       )}
 
-      {/* Content area */}
-      <div className={`flex-1 min-h-0 ${videoConnected ? 'pt-[44px]' : ''}`}>
+      {/* Content area — full height */}
+      <div className="flex-1 min-h-0">
         {videoConnected && viewMode === 'video' ? (
           /* Video-only mode */
           <div className="h-full">
@@ -409,15 +409,17 @@ export default function RoomPage() {
             </div>
           </div>
         ) : (
-          /* Not connected — lobby left, join buttons right */
-          <div className="flex h-full">
-            <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 overflow-y-auto">
-              <div className="w-full max-w-lg animate-fade-in space-y-4">
-                {lobbyContent}
+          /* Not connected — lobby with join buttons inline */
+          <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 overflow-y-auto">
+            <div className="w-full max-w-lg animate-fade-in space-y-4">
+              {/* Join video inline — compact row */}
+              <div className="flex items-center justify-between bg-avalon-navy rounded-lg border border-avalon-dark-border px-4 py-2">
+                <span className="text-avalon-text-secondary text-sm">Join video call</span>
+                <div className="flex gap-2">
+                  <VideoRoom roomCode={code} inline />
+                </div>
               </div>
-            </div>
-            <div className="w-[400px] flex-shrink-0 flex items-center justify-center border-l border-avalon-dark-border">
-              <VideoRoom roomCode={code} />
+              {lobbyContent}
             </div>
           </div>
         )}

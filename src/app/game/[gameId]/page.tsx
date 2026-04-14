@@ -142,9 +142,9 @@ export default function GamePage() {
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
-      {/* Fixed top bar — always in the same position */}
+      {/* Floating top bar — transparent, overlays content */}
       {isConnected && (
-        <div className="flex items-center justify-between px-3 py-1.5 bg-avalon-navy border-b border-avalon-dark-border flex-shrink-0 z-10">
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
           <ViewModeToggle />
           <div className="flex items-center gap-2">
             <ChatPanel />
@@ -153,7 +153,7 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* Content area */}
+      {/* Content area — full height, no padding needed */}
       <div className="flex-1 min-h-0">
         {viewMode === 'video' && isConnected ? (
           /* Video-only mode */
