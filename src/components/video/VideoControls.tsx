@@ -20,7 +20,7 @@ export function VideoControls() {
   if (!isConnected) return null;
 
   return (
-    <div className="flex items-center justify-center gap-3 py-2 px-4 bg-avalon-navy border-t border-avalon-dark-border">
+    <div className="flex items-center justify-center gap-1">
       <button
         onClick={toggleMic}
         className={`
