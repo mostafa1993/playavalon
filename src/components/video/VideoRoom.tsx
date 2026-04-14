@@ -93,50 +93,29 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
 
   // Join buttons — shared between inline and full modes
   const joinButtons = (
-    <>
-      <button
-        disabled={isJoining}
-        onClick={async () => {
-          setIsJoining(true);
-          try {
-            await connect(roomCode, { enableCamera: true, enableMic: true });
-          } finally {
-            setIsJoining(false);
-          }
-        }}
-        className="px-2.5 py-1 bg-avalon-gold text-avalon-midnight rounded-md text-xs font-medium hover:bg-avalon-gold-light transition-colors disabled:opacity-50"
-      >
-        {isJoining ? 'Joining...' : 'Join with video'}
-      </button>
-      <button
-        disabled={isJoining}
-        onClick={async () => {
-          setIsJoining(true);
-          try {
-            await connect(roomCode, { enableCamera: false, enableMic: true });
-          } finally {
-            setIsJoining(false);
-          }
-        }}
-        className="px-2.5 py-1 bg-avalon-dark-lighter text-avalon-text rounded-md text-xs font-medium hover:bg-avalon-dark-border transition-colors disabled:opacity-50"
-      >
-        {isJoining ? 'Joining...' : 'Audio only'}
-      </button>
-    </>
+    <button
+      disabled={isJoining}
+      onClick={async () => {
+        setIsJoining(true);
+        try {
+          await connect(roomCode, { enableCamera: false, enableMic: false });
+        } finally {
+          setIsJoining(false);
+        }
+      }}
+      className="px-2.5 py-1 bg-avalon-gold text-avalon-midnight rounded-md text-xs font-medium hover:bg-avalon-gold-light transition-colors disabled:opacity-50"
+    >
+      {isJoining ? 'Joining...' : 'Join call'}
+    </button>
   );
 
   // Not connected — show join button
   if (!isConnected) {
     if (inline) {
-      // Just the buttons, no wrapper
-      return (
-        <div className="flex gap-2">
-          {connectionState === ConnectionState.Connecting ? (
-            <span className="text-avalon-text-muted text-xs">Connecting...</span>
-          ) : (
-            joinButtons
-          )}
-        </div>
+      return connectionState === ConnectionState.Connecting ? (
+        <span className="text-avalon-text-muted text-xs">Connecting...</span>
+      ) : (
+        joinButtons
       );
     }
 
@@ -153,9 +132,7 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
             {error && (
               <p className="text-red-400 text-xs">{error}</p>
             )}
-            <div className="flex gap-2">
-              {joinButtons}
-            </div>
+            {joinButtons}
           </>
         )}
       </div>

@@ -71,18 +71,39 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
     .toUpperCase()
     .slice(0, 2);
 
+  // Track the attached video element + track for cleanup
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
+  const attachedVideoTrackRef = useRef<any>(null);
+
   // Attach video track via ref callback — fires immediately when element mounts
   const videoRefCallback = useCallback(
     (el: HTMLVideoElement | null) => {
-      if (!el) return;
-      // Detach any previous tracks
+      // Detach previous track from previous element
+      if (attachedVideoTrackRef.current && videoElRef.current) {
+        attachedVideoTrackRef.current.detach(videoElRef.current);
+      }
+      videoElRef.current = el;
+      if (!el) {
+        attachedVideoTrackRef.current = null;
+        return;
+      }
       el.srcObject = null;
       if (cameraPublication?.track) {
         cameraPublication.track.attach(el);
+        attachedVideoTrackRef.current = cameraPublication.track;
       }
     },
     [cameraPublication?.track]
   );
+
+  // Cleanup video track on unmount
+  useEffect(() => {
+    return () => {
+      if (attachedVideoTrackRef.current && videoElRef.current) {
+        attachedVideoTrackRef.current.detach(videoElRef.current);
+      }
+    };
+  }, []);
 
   // Attach audio track (remote participants only)
   useEffect(() => {

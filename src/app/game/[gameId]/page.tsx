@@ -5,7 +5,7 @@
  * Main game play screen with video calling split layout
  */
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { GameBoard } from '@/components/game/GameBoard';
 import { VideoRoom } from '@/components/video';
@@ -19,64 +19,7 @@ import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useGameState } from '@/hooks/useGameState';
 import { useSpeakingTimer } from '@/hooks/useSpeakingTimer';
 import { getPlayerId, hasPlayerId } from '@/lib/utils/player-id';
-
-/**
- * ScaleToFit — scales its children down to fit the container without scrolling
- */
-function ScaleToFit({ children, className }: { children: React.ReactNode; className?: string }) {
-  const outerRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const scaleRef = useRef(1);
-
-  useEffect(() => {
-    const update = () => {
-      const outer = outerRef.current;
-      const inner = innerRef.current;
-      if (!outer || !inner) return;
-
-      const availableHeight = outer.clientHeight;
-      // Get natural height by undoing the current scale
-      const currentScale = scaleRef.current;
-      const scaledHeight = inner.getBoundingClientRect().height;
-      const naturalHeight = scaledHeight / currentScale;
-
-      if (naturalHeight > availableHeight && naturalHeight > 0) {
-        const newScale = Math.max(0.4, availableHeight / naturalHeight);
-        scaleRef.current = newScale;
-        setScale(newScale);
-      } else if (naturalHeight < availableHeight * 0.95) {
-        // Scale back up if there's room
-        const newScale = Math.min(1, availableHeight / naturalHeight);
-        scaleRef.current = newScale;
-        setScale(newScale);
-      }
-    };
-
-    const timer = setTimeout(update, 100);
-    const observer = new ResizeObserver(() => setTimeout(update, 50));
-    if (outerRef.current) observer.observe(outerRef.current);
-    return () => {
-      clearTimeout(timer);
-      observer.disconnect();
-    };
-  }, []);
-
-  return (
-    <div ref={outerRef} className={`overflow-hidden ${className || ''}`}>
-      <div
-        ref={innerRef}
-        style={{
-          transform: `scale(${scale})`,
-          transformOrigin: 'top center',
-          width: `${100 / scale}%`,
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
+import { ScaleToFit } from '@/components/ui/ScaleToFit';
 
 export default function GamePage() {
   const router = useRouter();
@@ -94,6 +37,10 @@ export default function GamePage() {
     }
   }, [gameState?.game?.leader_index, initialLeaderIndex]);
 
+  // Stable keys for seat number memoization — avoid recalculating every 3s poll
+  const seatingOrderKey = gameState?.game?.seating_order?.join(',') ?? '';
+  const participantCount = room ? room.remoteParticipants.size + 1 : 0;
+
   // Build seat numbers: first leader = seat 1, then clockwise
   const seatNumbers = useMemo(() => {
     if (!gameState?.game?.seating_order || !gameState.players || !room || initialLeaderIndex === null) return undefined;
@@ -103,21 +50,17 @@ export default function GamePage() {
     const playerCount = seating_order.length;
     const map = new Map<string, number>();
 
-    // Map DB player id → LiveKit identity (participant.identity = localStorage player_id)
-    // We match by nickname since game state doesn't expose localStorage player_id
     const participants = [
       room.localParticipant,
       ...Array.from(room.remoteParticipants.values()),
     ];
 
     for (let i = 0; i < playerCount; i++) {
-      // Seat number: rotate so leader_index position = seat 1
       const seatNum = ((i - leader_index + playerCount) % playerCount) + 1;
       const dbPlayerId = seating_order[i];
       const gamePlayer = gameState.players.find((p: any) => p.id === dbPlayerId);
       if (!gamePlayer) continue;
 
-      // Find the LiveKit participant with the matching nickname
       const lkParticipant = participants.find(p => p.name === gamePlayer.nickname);
       if (lkParticipant) {
         map.set(lkParticipant.identity, seatNum);
@@ -125,7 +68,8 @@ export default function GamePage() {
     }
 
     return map.size > 0 ? map : undefined;
-  }, [gameState?.game?.seating_order, initialLeaderIndex, gameState?.players, room]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seatingOrderKey, initialLeaderIndex, participantCount]);
 
   // Redirect to home if not registered
   useEffect(() => {

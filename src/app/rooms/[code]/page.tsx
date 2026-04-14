@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { AlertTriangle, Search } from 'lucide-react';
@@ -18,47 +18,6 @@ import { usePlayer } from '@/hooks/usePlayer';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { getPlayerId } from '@/lib/utils/player-id';
 import type { SplitIntelVisibility, OberonSplitIntelVisibility } from '@/types/game';
-
-/**
- * ScaleToFit — scales children to fit container without scrolling
- */
-function ScaleToFit({ children, className }: { children: React.ReactNode; className?: string }) {
-  const outerRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    const update = () => {
-      const outer = outerRef.current;
-      const inner = innerRef.current;
-      if (!outer || !inner) return;
-      inner.style.transform = 'scale(1)';
-      const naturalHeight = inner.scrollHeight;
-      const availableHeight = outer.clientHeight;
-      if (naturalHeight > availableHeight && naturalHeight > 0) {
-        setScale(Math.max(0.5, availableHeight / naturalHeight));
-      } else {
-        setScale(1);
-      }
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    if (outerRef.current) observer.observe(outerRef.current);
-    if (innerRef.current) observer.observe(innerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <div ref={outerRef} className={`overflow-hidden ${className || ''}`}>
-      <div
-        ref={innerRef}
-        style={{ transform: `scale(${scale})`, transformOrigin: 'top center', width: `${100 / scale}%` }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
 
 export default function RoomPage() {
   const params = useParams();

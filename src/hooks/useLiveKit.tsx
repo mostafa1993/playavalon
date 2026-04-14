@@ -84,6 +84,7 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
   const [isMicEnabled, setIsMicEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const connectingRef = useRef(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const chatVisibleRef = useRef(false);
@@ -130,6 +131,10 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Prevent concurrent connect attempts (double-click guard)
+    if (connectingRef.current) return;
+    connectingRef.current = true;
+
     // Disconnect any existing connection
     if (roomRef.current) {
       roomRef.current.disconnect();
@@ -172,14 +177,19 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
         setConnectionState(state);
       });
 
+      const MAX_CHAT_PAYLOAD = 2048; // 2KB max per chat message
+
       room.on(RoomEvent.DataReceived, (payload: Uint8Array, participant?: RemoteParticipant, _kind?: unknown, topic?: string) => {
+        // Drop oversized payloads to prevent memory abuse
+        if (payload.byteLength > MAX_CHAT_PAYLOAD) return;
+
         if (topic === CHAT_TOPIC && participant) {
           const text = new TextDecoder().decode(payload);
           const msg: ChatMessage = {
-            id: `${Date.now()}-${participant.identity}`,
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${participant.identity}`,
             sender: participant.identity,
             senderName: participant.name || participant.identity,
-            text,
+            text: text.slice(0, 500),
             timestamp: Date.now(),
           };
           setChatMessages((prev) => [...prev, msg]);
@@ -218,6 +228,8 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect to video');
       setConnectionState(ConnectionState.Disconnected);
+    } finally {
+      connectingRef.current = false;
     }
   }, []);
 
