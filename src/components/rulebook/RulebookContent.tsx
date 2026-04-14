@@ -29,7 +29,7 @@ export function RulebookContent({ initialTab = 'roles', compact = false }: Ruleb
       {!compact && (
         <div className="text-center space-y-2 mb-8">
           <h1 className="text-3xl md:text-4xl font-display font-bold text-avalon-gold">
-            <BookOpen size={16} className="inline" /> Rulebook
+            <BookOpen size={32} className="inline mr-2" /> Rulebook
           </h1>
           <p className="text-avalon-text-muted max-w-lg mx-auto">
             Everything you need to know about playing Avalon Online

@@ -1,6 +1,14 @@
 'use client';
 
+import { Users, Settings, Eye, GitBranch } from 'lucide-react';
 import { RULEBOOK_TABS, type RulebookTabId } from '@/lib/domain/rulebook-content';
+
+const TAB_ICONS: Record<RulebookTabId, React.ReactNode> = {
+  roles: <Users size={18} />,
+  modes: <Settings size={18} />,
+  visual: <Eye size={18} />,
+  flow: <GitBranch size={18} />,
+};
 
 interface RulebookTabsProps {
   activeTab: RulebookTabId;
@@ -39,7 +47,7 @@ export function RulebookTabs({ activeTab, onTabChange }: RulebookTabsProps) {
               }
             `}
           >
-            <span className="text-lg">{tab.icon}</span>
+            <span>{TAB_ICONS[tab.id]}</span>
             <span>{tab.label}</span>
           </button>
         );
