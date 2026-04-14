@@ -196,11 +196,11 @@ describe('roles', () => {
   describe('validateRoleDistribution', () => {
     it('should validate correct 5-player distribution', () => {
       const assignments: RoleAssignment[] = [
-        { playerId: 'p1', role: 'good' },
-        { playerId: 'p2', role: 'good' },
-        { playerId: 'p3', role: 'good' },
-        { playerId: 'p4', role: 'evil' },
-        { playerId: 'p5', role: 'evil' },
+        { playerId: 'p1', role: 'good', specialRole: 'servant' },
+        { playerId: 'p2', role: 'good', specialRole: 'servant' },
+        { playerId: 'p3', role: 'good', specialRole: 'servant' },
+        { playerId: 'p4', role: 'evil', specialRole: 'minion' },
+        { playerId: 'p5', role: 'evil', specialRole: 'minion' },
       ];
       const result = validateRoleDistribution(assignments, 5);
       expect(result.valid).toBe(true);
@@ -208,16 +208,16 @@ describe('roles', () => {
 
     it('should validate correct 10-player distribution', () => {
       const assignments: RoleAssignment[] = [
-        { playerId: 'p1', role: 'good' },
-        { playerId: 'p2', role: 'good' },
-        { playerId: 'p3', role: 'good' },
-        { playerId: 'p4', role: 'good' },
-        { playerId: 'p5', role: 'good' },
-        { playerId: 'p6', role: 'good' },
-        { playerId: 'p7', role: 'evil' },
-        { playerId: 'p8', role: 'evil' },
-        { playerId: 'p9', role: 'evil' },
-        { playerId: 'p10', role: 'evil' },
+        { playerId: 'p1', role: 'good', specialRole: 'servant' },
+        { playerId: 'p2', role: 'good', specialRole: 'servant' },
+        { playerId: 'p3', role: 'good', specialRole: 'servant' },
+        { playerId: 'p4', role: 'good', specialRole: 'servant' },
+        { playerId: 'p5', role: 'good', specialRole: 'servant' },
+        { playerId: 'p6', role: 'good', specialRole: 'servant' },
+        { playerId: 'p7', role: 'evil', specialRole: 'minion' },
+        { playerId: 'p8', role: 'evil', specialRole: 'minion' },
+        { playerId: 'p9', role: 'evil', specialRole: 'minion' },
+        { playerId: 'p10', role: 'evil', specialRole: 'minion' },
       ];
       const result = validateRoleDistribution(assignments, 10);
       expect(result.valid).toBe(true);
@@ -225,10 +225,10 @@ describe('roles', () => {
 
     it('should reject wrong total count', () => {
       const assignments: RoleAssignment[] = [
-        { playerId: 'p1', role: 'good' },
-        { playerId: 'p2', role: 'good' },
-        { playerId: 'p3', role: 'good' },
-        { playerId: 'p4', role: 'evil' },
+        { playerId: 'p1', role: 'good', specialRole: 'servant' },
+        { playerId: 'p2', role: 'good', specialRole: 'servant' },
+        { playerId: 'p3', role: 'good', specialRole: 'servant' },
+        { playerId: 'p4', role: 'evil', specialRole: 'minion' },
       ];
       const result = validateRoleDistribution(assignments, 5);
       expect(result.valid).toBe(false);
@@ -237,11 +237,11 @@ describe('roles', () => {
 
     it('should reject wrong good count', () => {
       const assignments: RoleAssignment[] = [
-        { playerId: 'p1', role: 'good' },
-        { playerId: 'p2', role: 'good' },
-        { playerId: 'p3', role: 'evil' },
-        { playerId: 'p4', role: 'evil' },
-        { playerId: 'p5', role: 'evil' },
+        { playerId: 'p1', role: 'good', specialRole: 'servant' },
+        { playerId: 'p2', role: 'good', specialRole: 'servant' },
+        { playerId: 'p3', role: 'evil', specialRole: 'minion' },
+        { playerId: 'p4', role: 'evil', specialRole: 'minion' },
+        { playerId: 'p5', role: 'evil', specialRole: 'minion' },
       ];
       const result = validateRoleDistribution(assignments, 5);
       expect(result.valid).toBe(false);
@@ -252,11 +252,11 @@ describe('roles', () => {
       // 5 players should have 3 good, 2 evil
       // This has 4 good, 1 evil - validation catches wrong good count first
       const assignments: RoleAssignment[] = [
-        { playerId: 'p1', role: 'good' },
-        { playerId: 'p2', role: 'good' },
-        { playerId: 'p3', role: 'good' },
-        { playerId: 'p4', role: 'good' },
-        { playerId: 'p5', role: 'evil' },
+        { playerId: 'p1', role: 'good', specialRole: 'servant' },
+        { playerId: 'p2', role: 'good', specialRole: 'servant' },
+        { playerId: 'p3', role: 'good', specialRole: 'servant' },
+        { playerId: 'p4', role: 'good', specialRole: 'servant' },
+        { playerId: 'p5', role: 'evil', specialRole: 'minion' },
       ];
       const result = validateRoleDistribution(assignments, 5);
       expect(result.valid).toBe(false);
