@@ -124,11 +124,13 @@ export function useSpeakingTimer({
       generatedFor: generatedForQuestRef.current,
     });
     if (!isManager || !seatNumbers || !leaderIdentity || seatNumbers.size === 0) return;
-    if (questNumber === 0 || questNumber === generatedForQuestRef.current) return;
+    if (questNumber === 0) return;
+    // Re-generate if quest changed OR if we haven't generated yet (late isManager/seatNumbers arrival)
+    if (questNumber === generatedForQuestRef.current && state.speakingOrder.length > 0) return;
     generatedForQuestRef.current = questNumber;
 
     const order = generateSpeakingOrder(seatNumbers, leaderIdentity);
-    console.log('[SpeakingTimer] Generated order:', order);
+    console.log('[SpeakingTimer] Generated order:', order, 'seatNumbers:', [...seatNumbers.entries()]);
     const newState: SpeakingTimerState = {
       speakingOrder: order,
       currentSpeakerIndex: 0,

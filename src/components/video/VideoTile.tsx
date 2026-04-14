@@ -171,13 +171,11 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
         </svg>
       )}
 
-      {/* Circular countdown clock — positioned inside the border ring */}
+      {/* Circular countdown clock — positioned inside the border ring with padding */}
       {isCurrentSpeaker && (
-        <div className="absolute top-3 left-3 z-20">
-          <div className="relative w-10 h-10">
-            {/* SVG circular progress */}
+        <div className="absolute top-5 left-5 z-20">
+          <div className="relative w-14 h-14">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-              {/* Background circle */}
               <circle
                 cx="18" cy="18" r="15"
                 fill="rgba(0,0,0,0.6)"
@@ -185,7 +183,6 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
                 strokeWidth="2"
                 strokeOpacity="0.3"
               />
-              {/* Progress arc — shrinks clockwise */}
               {timeRemaining != null && (
                 <circle
                   cx="18" cy="18" r="15"
@@ -198,8 +195,7 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
                 />
               )}
             </svg>
-            {/* Seconds text centered */}
-            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
+            <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white">
               {timeRemaining != null ? Math.ceil(timeRemaining) : '●'}
             </span>
           </div>
