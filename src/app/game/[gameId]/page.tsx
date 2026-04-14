@@ -159,25 +159,21 @@ export default function GamePage() {
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
-      {/* Floating top-right bar — always visible */}
-      <div className="fixed top-6 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
-        {isConnected ? (
-          <>
-            <ViewModeToggle />
-            <div className="flex items-center gap-2">
-              <TimerButton
-                onStart={speakingTimer.startTimer}
-                isRunning={speakingTimer.timeRemaining !== null && speakingTimer.timeRemaining > 0}
-                isManager={speakingTimer.isManager}
-              />
-              <ChatPanel />
-              <VideoControls />
-            </div>
-          </>
-        ) : roomCode ? (
-          <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} inline />
-        ) : null}
-      </div>
+      {/* Floating top-right bar — only when connected */}
+      {isConnected && (
+        <div className="fixed top-6 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
+          <ViewModeToggle />
+          <div className="flex items-center gap-2">
+            <TimerButton
+              onStart={speakingTimer.startTimer}
+              isRunning={speakingTimer.timeRemaining !== null && speakingTimer.timeRemaining > 0}
+              isManager={speakingTimer.isManager}
+            />
+            <ChatPanel />
+            <VideoControls />
+          </div>
+        </div>
+      )}
 
       {/* Content area */}
       <div className="flex-1 min-h-0 flex">
@@ -191,7 +187,13 @@ export default function GamePage() {
           `}
         >
           <div className={`${!isConnected || viewMode === 'game' ? 'max-w-2xl mx-auto py-4 px-4 pb-8' : ''}`}>
-            {!isConnected && roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} />}
+            {/* Join video bar — centered when not connected */}
+            {!isConnected && roomCode && (
+              <div className="flex items-center justify-center gap-3 py-2 px-4 mb-3 bg-avalon-navy/50 rounded-lg border border-avalon-dark-border">
+                <span className="text-avalon-text-muted text-sm">Join video call</span>
+                <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} inline />
+              </div>
+            )}
             <GameBoard gameId={gameId} />
           </div>
         </div>

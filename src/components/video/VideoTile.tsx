@@ -134,7 +134,7 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
             x="5" y="5" width="190" height="190" rx="4" ry="4"
             fill="none"
             stroke={ringColor}
-            strokeWidth="10"
+            strokeWidth="3"
             strokeOpacity="0.15"
           />
           {/* Progress ring — shrinks clockwise */}
@@ -142,7 +142,7 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
             x="5" y="5" width="190" height="190" rx="4" ry="4"
             fill="none"
             stroke={ringColor}
-            strokeWidth="10"
+            strokeWidth="3"
             strokeDasharray={`${progress * 760} ${760}`}
             strokeLinecap="round"
             style={{ transition: 'stroke-dasharray 0.3s linear, stroke 0.5s ease' }}

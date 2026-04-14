@@ -104,7 +104,7 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
             setIsJoining(false);
           }
         }}
-        className="px-3 py-1.5 bg-avalon-gold text-avalon-midnight rounded-lg text-xs font-medium hover:bg-avalon-gold-light transition-colors disabled:opacity-50"
+        className="px-2.5 py-1 bg-avalon-gold text-avalon-midnight rounded-md text-xs font-medium hover:bg-avalon-gold-light transition-colors disabled:opacity-50"
       >
         {isJoining ? 'Joining...' : 'Join with video'}
       </button>
@@ -118,7 +118,7 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
             setIsJoining(false);
           }
         }}
-        className="px-3 py-1.5 bg-avalon-dark-lighter text-avalon-text rounded-lg text-xs font-medium hover:bg-avalon-dark-border transition-colors disabled:opacity-50"
+        className="px-2.5 py-1 bg-avalon-dark-lighter text-avalon-text rounded-md text-xs font-medium hover:bg-avalon-dark-border transition-colors disabled:opacity-50"
       >
         {isJoining ? 'Joining...' : 'Audio only'}
       </button>

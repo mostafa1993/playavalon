@@ -368,20 +368,16 @@ export default function RoomPage() {
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
-      {/* Floating top-right bar — always visible */}
-      <div className="fixed top-6 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
-        {videoConnected ? (
-          <>
-            <ViewModeToggle />
-            <div className="flex items-center gap-2">
-              <ChatPanel />
-              <VideoControls />
-            </div>
-          </>
-        ) : (
-          <VideoRoom roomCode={code} inline />
-        )}
-      </div>
+      {/* Floating top-right bar — only when connected */}
+      {videoConnected && (
+        <div className="fixed top-6 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
+          <ViewModeToggle />
+          <div className="flex items-center gap-2">
+            <ChatPanel />
+            <VideoControls />
+          </div>
+        </div>
+      )}
 
       {/* Content area — full height */}
       <div className="flex-1 min-h-0">
@@ -410,6 +406,13 @@ export default function RoomPage() {
           <div className="h-full overflow-y-auto">
             <div className="flex flex-col items-center p-6 md:p-8">
               <div className="w-full max-w-lg animate-fade-in space-y-4 pb-8">
+                {/* Join video bar — top center when not connected */}
+                {!videoConnected && (
+                  <div className="flex items-center justify-center gap-3 py-2 px-4 bg-avalon-navy/50 rounded-lg border border-avalon-dark-border">
+                    <span className="text-avalon-text-muted text-sm">Join video call</span>
+                    <VideoRoom roomCode={code} inline />
+                  </div>
+                )}
                 {lobbyContent}
               </div>
             </div>
