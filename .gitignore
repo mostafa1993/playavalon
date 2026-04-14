@@ -32,6 +32,7 @@ yarn-error.log*
 .env
 .env.local
 .env.production
+livekit-dev.yaml
 .env.development.local
 .env.test.local
 .env.production.local

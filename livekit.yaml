@@ -5,5 +5,3 @@ rtc:
   port_range_start: 50000
   port_range_end: 60000
   use_external_ip: true
-keys:
-  avalon_prod_key: avalon_prod_secret_key_change_me_32chars!
