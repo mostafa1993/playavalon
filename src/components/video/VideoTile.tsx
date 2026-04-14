@@ -171,14 +171,38 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
         </svg>
       )}
 
-      {/* Turn indicator badge */}
+      {/* Circular countdown clock — positioned inside the border ring */}
       {isCurrentSpeaker && (
-        <div className={`absolute top-1 left-1 z-20 px-1.5 py-0.5 rounded text-[10px] font-bold
-          ${timerColor === 'red' ? 'bg-red-500 text-white'
-            : timerColor === 'yellow' ? 'bg-yellow-400 text-black'
-            : 'bg-green-500 text-white'}`}
-        >
-          {timeRemaining != null ? `${Math.ceil(timeRemaining)}s` : 'TURN'}
+        <div className="absolute top-3 left-3 z-20">
+          <div className="relative w-10 h-10">
+            {/* SVG circular progress */}
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+              {/* Background circle */}
+              <circle
+                cx="18" cy="18" r="15"
+                fill="rgba(0,0,0,0.6)"
+                stroke={ringColor}
+                strokeWidth="2"
+                strokeOpacity="0.3"
+              />
+              {/* Progress arc — shrinks clockwise */}
+              {timeRemaining != null && (
+                <circle
+                  cx="18" cy="18" r="15"
+                  fill="none"
+                  stroke={ringColor}
+                  strokeWidth="2.5"
+                  strokeDasharray={`${progress * 94.2} 94.2`}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dasharray 0.3s linear, stroke 0.5s ease' }}
+                />
+              )}
+            </svg>
+            {/* Seconds text centered */}
+            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
+              {timeRemaining != null ? Math.ceil(timeRemaining) : '●'}
+            </span>
+          </div>
         </div>
       )}
       {isCameraOn ? (
