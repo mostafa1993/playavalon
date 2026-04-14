@@ -24,10 +24,10 @@ export function VideoControls() {
       <button
         onClick={toggleMic}
         className={`
-          w-10 h-10 rounded-full flex items-center justify-center transition-colors
+          p-1.5 rounded-full flex items-center justify-center transition-colors
           ${isMicEnabled
-            ? 'bg-avalon-dark-lighter text-avalon-text hover:bg-avalon-dark-border'
-            : 'bg-red-500/80 text-white hover:bg-red-600'}
+            ? 'text-avalon-text hover:text-avalon-gold'
+            : 'text-red-400 hover:text-red-300'}
         `}
         title={isMicEnabled ? 'Mute mic' : 'Unmute mic'}
       >
@@ -37,10 +37,10 @@ export function VideoControls() {
       <button
         onClick={toggleCamera}
         className={`
-          w-10 h-10 rounded-full flex items-center justify-center transition-colors
+          p-1.5 rounded-full flex items-center justify-center transition-colors
           ${isCameraEnabled
-            ? 'bg-avalon-dark-lighter text-avalon-text hover:bg-avalon-dark-border'
-            : 'bg-red-500/80 text-white hover:bg-red-600'}
+            ? 'text-avalon-text hover:text-avalon-gold'
+            : 'text-red-400 hover:text-red-300'}
         `}
         title={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
       >
@@ -49,7 +49,7 @@ export function VideoControls() {
 
       <button
         onClick={disconnect}
-        className="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center hover:bg-red-700 transition-colors"
+        className="p-1.5 rounded-full text-red-500 hover:text-red-400 transition-colors"
         title="Leave video"
       >
         <PhoneOff size={18} />
