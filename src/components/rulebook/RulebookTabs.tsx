@@ -40,7 +40,7 @@ export function RulebookTabs({ activeTab, onTabChange }: RulebookTabsProps) {
               flex items-center gap-2 px-4 py-2
               font-medium text-sm whitespace-nowrap
               transition-all duration-200
-              focus:outline-none focus:ring-2 focus:ring-avalon-gold/50
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-avalon-gold/50
               ${isActive
                 ? 'text-avalon-gold'
                 : 'text-avalon-text-muted hover:text-avalon-text-secondary'
