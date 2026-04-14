@@ -62,15 +62,14 @@ export function VideoGrid({ participants, seatNumbers, fullscreen = false }: Vid
       className={`
         grid ${getGridLayout(count)} gap-1 p-1
         ${fullscreen ? 'h-full' : ''}
-        place-items-center
+        place-items-center place-content-center
       `}
     >
       {participants.map((participant, i) => (
         <div
           key={participant.identity}
           className={`
-            w-full h-full
-            ${count === 3 && i === 2 ? 'col-start-1 col-end-3 max-w-[50%] justify-self-center' : ''}
+            ${count === 3 && i === 2 ? 'col-start-1 col-end-3 justify-self-center' : ''}
           `}
         >
           <VideoTile

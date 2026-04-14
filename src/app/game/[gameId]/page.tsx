@@ -12,6 +12,7 @@ import { VideoRoom } from '@/components/video';
 import { ViewModeToggle } from '@/components/video/ViewModeToggle';
 import { VideoControls } from '@/components/video/VideoControls';
 import { ChatPanel } from '@/components/video/ChatPanel';
+import { ResizableSplit } from '@/components/video/ResizableSplit';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useGameState } from '@/hooks/useGameState';
@@ -102,15 +103,20 @@ export default function GamePage() {
             {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls />}
           </div>
         ) : viewMode === 'split' && isConnected ? (
-          /* Split mode */
-          <div className="flex gap-0 h-full">
-            <div className="w-[420px] flex-shrink-0 min-w-0 overflow-y-auto py-4 px-3">
-              <GameBoard gameId={gameId} />
-            </div>
-            <div className="flex-1 min-w-0 h-full">
-              {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls />}
-            </div>
-          </div>
+          /* Split mode — draggable divider between game and video */
+          <ResizableSplit
+            defaultLeftPercent={35}
+            minLeftPercent={20}
+            maxLeftPercent={60}
+            left={
+              <div className="h-full py-2 px-2 overflow-y-auto">
+                <GameBoard gameId={gameId} />
+              </div>
+            }
+            right={
+              roomCode ? <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls /> : <div />
+            }
+          />
         ) : (
           /* Game-only mode or not connected */
           <div className="max-w-2xl mx-auto py-6 px-4 space-y-3">
