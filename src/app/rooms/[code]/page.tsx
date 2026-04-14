@@ -393,22 +393,31 @@ export default function RoomPage() {
             minLeftPercent={30}
             maxLeftPercent={60}
             left={
-              <ScaleToFit className="h-full">
-                <div className="p-4 space-y-4">
-                  {lobbyContent}
-                </div>
-              </ScaleToFit>
+              <div className="h-full overflow-y-auto p-4 space-y-4">
+                {lobbyContent}
+              </div>
             }
             right={
               <VideoRoom roomCode={code} fullscreen hideControls />
             }
           />
-        ) : (
-          /* Game-only mode or not connected */
+        ) : videoConnected && viewMode === 'game' ? (
+          /* Game-only mode — full lobby, audio stays on */
           <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 overflow-y-auto">
             <div className="w-full max-w-lg animate-fade-in space-y-4">
-              {!videoConnected && <VideoRoom roomCode={code} />}
               {lobbyContent}
+            </div>
+          </div>
+        ) : (
+          /* Not connected — lobby left, join buttons right */
+          <div className="flex h-full">
+            <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 overflow-y-auto">
+              <div className="w-full max-w-lg animate-fade-in space-y-4">
+                {lobbyContent}
+              </div>
+            </div>
+            <div className="w-[400px] flex-shrink-0 flex items-center justify-center border-l border-avalon-dark-border">
+              <VideoRoom roomCode={code} />
             </div>
           </div>
         )}
