@@ -8,6 +8,7 @@
  * by entering their existing nickname and room code.
  * This bypasses the normal registration flow by retrieving their original player ID.
  */
+import { RefreshCw } from 'lucide-react';
 
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -199,7 +200,7 @@ export function ReturningPlayerPanel({ onBack }: ReturningPlayerPanelProps) {
               Restoring...
             </span>
           ) : (
-            '🔄 Restore Session'
+            <><RefreshCw size={16} className="inline" /> Restore Session</>
           )}
         </button>
 

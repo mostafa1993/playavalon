@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { BookOpen } from 'lucide-react';
 import type { MerlinQuizResults as QuizResults, MerlinQuizResultEntry } from '@/types/game';
 
 interface MerlinQuizResultsProps {
@@ -194,7 +195,7 @@ export function MerlinQuizResults({
             : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
         } transition-colors`}
       >
-        {showMerlin ? '📜 Show All Roles' : 'Skip to Role Reveal'}
+        {showMerlin ? <><BookOpen size={16} className="inline" /> Show All Roles</> : 'Skip to Role Reveal'}
       </button>
     </div>
   );

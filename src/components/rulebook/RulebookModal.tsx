@@ -2,6 +2,7 @@
 
 import { Modal } from '@/components/ui/Modal';
 import { RulebookContent } from './RulebookContent';
+import { BookOpen } from 'lucide-react';
 
 interface RulebookModalProps {
   isOpen: boolean;
@@ -17,7 +18,7 @@ export function RulebookModal({ isOpen, onClose }: RulebookModalProps) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="📜 Rulebook"
+      title={<><BookOpen size={16} className="inline" /> Rulebook</>}
       size="lg"
       scrollable
     >

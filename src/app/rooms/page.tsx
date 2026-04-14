@@ -8,6 +8,7 @@ import { CreateRoomModal } from '@/components/CreateRoomModal';
 import { usePlayer } from '@/hooks/usePlayer';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { getPlayerId } from '@/lib/utils/player-id';
+import { RefreshCw } from 'lucide-react';
 import type { RoomListItem } from '@/types/room';
 
 /**
@@ -231,7 +232,7 @@ export default function RoomsPage() {
           onClick={fetchRooms}
           className="w-full text-center text-avalon-text-secondary hover:text-avalon-gold transition-colors text-sm"
         >
-          🔄 Refresh list
+          <RefreshCw size={16} className="inline" /> Refresh list
         </button>
       </div>
 

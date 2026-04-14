@@ -1,6 +1,7 @@
 'use client';
 
 import { GAME_PHASES, WIN_CONDITIONS } from '@/lib/domain/rulebook-content';
+import { RefreshCw } from 'lucide-react';
 
 /**
  * Game Flow tab content - explains game phases and win conditions
@@ -16,7 +17,7 @@ export function GameFlowTab() {
       {/* Game Phases */}
       <section>
         <h3 className="flex items-center gap-2 text-lg font-display font-bold text-avalon-gold mb-4">
-          <span>🔄</span>
+          <span><RefreshCw size={16} /></span>
           <span>Game Phases</span>
         </h3>
         <div className="space-y-3">

@@ -8,6 +8,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { AlertTriangle } from 'lucide-react';
 import type { GamePlayer, TeamProposal, QuestRequirement, QuestActionType } from '@/types/game';
 import type { SpecialRole } from '@/types/database';
 import { submitQuestAction } from '@/lib/api/game';
@@ -82,7 +83,7 @@ export function QuestExecution({
       {questRequirement.fails === 2 && (
         <div className="text-center">
           <p className="text-avalon-silver/80 text-sm">
-            <span className="text-amber-400">⚠️ This quest requires 2 fails to fail!</span>
+            <span className="text-amber-400"><AlertTriangle size={16} className="inline" /> This quest requires 2 fails to fail!</span>
           </p>
         </div>
       )}

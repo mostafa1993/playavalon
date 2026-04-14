@@ -24,7 +24,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { getPhaseName, getPhaseDescription } from '@/lib/domain/game-state-machine';
 import { getQuestRequirement } from '@/lib/domain/quest-config';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Eye } from 'lucide-react';
 
 interface GameBoardProps {
   gameId: string;
@@ -294,7 +294,7 @@ export function GameBoard({ gameId }: GameBoardProps) {
             onClick={() => setShowRoleModal(true)}
             className="px-3 py-1.5 text-xs rounded-md border border-avalon-dark-border text-avalon-text-secondary hover:bg-avalon-dark-lighter transition-colors"
           >
-            👁️ Role
+            <Eye size={16} className="inline" /> Role
           </button>
         </div>
       </div>

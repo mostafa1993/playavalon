@@ -9,6 +9,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Modal } from '@/components/ui/Modal';
+import { RefreshCw } from 'lucide-react';
 
 interface SessionTakeoverAlertProps {
   isOpen: boolean;
@@ -33,7 +34,7 @@ export function SessionTakeoverAlert({ isOpen }: SessionTakeoverAlertProps) {
       showCloseButton={false}
     >
       <div className="space-y-6 text-center">
-        <div className="text-6xl">🔄</div>
+        <div className="text-6xl"><RefreshCw size={48} /></div>
 
         <div className="space-y-2">
           <p className="text-lg text-avalon-text">

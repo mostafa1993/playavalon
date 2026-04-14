@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/Button';
 import { getPhaseName, getPhaseDescription } from '@/lib/domain/game-state-machine';
 import { getQuestRequirement } from '@/lib/domain/quest-config';
 import { getPlayerId } from '@/lib/utils/player-id';
+import { Eye } from 'lucide-react';
 import type { WatcherGameState } from '@/types/watcher';
 
 interface WatcherGameBoardProps {
@@ -233,7 +234,7 @@ function WatcherHeader({ onStopWatching }: WatcherHeaderProps) {
   return (
     <div className="flex items-center justify-between bg-avalon-navy/50 rounded-md px-3 py-1.5 border border-avalon-dark-border">
       <div className="flex items-center gap-2">
-        <span className="text-xl">👁️</span>
+        <span className="text-xl"><Eye size={16} /></span>
         <span className="text-avalon-silver text-sm font-medium">Watching</span>
       </div>
       <button

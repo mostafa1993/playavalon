@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { validateRoleConfig, getRoleDetails } from '@/lib/domain/role-config';
 import { SPECIAL_ROLES, LADY_OF_LAKE_MIN_RECOMMENDED } from '@/lib/utils/constants';
 import { canEnableEvilRingVisibility, shouldAutoDisableRing } from '@/lib/domain/evil-ring-visibility';
+import { AlertTriangle } from 'lucide-react';
 import type { RoleConfig, OberonMode } from '@/types/role-config';
 
 interface RoleConfigPanelProps {
@@ -235,7 +236,7 @@ export function RoleConfigPanel({
               : 'max-h-0 opacity-0'
           }`}>
             <p className="text-sm font-medium text-yellow-400 flex items-center gap-1">
-              ⚠️ Recommended for {LADY_OF_LAKE_MIN_RECOMMENDED}+ players
+              <AlertTriangle size={16} className="inline" /> Recommended for {LADY_OF_LAKE_MIN_RECOMMENDED}+ players
             </p>
           </div>
 
@@ -350,7 +351,7 @@ export function RoleConfigPanel({
           }`}>
             <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30">
               <p className="text-sm font-medium text-red-400">
-                ⚠️ With Mordred + Oberon Chaos, all evil may be hidden from Merlin.
+                <AlertTriangle size={16} className="inline" /> With Mordred + Oberon Chaos, all evil may be hidden from Merlin.
                 Split Intel Mode will be blocked if no visible evil players exist.
               </p>
             </div>

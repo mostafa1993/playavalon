@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { MerlinQuiz } from './MerlinQuiz';
 import { MerlinQuizResults } from './MerlinQuizResults';
@@ -294,7 +295,7 @@ export function GameOver({
       {players.length > 0 && players[0].revealed_role && (
         <div className="w-full max-w-2xl bg-avalon-dark-blue/50 rounded-xl p-5 border border-avalon-silver/20">
           <h3 className="text-lg font-bold text-avalon-silver text-center mb-3">
-            📜 Role Reveal
+            <BookOpen size={16} className="inline" /> Role Reveal
           </h3>
 
           <div className="grid grid-cols-2 gap-3">

@@ -2,6 +2,7 @@
 
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { HelpCircle, AlertTriangle } from 'lucide-react';
 import type { SplitIntelVisibility, OberonSplitIntelVisibility, EvilRingVisibility } from '@/types/game';
 
 // Special role type (Phase 2: includes oberon variants, Feature 020: Big Box roles)
@@ -169,7 +170,7 @@ export function RoleRevealModal({
             {/* T024: Mixed Intel Group */}
             <div className="p-4 rounded-lg bg-amber-950/50 border border-amber-500/40">
               <h3 className="font-display text-sm uppercase tracking-wider mb-3 text-amber-300 flex items-center gap-2">
-                <span>❓</span>
+                <span><HelpCircle size={16} /></span>
                 <span>{splitIntel.mixedLabel}</span>
               </h3>
               <p className="text-amber-300/70 text-xs mb-3">{splitIntel.mixedDescription}</p>
@@ -189,7 +190,7 @@ export function RoleRevealModal({
             {splitIntel.hiddenWarning && (
               <div className="p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30 text-center">
                 <p className="text-yellow-300 text-sm">
-                  ⚠️ <strong>{splitIntel.hiddenWarning}</strong>
+                  <AlertTriangle size={16} className="inline" /> <strong>{splitIntel.hiddenWarning}</strong>
                 </p>
               </div>
             )}
@@ -236,7 +237,7 @@ export function RoleRevealModal({
             {/* Mixed Intel Group (Oberon + good player) */}
             <div className="p-4 rounded-lg bg-teal-950/50 border border-teal-500/40">
               <h3 className="font-display text-sm uppercase tracking-wider mb-3 text-teal-300 flex items-center gap-2">
-                <span>❓</span>
+                <span><HelpCircle size={16} /></span>
                 <span>{oberonSplitIntel.mixedLabel}</span>
               </h3>
               <p className="text-teal-300/70 text-xs mb-3">{oberonSplitIntel.mixedDescription}</p>
@@ -256,7 +257,7 @@ export function RoleRevealModal({
             {oberonSplitIntel.hiddenWarning && (
               <div className="p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30 text-center">
                 <p className="text-yellow-300 text-sm">
-                  ⚠️ <strong>{oberonSplitIntel.hiddenWarning}</strong>
+                  <AlertTriangle size={16} className="inline" /> <strong>{oberonSplitIntel.hiddenWarning}</strong>
                 </p>
               </div>
             )}
@@ -287,7 +288,7 @@ export function RoleRevealModal({
             {evilRingVisibility.hiddenCount > 0 && (
               <div className="p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30 text-center">
                 <p className="text-yellow-300 text-sm">
-                  ⚠️ <strong>{evilRingVisibility.hiddenCount} other evil player{evilRingVisibility.hiddenCount === 1 ? ' is' : 's are'} hidden from you</strong>
+                  <AlertTriangle size={16} className="inline" /> <strong>{evilRingVisibility.hiddenCount} other evil player{evilRingVisibility.hiddenCount === 1 ? ' is' : 's are'} hidden from you</strong>
                 </p>
               </div>
             )}
@@ -363,7 +364,7 @@ export function RoleRevealModal({
         {specialRole === 'merlin' && hiddenEvilCount !== undefined && hiddenEvilCount > 0 && !splitIntel?.enabled && !oberonSplitIntel?.enabled && (
           <div className="p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30 text-center">
             <p className="text-yellow-300 text-sm">
-              ⚠️ <strong>{hiddenEvilCount} evil {hiddenEvilCount === 1 ? 'player is' : 'players are'} hidden from you!</strong>
+              <AlertTriangle size={16} className="inline" /> <strong>{hiddenEvilCount} evil {hiddenEvilCount === 1 ? 'player is' : 'players are'} hidden from you!</strong>
             </p>
           </div>
         )}

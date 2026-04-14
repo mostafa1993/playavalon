@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
+import { AlertTriangle } from 'lucide-react';
 import { PlayerSeats } from './PlayerSeats';
 import type { GamePlayer, QuestRequirement } from '@/types/game';
 import { proposeTeam, updateDraftTeam } from '@/lib/api/game';
@@ -175,7 +176,7 @@ export function TeamProposal({
 
           {/* Feature 007: Broadcast error (doesn't block submission) */}
           {broadcastError && (
-            <p className="text-orange-400 text-xs mt-1">⚠️ {broadcastError}</p>
+            <p className="text-orange-400 text-xs mt-1"><AlertTriangle size={16} className="inline" /> {broadcastError}</p>
           )}
 
           <Button

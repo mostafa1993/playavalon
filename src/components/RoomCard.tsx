@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/Button';
+import { Eye } from 'lucide-react';
 import type { RoomListItem } from '@/types/room';
 
 interface RoomCardProps {
@@ -72,7 +73,7 @@ export function RoomCard({
               isLoading={isWatching}
               title="Watch this game"
             >
-              👁️
+              <Eye size={16} />
             </Button>
           )}
 

@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react';
+import { Search, Eye } from 'lucide-react';
 import type { GamePlayer, LadyOfLakeState } from '@/types/game';
 
 interface LadyOfLakePhaseProps {
@@ -161,7 +162,7 @@ export function LadyOfLakePhase({
                 <span className="animate-spin">🌊</span> Investigating...
               </span>
             ) : selectedPlayer ? (
-              `🔍 Investigate ${selectedPlayer.nickname}`
+              <><Search size={16} className="inline" /> Investigate {selectedPlayer.nickname}</>
             ) : (
               'Select a Player'
             )}
@@ -200,7 +201,7 @@ export function LadyOfLakePhase({
                   key={id}
                   className="px-2 py-1 bg-slate-700/50 rounded text-xs text-slate-400"
                 >
-                  👁️ {player?.nickname || 'Unknown'}
+                  <Eye size={16} className="inline" /> {player?.nickname || 'Unknown'}
                 </span>
               );
             })}

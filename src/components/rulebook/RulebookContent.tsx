@@ -6,6 +6,7 @@ import { RolesTab } from './RolesTab';
 import { GameModesTab } from './GameModesTab';
 import { VisualGuideTab } from './VisualGuideTab';
 import { GameFlowTab } from './GameFlowTab';
+import { BookOpen } from 'lucide-react';
 import type { RulebookTabId } from '@/lib/domain/rulebook-content';
 
 interface RulebookContentProps {
@@ -28,7 +29,7 @@ export function RulebookContent({ initialTab = 'roles', compact = false }: Ruleb
       {!compact && (
         <div className="text-center space-y-2 mb-8">
           <h1 className="text-3xl md:text-4xl font-display font-bold text-avalon-gold">
-            📜 Rulebook
+            <BookOpen size={16} className="inline" /> Rulebook
           </h1>
           <p className="text-avalon-text-muted max-w-lg mx-auto">
             Everything you need to know about playing Avalon Online

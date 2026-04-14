@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
+import { AlertTriangle, Search } from 'lucide-react';
 import { Lobby } from '@/components/Lobby';
 import { RoleRevealModal } from '@/components/RoleRevealModal';
 import { SessionTakeoverAlert } from '@/components/SessionTakeoverAlert';
@@ -273,7 +274,7 @@ export default function RoomPage() {
     return (
       <div className="flex-1 flex items-center justify-center p-6 bg-avalon-midnight min-h-screen">
         <div className="card max-w-md w-full text-center space-y-4">
-          <div className="text-4xl">⚠️</div>
+          <div className="text-4xl"><AlertTriangle size={32} /></div>
           <h2 className="font-display text-xl text-avalon-gold">Room Not Found</h2>
           <p className="text-avalon-text-secondary">{error}</p>
           <button
@@ -292,7 +293,7 @@ export default function RoomPage() {
     return (
       <div className="flex-1 flex items-center justify-center p-6 bg-avalon-midnight min-h-screen">
         <div className="card max-w-md w-full text-center space-y-4">
-          <div className="text-4xl">🔍</div>
+          <div className="text-4xl"><Search size={32} /></div>
           <h2 className="font-display text-xl text-avalon-gold">Room Not Found</h2>
           <p className="text-avalon-text-secondary">
             This room doesn&apos;t exist or you&apos;re not a member.

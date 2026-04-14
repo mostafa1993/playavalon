@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { WatcherGameBoard } from '@/components/game/WatcherGameBoard';
 import { getPlayerId, getStoredNickname } from '@/lib/utils/player-id';
 import { Button } from '@/components/ui/Button';
+import { Eye } from 'lucide-react';
 
 interface PageParams {
   gameId: string;
@@ -105,7 +106,7 @@ export default function WatcherPage({
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-8 bg-avalon-midnight min-h-screen">
         <div className="text-center max-w-md">
-          <div className="text-6xl mb-4">👁️</div>
+          <div className="text-6xl mb-4"><Eye size={48} /></div>
           <h1 className="text-2xl font-bold text-avalon-gold mb-4">
             Cannot Watch Game
           </h1>

@@ -10,6 +10,7 @@ import { ReturningPlayerPanel } from '@/components/ReturningPlayerPanel';
 import { usePlayer } from '@/hooks/usePlayer';
 import { validateNickname, validateRoomCode } from '@/lib/domain/validation';
 import type { RoleConfig } from '@/types/role-config';
+import { Eye, BookOpen } from 'lucide-react';
 import type { WatchStatusResponse } from '@/types/watcher';
 
 export default function Home() {
@@ -343,7 +344,7 @@ export default function Home() {
                       <span className="text-avalon-text-muted">Checking room status...</span>
                     ) : watchStatus?.watchable ? (
                       <span className="text-emerald-400">
-                        👁️ Game in progress • {watchStatus.watcherCount}/{watchStatus.watcherLimit} watching
+                        <Eye size={16} className="inline" /> Game in progress • {watchStatus.watcherCount}/{watchStatus.watcherLimit} watching
                       </span>
                     ) : watchStatus?.reason === 'GAME_NOT_STARTED' ? (
                       <span className="text-blue-400">Room found • Game hasn&apos;t started yet</span>
@@ -386,7 +387,7 @@ export default function Home() {
                           : 'Watch this game'
                       }
                     >
-                      👁️ Watch
+                      <Eye size={16} className="inline" /> Watch
                     </Button>
                   )}
                 </div>
@@ -418,7 +419,7 @@ export default function Home() {
             onClick={() => router.push('/rules')}
             className="text-avalon-text-secondary hover:text-avalon-gold transition-colors text-sm font-medium"
           >
-            📜 View Rulebook
+            <BookOpen size={16} className="inline" /> View Rulebook
           </button>
           <p className="text-base font-medium text-avalon-text-muted">
             For 5-10 players • Real-time multiplayer
