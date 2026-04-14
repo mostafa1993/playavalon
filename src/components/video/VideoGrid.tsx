@@ -85,7 +85,11 @@ export function VideoGrid({ participants, seatNumbers, fullscreen = false }: Vid
           gridAutoRows: `${layout.tileSize}px`,
         }}
       >
-        {participants.map((participant) => (
+        {[...participants].sort((a, b) => {
+          const seatA = seatNumbers?.get(a.identity) ?? Infinity;
+          const seatB = seatNumbers?.get(b.identity) ?? Infinity;
+          return seatA - seatB;
+        }).map((participant) => (
           <div
             key={participant.identity}
             style={{ width: layout.tileSize, height: layout.tileSize }}

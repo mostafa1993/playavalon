@@ -58,7 +58,7 @@ export function VideoTile({ participant, seatNumber, fillContainer = false }: Vi
     : !!micPublication?.isSubscribed && !micPublication.isMuted;
   const rawName = participant.name || participant.identity;
   const name = seatNumber ? `${seatNumber} - ${rawName}` : rawName;
-  const initials = name
+  const initials = rawName
     .split(' ')
     .map((w) => w[0])
     .join('')
