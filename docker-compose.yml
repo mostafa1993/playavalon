@@ -38,7 +38,7 @@ services:
       - "50000-60000:50000-60000/udp"
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml
-    command: --config /etc/livekit.yaml --keys "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    command: ["--config", "/etc/livekit.yaml", "--keys", "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"]
     labels:
       - traefik.enable=true
       - traefik.http.routers.livekit.rule=Host(`livekit.playavalon.fun`)
