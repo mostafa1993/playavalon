@@ -18,6 +18,7 @@ import {
 import {
   Room,
   RoomEvent,
+  ParticipantEvent,
   ConnectionState,
   type RemoteParticipant,
 } from 'livekit-client';
@@ -187,6 +188,16 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
           }
         }
       });
+
+      // Sync local mic/camera state whenever tracks change
+      const syncLocalTracks = () => {
+        setIsCameraEnabled(room.localParticipant.isCameraEnabled);
+        setIsMicEnabled(room.localParticipant.isMicrophoneEnabled);
+      };
+      room.localParticipant.on(ParticipantEvent.TrackMuted, syncLocalTracks);
+      room.localParticipant.on(ParticipantEvent.TrackUnmuted, syncLocalTracks);
+      room.localParticipant.on(ParticipantEvent.TrackPublished, syncLocalTracks);
+      room.localParticipant.on(ParticipantEvent.TrackUnpublished, syncLocalTracks);
 
       roomRef.current = room;
       setRoom(room);
