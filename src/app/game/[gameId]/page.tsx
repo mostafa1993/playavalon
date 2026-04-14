@@ -171,9 +171,9 @@ export default function GamePage() {
             minLeftPercent={30}
             maxLeftPercent={60}
             left={
-              <ScaleToFit className="h-full">
+              <div className="h-full overflow-y-auto py-2 px-2">
                 <GameBoard gameId={gameId} />
-              </ScaleToFit>
+              </div>
             }
             right={
               roomCode ? <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls /> : <div />
@@ -181,11 +181,11 @@ export default function GamePage() {
           />
         ) : (
           /* Game-only mode or not connected */
-          <ScaleToFit className="h-full">
-            <div className="max-w-2xl mx-auto py-4 px-4">
+          <div className="h-full overflow-y-auto">
+            <div className="max-w-2xl mx-auto py-4 px-4 pb-8">
               <GameBoard gameId={gameId} />
             </div>
-          </ScaleToFit>
+          </div>
         )}
       </div>
     </main>

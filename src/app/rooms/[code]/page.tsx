@@ -407,9 +407,11 @@ export default function RoomPage() {
           />
         ) : (
           /* Game-only mode or not connected — full lobby */
-          <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 overflow-y-auto">
-            <div className="w-full max-w-lg animate-fade-in space-y-4">
-              {lobbyContent}
+          <div className="h-full overflow-y-auto">
+            <div className="flex flex-col items-center p-6 md:p-8">
+              <div className="w-full max-w-lg animate-fade-in space-y-4 pb-8">
+                {lobbyContent}
+              </div>
             </div>
           </div>
         )}

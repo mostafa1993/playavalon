@@ -56,30 +56,30 @@ export function Lobby({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Room Header */}
-      <div className="text-center space-y-4">
-        <div>
-          <p className="text-avalon-silver text-base font-semibold uppercase tracking-wider">
+    <div className="space-y-3">
+      {/* Room Header — compact */}
+      <div className="text-center space-y-2">
+        <div className="flex items-center justify-center gap-2">
+          <p className="text-avalon-silver text-xs font-semibold uppercase tracking-wider">
             Room Code
           </p>
           <button
             onClick={handleCopyCode}
-            className="group flex items-center justify-center gap-2 mx-auto mt-1"
+            className="group flex items-center gap-1"
           >
-            <span className="text-4xl font-mono font-bold text-avalon-gold tracking-widest">
+            <span className="text-2xl font-mono font-bold text-avalon-gold tracking-widest">
               {room.room.code}
             </span>
             <span
               className={`
-                text-base font-medium transition-all
+                text-xs font-medium transition-all
                 ${copied
                   ? 'text-good'
                   : 'text-avalon-silver/50 group-hover:text-avalon-gold'
                 }
               `}
             >
-              {copied ? '✓ Copied!' : '📋'}
+              {copied ? '✓' : '📋'}
             </span>
           </button>
         </div>
@@ -157,31 +157,30 @@ export function Lobby({
 
       {/* Confirmation Progress (when roles distributed) */}
       {room.room.status === 'roles_distributed' && room.confirmations && (
-        <div className="card">
-          <div className="text-center space-y-2">
-            <p className="text-avalon-silver text-base font-semibold">Role Confirmations</p>
-            <p className="text-3xl font-display font-bold text-avalon-gold">
+        <div className="card py-2 px-3">
+          <div className="flex items-center justify-between">
+            <p className="text-avalon-silver text-sm font-semibold">Confirmations</p>
+            <p className="text-lg font-display font-bold text-avalon-gold">
               {room.confirmations.confirmed} / {room.confirmations.total}
             </p>
-            {room.confirmations.confirmed === room.confirmations.total ? (
-              <p className="text-good text-base font-semibold">All players confirmed!</p>
-            ) : (
-              <p className="text-avalon-silver/80 text-base font-medium">
-                Waiting for all players to confirm their roles...
-              </p>
-            )}
           </div>
+          {room.confirmations.confirmed === room.confirmations.total ? (
+            <p className="text-good text-xs">All confirmed!</p>
+          ) : (
+            <p className="text-avalon-silver/80 text-xs">
+              Waiting for all players to confirm...
+            </p>
+          )}
         </div>
       )}
 
       {/* Manager Controls */}
       {isManager && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {canDistribute && onDistributeRoles && (
             <Button
               variant="primary"
               fullWidth
-              size="lg"
               onClick={onDistributeRoles}
               isLoading={isDistributing}
             >
@@ -193,7 +192,6 @@ export function Lobby({
             <Button
               variant="primary"
               fullWidth
-              size="lg"
               onClick={onStartGame}
               isLoading={isStarting}
             >
@@ -202,7 +200,7 @@ export function Lobby({
           )}
 
           {!isFull && room.room.status === 'waiting' && (
-            <p className="text-center text-avalon-silver/80 text-base font-medium">
+            <p className="text-center text-avalon-silver/80 text-xs">
               Waiting for {room.room.expected_players - room.players.length} more{' '}
               {room.room.expected_players - room.players.length === 1
                 ? 'player'
@@ -214,10 +212,11 @@ export function Lobby({
       )}
 
       {/* Leave Button */}
-      <div className="pt-4 border-t border-avalon-silver/10">
+      <div className="pt-2 border-t border-avalon-silver/10">
         <Button
           variant="ghost"
           fullWidth
+          size="sm"
           onClick={onLeave}
           className="text-avalon-silver hover:text-evil-light"
         >

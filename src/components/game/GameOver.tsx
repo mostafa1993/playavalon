@@ -213,109 +213,94 @@ export function GameOver({
 
   // Original game over view with role reveal
   return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-8">
-      {/* Winner Banner */}
+    <div className="flex flex-col items-center justify-center space-y-3">
+      {/* Winner Banner — compact */}
       <div
         className={`
-          w-full max-w-md text-center p-8 rounded-2xl
+          w-full max-w-md text-center p-4 rounded-xl
           ${winner === 'good'
-            ? 'bg-gradient-to-br from-emerald-500/30 to-emerald-900/30 border-2 border-emerald-500/50'
-            : 'bg-gradient-to-br from-red-500/30 to-red-900/30 border-2 border-red-500/50'}
+            ? 'bg-gradient-to-br from-emerald-500/30 to-emerald-900/30 border border-emerald-500/50'
+            : 'bg-gradient-to-br from-red-500/30 to-red-900/30 border border-red-500/50'}
         `}
       >
-        {/* Trophy/Skull Icon */}
-        <div className="text-7xl mb-4 animate-bounce">
+        <div className="text-4xl mb-2">
           {winner === 'good' ? '🏆' : '💀'}
         </div>
-
-        {/* Winner Text */}
         <h1
-          className={`text-3xl font-bold mb-2 ${winner === 'good' ? 'text-emerald-400' : 'text-red-400'}`}
+          className={`text-2xl font-bold ${winner === 'good' ? 'text-emerald-400' : 'text-red-400'}`}
         >
           {winner === 'good' ? 'Good Wins!' : 'Evil Wins!'}
         </h1>
-
-        {/* Announcement */}
-        <p className="text-xl text-avalon-silver/90 mb-3">
-          {announcement}
-        </p>
-
-        {/* Reason */}
-        <p className="text-avalon-silver/70">
-          {reasonText}
-        </p>
+        <p className="text-sm text-avalon-silver/90 mt-1">{announcement}</p>
+        <p className="text-xs text-avalon-silver/70">{reasonText}</p>
       </div>
 
-      {/* Personal Result */}
+      {/* Personal Result — inline */}
       {playerRole && (
         <div
           className={`
-            px-6 py-3 rounded-xl text-lg font-bold
+            px-4 py-1.5 rounded-lg text-sm font-bold
             ${isWinner
               ? 'bg-avalon-gold/20 text-avalon-gold border border-avalon-gold/40'
               : 'bg-gray-500/20 text-gray-400 border border-gray-500/40'}
           `}
         >
           {isWinner ? '🎉 You Win!' : '😔 You Lose'}
-          <span className="ml-2 text-sm font-normal">
+          <span className="ml-2 text-xs font-normal">
             (You were {playerRole === 'good' ? 'Good' : 'Evil'})
           </span>
         </div>
       )}
 
-      {/* Final Score */}
-      <div className="bg-avalon-dark-blue/50 rounded-xl p-6 border border-avalon-silver/20">
-        <h3 className="text-sm text-avalon-silver/60 text-center mb-4">Final Score</h3>
-        <div className="flex justify-center gap-12">
+      {/* Final Score + Quest Results — combined row */}
+      <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3">
           <div className="text-center">
-            <div className="text-4xl font-bold text-emerald-400">{score.good}</div>
-            <div className="text-sm text-avalon-silver/60">Good</div>
+            <div className="text-2xl font-bold text-emerald-400">{score.good}</div>
+            <div className="text-xs text-avalon-silver/60">Good</div>
           </div>
-          <div className="text-2xl text-avalon-silver/40 self-center">vs</div>
+          <div className="text-sm text-avalon-silver/40">vs</div>
           <div className="text-center">
-            <div className="text-4xl font-bold text-red-400">{score.evil}</div>
-            <div className="text-sm text-avalon-silver/60">Evil</div>
+            <div className="text-2xl font-bold text-red-400">{score.evil}</div>
+            <div className="text-xs text-avalon-silver/60">Evil</div>
           </div>
         </div>
-      </div>
-
-      {/* Quest Results Summary */}
-      <div className="flex justify-center gap-3">
-        {questResults.map((result, index) => (
-          <div
-            key={index}
-            className={`
-              w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold
-              ${result.result === 'success'
-                ? 'bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400'
-                : 'bg-red-500/20 border-2 border-red-500 text-red-400'}
-            `}
-          >
-            {result.result === 'success' ? '✓' : '✗'}
-          </div>
-        ))}
-        {/* Empty slots */}
-        {Array(5 - questResults.length).fill(null).map((_, index) => (
-          <div
-            key={`empty-${index}`}
-            className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold bg-avalon-dark-blue border-2 border-avalon-silver/20 text-avalon-silver/40"
-          >
-            -
-          </div>
-        ))}
+        <div className="flex gap-1.5">
+          {questResults.map((result, index) => (
+            <div
+              key={index}
+              className={`
+                w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
+                ${result.result === 'success'
+                  ? 'bg-emerald-500/20 border border-emerald-500 text-emerald-400'
+                  : 'bg-red-500/20 border border-red-500 text-red-400'}
+              `}
+            >
+              {result.result === 'success' ? '✓' : '✗'}
+            </div>
+          ))}
+          {Array(5 - questResults.length).fill(null).map((_, index) => (
+            <div
+              key={`empty-${index}`}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold bg-avalon-dark-blue border border-avalon-silver/20 text-avalon-silver/40"
+            >
+              -
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Role Reveal Section */}
       {players.length > 0 && players[0].revealed_role && (
-        <div className="w-full max-w-2xl bg-avalon-dark-blue/50 rounded-xl p-6 border border-avalon-silver/20">
-          <h3 className="text-lg font-bold text-avalon-silver text-center mb-4">
+        <div className="w-full max-w-2xl bg-avalon-dark-blue/50 rounded-xl p-3 border border-avalon-silver/20">
+          <h3 className="text-sm font-bold text-avalon-silver text-center mb-2">
             📜 Role Reveal
           </h3>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             {/* Good Team */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-emerald-400 text-center mb-2">
+            <div className="space-y-1">
+              <h4 className="text-xs font-semibold text-emerald-400 text-center mb-1">
                 ⚔️ Loyal Servants of Arthur
               </h4>
               {sortedPlayers
@@ -380,8 +365,8 @@ export function GameOver({
             </div>
 
             {/* Evil Team */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-red-400 text-center mb-2">
+            <div className="space-y-1">
+              <h4 className="text-xs font-semibold text-red-400 text-center mb-1">
                 😈 Minions of Mordred
               </h4>
               {sortedPlayers
@@ -427,15 +412,17 @@ export function GameOver({
       )}
 
       {/* Actions */}
-      <div className="flex gap-4">
+      <div className="flex gap-3">
         <Button
           variant="secondary"
+          size="sm"
           onClick={() => router.push('/')}
         >
           Back to Home
         </Button>
         <Button
           variant="primary"
+          size="sm"
           onClick={() => window.location.reload()}
         >
           View Game Again

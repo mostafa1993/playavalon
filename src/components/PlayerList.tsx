@@ -27,19 +27,19 @@ export function PlayerList({
   const emptySlots = expectedPlayers - players.length;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1.5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="font-display text-avalon-gold text-base font-bold uppercase tracking-wider">
+        <h3 className="font-display text-avalon-gold text-sm font-bold uppercase tracking-wider">
           Knights at the Table
         </h3>
-        <span className="text-avalon-silver text-base font-bold">
+        <span className="text-avalon-silver text-sm font-bold">
           {players.length}/{expectedPlayers}
         </span>
       </div>
 
       {/* Player list */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         {sortedPlayers.map((player) => (
           <PlayerCard
             key={player.id}
@@ -54,12 +54,12 @@ export function PlayerList({
             {Array.from({ length: emptySlots }).map((_, i) => (
               <div
                 key={`empty-${i}`}
-                className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-avalon-silver/20"
+                className="flex items-center gap-2 p-2 rounded-lg border border-dashed border-avalon-silver/20"
               >
-                <div className="w-10 h-10 rounded-full bg-avalon-midnight/30 flex items-center justify-center">
-                  <span className="text-avalon-silver/30 text-xl">?</span>
+                <div className="w-8 h-8 rounded-full bg-avalon-midnight/30 flex items-center justify-center">
+                  <span className="text-avalon-silver/30 text-sm">?</span>
                 </div>
-                <span className="text-avalon-silver/50 text-base font-medium italic">
+                <span className="text-avalon-silver/50 text-xs font-medium italic">
                   Waiting for knight...
                 </span>
               </div>
