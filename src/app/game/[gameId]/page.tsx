@@ -94,10 +94,9 @@ export default function GamePage() {
           </div>
         </div>
       ) : (
-        /* Game-only mode (or not connected to video) */
+        /* Game-only mode or not connected — always show VideoRoom so user can rejoin */
         <div className="max-w-2xl mx-auto space-y-3">
-          {/* Compact video controls bar when in game mode but connected */}
-          {isConnected && roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} />}
+          {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} />}
           <GameBoard gameId={gameId} />
         </div>
       )}
