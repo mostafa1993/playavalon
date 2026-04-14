@@ -1,5 +1,8 @@
 # Dependencies
 node_modules/
+
+# Claude Code
+.claude/
 .pnp
 .pnp.js
 

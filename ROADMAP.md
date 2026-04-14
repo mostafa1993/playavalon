@@ -657,7 +657,16 @@ Optimization, mobile support, and quality-of-life features that aren't needed to
 - Useful for showing something to the group
 - LiveKit supports this natively
 
-### 3.4 Game Session Recording
+### 3.4 Rejoin Video After Disconnect
+
+**What**: If a player clicks the end call button (or loses connection) during a game, they should be able to rejoin the video call.
+
+- After disconnecting, show the "Join with video" / "Join audio only" buttons again on the game page
+- Rejoin should reconnect to the same LiveKit room seamlessly
+- Other participants see the player leave and reappear in the video grid
+- Audio/video preferences (camera on/off) should be remembered from before disconnect
+
+### 3.5 Game Session Recording
 
 **What**: Record the full game session (audio + video + game events) for post-game review.
 
@@ -695,8 +704,9 @@ Continuing the existing spec numbering:
 | 040   | AI personality profiles          | 2     | P2       |
 | 041   | Mobile layout + responsive video | 3     | P1       |
 | 042   | Seat numbers on video tiles      | 3     | P0       |
-| 043   | Screen sharing                   | 3     | P2       |
-| 044   | Game session recording           | 3     | P2       |
+| 043   | Rejoin video after disconnect    | 3     | P0       |
+| 044   | Screen sharing                   | 3     | P2       |
+| 045   | Game session recording           | 3     | P2       |
 
 ---
 
