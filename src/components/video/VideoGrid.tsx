@@ -5,7 +5,7 @@
  * Tiles are always square and sized to fit within the container
  */
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { VideoTile } from './VideoTile';
 import type { Participant } from 'livekit-client';
 
@@ -73,6 +73,14 @@ export function VideoGrid({ participants, seatNumbers, fullscreen = false, curre
     return () => observer.disconnect();
   }, [participants.length]);
 
+  const sortedParticipants = useMemo(() => {
+    return [...participants].sort((a, b) => {
+      const seatA = seatNumbers?.get(a.identity) ?? Infinity;
+      const seatB = seatNumbers?.get(b.identity) ?? Infinity;
+      return seatA - seatB;
+    });
+  }, [participants, seatNumbers]);
+
   if (participants.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-avalon-text-muted text-sm">
@@ -93,11 +101,7 @@ export function VideoGrid({ participants, seatNumbers, fullscreen = false, curre
           gridAutoRows: `${layout.tileSize}px`,
         }}
       >
-        {[...participants].sort((a, b) => {
-          const seatA = seatNumbers?.get(a.identity) ?? Infinity;
-          const seatB = seatNumbers?.get(b.identity) ?? Infinity;
-          return seatA - seatB;
-        }).map((participant) => (
+        {sortedParticipants.map((participant) => (
           <div
             key={participant.identity}
             style={{ width: layout.tileSize, height: layout.tileSize }}

@@ -111,7 +111,7 @@ export default function GamePage() {
             <TimerButton
               onStart={speakingTimer.startTimer}
               isRunning={speakingTimer.timeRemaining !== null && speakingTimer.timeRemaining > 0}
-              isManager={speakingTimer.isManager}
+              isManager={isManager}
             />
             <ChatPanel />
             <VideoControls />

@@ -50,7 +50,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    volumes:
+      - redis_data:/data
     restart: unless-stopped
 
 volumes:
   letsencrypt:
+  redis_data:

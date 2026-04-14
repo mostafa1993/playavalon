@@ -109,7 +109,8 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
         !e.metaKey &&
         !e.altKey &&
         !(e.target instanceof HTMLInputElement) &&
-        !(e.target instanceof HTMLTextAreaElement)
+        !(e.target instanceof HTMLTextAreaElement) &&
+        !(e.target instanceof HTMLElement && e.target.isContentEditable)
       ) {
         setViewModeState((prev) => {
           const modes: ViewMode[] = ['video', 'split', 'game'];
@@ -250,36 +251,54 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     const room = roomRef.current;
     if (!room) return;
 
-    const enabled = room.localParticipant.isCameraEnabled;
-    await room.localParticipant.setCameraEnabled(!enabled);
-    setIsCameraEnabled(!enabled);
+    try {
+      const enabled = room.localParticipant.isCameraEnabled;
+      await room.localParticipant.setCameraEnabled(!enabled);
+      setIsCameraEnabled(!enabled);
+    } catch (err) {
+      // Sync state with actual device state on failure
+      setIsCameraEnabled(room.localParticipant.isCameraEnabled);
+      setError(err instanceof Error ? err.message : 'Failed to toggle camera');
+    }
   }, []);
 
   const toggleMic = useCallback(async () => {
     const room = roomRef.current;
     if (!room) return;
 
-    const enabled = room.localParticipant.isMicrophoneEnabled;
-    await room.localParticipant.setMicrophoneEnabled(!enabled);
-    setIsMicEnabled(!enabled);
+    try {
+      const enabled = room.localParticipant.isMicrophoneEnabled;
+      await room.localParticipant.setMicrophoneEnabled(!enabled);
+      setIsMicEnabled(!enabled);
+    } catch (err) {
+      // Sync state with actual device state on failure
+      setIsMicEnabled(room.localParticipant.isMicrophoneEnabled);
+      setError(err instanceof Error ? err.message : 'Failed to toggle microphone');
+    }
   }, []);
 
-  const sendChatMessage = useCallback((text: string) => {
+  const sendChatMessage = useCallback(async (text: string) => {
     const room = roomRef.current;
     if (!room || !text.trim()) return;
 
-    const payload = new TextEncoder().encode(text.trim());
-    room.localParticipant.publishData(payload, { topic: CHAT_TOPIC });
+    const trimmed = text.trim();
+    const payload = new TextEncoder().encode(trimmed);
 
-    // Add own message locally
-    const msg: ChatMessage = {
-      id: `${Date.now()}-local`,
-      sender: room.localParticipant.identity,
-      senderName: room.localParticipant.name || room.localParticipant.identity,
-      text: text.trim(),
-      timestamp: Date.now(),
-    };
-    setChatMessages((prev) => [...prev, msg]);
+    try {
+      await room.localParticipant.publishData(payload, { topic: CHAT_TOPIC });
+
+      // Only add to local state after successful send
+      const msg: ChatMessage = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}-local`,
+        sender: room.localParticipant.identity,
+        senderName: room.localParticipant.name || room.localParticipant.identity,
+        text: trimmed,
+        timestamp: Date.now(),
+      };
+      setChatMessages((prev) => [...prev, msg]);
+    } catch {
+      setError('Failed to send message');
+    }
   }, []);
 
   const markChatRead = useCallback(() => {

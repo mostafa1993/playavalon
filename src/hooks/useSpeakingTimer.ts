@@ -43,7 +43,6 @@ interface UseSpeakingTimerReturn {
   timerColor: 'green' | 'yellow' | 'red' | null;
   timerProgress: number | null;
   startTimer: () => void;
-  isManager: boolean;
   speakingOrder: string[];
   currentIndex: number;
 }
@@ -153,6 +152,17 @@ export function useSpeakingTimer({
     };
   }, [room]);
 
+  // Track pending broadcast
+  const pendingBroadcastRef = useRef<SpeakingTimerState | null>(null);
+
+  // Broadcast state changes via effect (clean side-effect handling)
+  useEffect(() => {
+    if (pendingBroadcastRef.current) {
+      broadcast(pendingBroadcastRef.current);
+      pendingBroadcastRef.current = null;
+    }
+  }, [state, broadcast]);
+
   // Advance to next speaker
   const advanceToNext = useCallback(() => {
     if (!isManager) return;
@@ -165,13 +175,12 @@ export function useSpeakingTimer({
         timerRunning: false,
         timerStartTime: null,
       };
-      // Broadcast outside setState via setTimeout to avoid side-effect in updater
-      setTimeout(() => broadcast(newState), 0);
+      pendingBroadcastRef.current = newState;
       autoMutedRef.current = false;
       advancedRef.current = false;
       return newState;
     });
-  }, [isManager, broadcast]);
+  }, [isManager]);
 
   // Timer countdown
   useEffect(() => {
@@ -216,12 +225,12 @@ export function useSpeakingTimer({
         timerRunning: true,
         timerStartTime: Date.now(),
       };
-      setTimeout(() => broadcast(newState), 0);
+      pendingBroadcastRef.current = newState;
       autoMutedRef.current = false;
       advancedRef.current = false;
       return newState;
     });
-  }, [isManager, broadcast]);
+  }, [isManager]);
 
   // Compute timer color and progress
   let timerColor: 'green' | 'yellow' | 'red' | null = null;
@@ -248,7 +257,6 @@ export function useSpeakingTimer({
     timerColor,
     timerProgress,
     startTimer,
-    isManager,
     speakingOrder: state.speakingOrder,
     currentIndex: state.currentSpeakerIndex,
   };

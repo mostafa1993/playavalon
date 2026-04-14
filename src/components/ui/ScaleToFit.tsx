@@ -41,12 +41,14 @@ export function ScaleToFit({ children, className }: ScaleToFitProps) {
 
     const timer = setTimeout(update, 100);
     const observer = new ResizeObserver(() => setTimeout(update, 50));
+    // Observe both container and content — content may change size on phase transitions
     if (outerRef.current) observer.observe(outerRef.current);
+    if (innerRef.current) observer.observe(innerRef.current);
     return () => {
       clearTimeout(timer);
       observer.disconnect();
     };
-  }, []);
+  }, [children]);
 
   return (
     <div ref={outerRef} className={`overflow-hidden ${className || ''}`}>
