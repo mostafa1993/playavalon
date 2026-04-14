@@ -115,11 +115,20 @@ export function useSpeakingTimer({
 
   // Generate speaking order when quest changes (manager only)
   useEffect(() => {
+    console.log('[SpeakingTimer] Check:', {
+      isManager,
+      hasSeatNumbers: !!seatNumbers,
+      seatNumbersSize: seatNumbers?.size,
+      leaderIdentity,
+      questNumber,
+      generatedFor: generatedForQuestRef.current,
+    });
     if (!isManager || !seatNumbers || !leaderIdentity || seatNumbers.size === 0) return;
     if (questNumber === 0 || questNumber === generatedForQuestRef.current) return;
     generatedForQuestRef.current = questNumber;
 
     const order = generateSpeakingOrder(seatNumbers, leaderIdentity);
+    console.log('[SpeakingTimer] Generated order:', order);
     const newState: SpeakingTimerState = {
       speakingOrder: order,
       currentSpeakerIndex: 0,
