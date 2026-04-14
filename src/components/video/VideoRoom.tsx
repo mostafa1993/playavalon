@@ -23,9 +23,11 @@ interface VideoRoomProps {
   seatNumbers?: Map<string, number>;
   /** If true, expand to fill parent container (used in video-only mode) */
   fullscreen?: boolean;
+  /** If true, don't render the header bar and controls (parent handles them) */
+  hideControls?: boolean;
 }
 
-export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscreen = false }: VideoRoomProps) {
+export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscreen = false, hideControls = false }: VideoRoomProps) {
   const {
     room,
     isConnected,
@@ -131,7 +133,7 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
   }
 
   // Connected — show video content based on view mode
-  if (viewMode === 'game') {
+  if (viewMode === 'game' && !hideControls) {
     // Game mode: video hidden, only show minimal controls bar
     return (
       <div className="flex items-center justify-between px-3 py-1.5 bg-avalon-navy rounded-lg border border-avalon-dark-border">
@@ -146,7 +148,21 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
     );
   }
 
+  if (viewMode === 'game' && hideControls) {
+    // Parent handles controls — render nothing in game mode
+    return null;
+  }
+
   // Video or Split mode
+  if (hideControls) {
+    // Parent handles header/controls — just render the grid
+    return (
+      <div className={`${fullscreen ? 'h-full' : ''} bg-avalon-navy`}>
+        <VideoGrid participants={participants} seatNumbers={seatNumbers} fullscreen={fullscreen} />
+      </div>
+    );
+  }
+
   return (
     <div className={`flex flex-col bg-avalon-navy ${fullscreen ? 'h-full' : 'rounded-lg border border-avalon-dark-border'} overflow-hidden`}>
       {/* Header with toggle + chat */}

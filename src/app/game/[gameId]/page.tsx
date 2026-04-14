@@ -9,6 +9,9 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { GameBoard } from '@/components/game/GameBoard';
 import { VideoRoom } from '@/components/video';
+import { ViewModeToggle } from '@/components/video/ViewModeToggle';
+import { VideoControls } from '@/components/video/VideoControls';
+import { ChatPanel } from '@/components/video/ChatPanel';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useGameState } from '@/hooks/useGameState';
@@ -76,30 +79,46 @@ export default function GamePage() {
   // T036: Activity heartbeat for disconnect detection
   useHeartbeat({ enabled: isReady && hasPlayerId() });
 
+  const showVideo = isConnected && viewMode !== 'game';
+
   return (
-    <main className={`min-h-screen bg-avalon-midnight ${isConnected && viewMode === 'video' ? 'p-0' : 'py-6 px-4'}`}>
-      {isConnected && viewMode === 'video' ? (
-        /* Video-only mode: full screen video */
-        <div className="h-screen flex flex-col">
-          {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen />}
-        </div>
-      ) : isConnected && viewMode === 'split' ? (
-        /* Split mode: game board left (50%), video right (50%) — no max-width, use full screen */
-        <div className="flex gap-2 h-[calc(100vh-3rem)]">
-          <div className="flex-1 min-w-0 overflow-y-auto">
-            <GameBoard gameId={gameId} />
+    <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
+      {/* Fixed top bar — always in the same position */}
+      {isConnected && (
+        <div className="flex items-center justify-between px-3 py-1.5 bg-avalon-navy border-b border-avalon-dark-border flex-shrink-0 z-10">
+          <ViewModeToggle />
+          <div className="flex items-center gap-2">
+            <ChatPanel />
+            <VideoControls />
           </div>
-          <div className="flex-1 min-w-0 sticky top-0 self-start h-full">
-            {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen />}
-          </div>
-        </div>
-      ) : (
-        /* Game-only mode or not connected — always show VideoRoom so user can rejoin */
-        <div className="max-w-2xl mx-auto space-y-3">
-          {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} />}
-          <GameBoard gameId={gameId} />
         </div>
       )}
+
+      {/* Content area */}
+      <div className="flex-1 min-h-0">
+        {viewMode === 'video' && isConnected ? (
+          /* Video-only mode */
+          <div className="h-full">
+            {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls />}
+          </div>
+        ) : viewMode === 'split' && isConnected ? (
+          /* Split mode */
+          <div className="flex gap-0 h-full">
+            <div className="w-[420px] flex-shrink-0 min-w-0 overflow-y-auto py-4 px-3">
+              <GameBoard gameId={gameId} />
+            </div>
+            <div className="flex-1 min-w-0 h-full">
+              {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls />}
+            </div>
+          </div>
+        ) : (
+          /* Game-only mode or not connected */
+          <div className="max-w-2xl mx-auto py-6 px-4 space-y-3">
+            {!isConnected && roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} />}
+            <GameBoard gameId={gameId} />
+          </div>
+        )}
+      </div>
     </main>
   );
 }
