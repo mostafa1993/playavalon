@@ -99,42 +99,56 @@ export function VideoTile({ participant, seatNumber, fillContainer = false, time
     }
   }, [micPublication?.track, isLocal]);
 
-  // Border color priority: speaking turn timer > audio speaking > default
+  // Border style
   const borderColorClass = isCurrentSpeaker
-    ? timerColor === 'red'
-      ? 'border-red-500'
-      : timerColor === 'yellow'
-      ? 'border-yellow-400'
-      : 'border-green-500'
+    ? 'border-transparent' // SVG ring handles the colored border
     : isSpeaking
     ? 'border-avalon-gold'
     : 'border-avalon-dark-border';
 
-  const borderWidth = isCurrentSpeaker ? 'border-4' : 'border-2';
+  // Timer ring color
+  const ringColor = timerColor === 'red' ? '#ef4444'
+    : timerColor === 'yellow' ? '#facc15'
+    : '#22c55e';
+
+  // The perimeter of the rounded rect (approximate for stroke-dasharray)
+  // We use a rect path that goes clockwise from top-center
+  const progress = timerProgress ?? 1;
 
   return (
     <div
       className={`
-        relative rounded-lg overflow-hidden bg-avalon-navy ${borderWidth} transition-colors
+        relative rounded-lg overflow-hidden bg-avalon-navy border-2 transition-colors
         ${borderColorClass}
         w-full h-full
       `}
     >
-      {/* Timer progress overlay */}
-      {isCurrentSpeaker && timerProgress != null && timerProgress < 1 && (
-        <div className="absolute inset-0 z-10 pointer-events-none">
-          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <rect
-              x="0" y={100 - (timerProgress ?? 0) * 100}
-              width="100" height={(timerProgress ?? 0) * 100}
-              fill={
-                timerColor === 'red' ? 'rgba(239,68,68,0.15)'
-                : timerColor === 'yellow' ? 'rgba(250,204,21,0.1)'
-                : 'rgba(34,197,94,0.08)'
-              }
-            />
-          </svg>
-        </div>
+      {/* SVG border ring that shrinks as timer progresses */}
+      {isCurrentSpeaker && (
+        <svg
+          className="absolute inset-0 w-full h-full z-10 pointer-events-none"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+        >
+          {/* Background track (dim) */}
+          <rect
+            x="1" y="1" width="98" height="98" rx="6" ry="6"
+            fill="none"
+            stroke={ringColor}
+            strokeWidth="2.5"
+            strokeOpacity="0.2"
+          />
+          {/* Progress ring — shrinks clockwise */}
+          <rect
+            x="1" y="1" width="98" height="98" rx="6" ry="6"
+            fill="none"
+            stroke={ringColor}
+            strokeWidth="2.5"
+            strokeDasharray={`${progress * 392} ${392}`}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray 0.3s linear, stroke 0.5s ease' }}
+          />
+        </svg>
       )}
 
       {/* Turn indicator badge */}
