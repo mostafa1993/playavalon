@@ -25,6 +25,7 @@ function ScaleToFit({ children, className }: { children: React.ReactNode; classN
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  const scaleRef = useRef(1);
 
   useEffect(() => {
     const update = () => {
@@ -32,23 +33,31 @@ function ScaleToFit({ children, className }: { children: React.ReactNode; classN
       const inner = innerRef.current;
       if (!outer || !inner) return;
 
-      // Reset scale to measure natural height
-      inner.style.transform = 'scale(1)';
-      const naturalHeight = inner.scrollHeight;
       const availableHeight = outer.clientHeight;
+      // Get natural height by undoing the current scale
+      const currentScale = scaleRef.current;
+      const scaledHeight = inner.getBoundingClientRect().height;
+      const naturalHeight = scaledHeight / currentScale;
 
       if (naturalHeight > availableHeight && naturalHeight > 0) {
-        setScale(Math.max(0.5, availableHeight / naturalHeight));
-      } else {
-        setScale(1);
+        const newScale = Math.max(0.4, availableHeight / naturalHeight);
+        scaleRef.current = newScale;
+        setScale(newScale);
+      } else if (naturalHeight < availableHeight * 0.95) {
+        // Scale back up if there's room
+        const newScale = Math.min(1, availableHeight / naturalHeight);
+        scaleRef.current = newScale;
+        setScale(newScale);
       }
     };
 
-    update();
-    const observer = new ResizeObserver(update);
+    const timer = setTimeout(update, 100);
+    const observer = new ResizeObserver(() => setTimeout(update, 50));
     if (outerRef.current) observer.observe(outerRef.current);
-    if (innerRef.current) observer.observe(innerRef.current);
-    return () => observer.disconnect();
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
   }, []);
 
   return (
