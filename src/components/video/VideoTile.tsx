@@ -96,7 +96,7 @@ export function VideoTile({ participant, seatNumber, fillContainer = false }: Vi
       className={`
         relative rounded-lg overflow-hidden bg-avalon-navy border-2 transition-colors
         ${isSpeaking ? 'border-avalon-gold' : 'border-avalon-dark-border'}
-        w-full aspect-square
+        w-full h-full
       `}
     >
       {isCameraOn ? (

@@ -56,7 +56,7 @@ export function Lobby({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* Room Header — compact */}
       <div className="text-center space-y-2">
         <div className="flex items-center justify-center gap-2">
