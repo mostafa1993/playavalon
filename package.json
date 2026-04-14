@@ -9,7 +9,9 @@
     "lint": "next lint",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "reset-db": "tsx scripts/reset-db.ts",
+    "dev:fresh": "tsx scripts/reset-db.ts && next dev"
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.20",
