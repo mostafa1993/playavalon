@@ -13,6 +13,14 @@ interface VideoGridProps {
   participants: Participant[];
   seatNumbers?: Map<string, number>;
   fullscreen?: boolean;
+  /** Current speaker's identity */
+  currentSpeaker?: string | null;
+  /** Timer color */
+  timerColor?: 'green' | 'yellow' | 'red' | null;
+  /** Timer progress 0-1 */
+  timerProgress?: number | null;
+  /** Time remaining in seconds */
+  timeRemaining?: number | null;
 }
 
 /**
@@ -42,7 +50,7 @@ function calcLayout(count: number, containerW: number, containerH: number, gap: 
   return { cols: bestCols, rows: bestRows, tileSize: bestSize };
 }
 
-export function VideoGrid({ participants, seatNumbers, fullscreen = false }: VideoGridProps) {
+export function VideoGrid({ participants, seatNumbers, fullscreen = false, currentSpeaker, timerColor, timerProgress, timeRemaining }: VideoGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState({ cols: 1, rows: 1, tileSize: 200 });
 
@@ -98,6 +106,10 @@ export function VideoGrid({ participants, seatNumbers, fullscreen = false }: Vid
               participant={participant}
               seatNumber={seatNumbers?.get(participant.identity)}
               fillContainer
+              isCurrentSpeaker={currentSpeaker === participant.identity}
+              timerColor={currentSpeaker === participant.identity ? timerColor : null}
+              timerProgress={currentSpeaker === participant.identity ? timerProgress : null}
+              timeRemaining={currentSpeaker === participant.identity ? timeRemaining : null}
             />
           </div>
         ))}

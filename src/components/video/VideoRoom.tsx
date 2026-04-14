@@ -27,9 +27,17 @@ interface VideoRoomProps {
   hideControls?: boolean;
   /** If true, render only the join buttons (no wrapper box) */
   inline?: boolean;
+  /** Current speaker identity for timer */
+  currentSpeaker?: string | null;
+  /** Timer color */
+  timerColor?: 'green' | 'yellow' | 'red' | null;
+  /** Timer progress 0-1 */
+  timerProgress?: number | null;
+  /** Time remaining */
+  timeRemaining?: number | null;
 }
 
-export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscreen = false, hideControls = false, inline = false }: VideoRoomProps) {
+export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscreen = false, hideControls = false, inline = false, currentSpeaker, timerColor, timerProgress, timeRemaining }: VideoRoomProps) {
   const {
     room,
     isConnected,
@@ -180,7 +188,7 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
     // Parent handles header/controls — just render the grid
     return (
       <div className={`${fullscreen ? 'h-full' : ''} bg-avalon-navy`}>
-        <VideoGrid participants={participants} seatNumbers={seatNumbers} fullscreen={fullscreen} />
+        <VideoGrid participants={participants} seatNumbers={seatNumbers} fullscreen={fullscreen} currentSpeaker={currentSpeaker} timerColor={timerColor} timerProgress={timerProgress} timeRemaining={timeRemaining} />
       </div>
     );
   }
@@ -195,7 +203,7 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
 
       {/* Video grid */}
       <div className="flex-1 min-h-0">
-        <VideoGrid participants={participants} seatNumbers={seatNumbers} fullscreen={fullscreen} />
+        <VideoGrid participants={participants} seatNumbers={seatNumbers} fullscreen={fullscreen} currentSpeaker={currentSpeaker} timerColor={timerColor} timerProgress={timerProgress} timeRemaining={timeRemaining} />
       </div>
 
       {/* Controls */}

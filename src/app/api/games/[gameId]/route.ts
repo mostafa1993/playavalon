@@ -56,10 +56,11 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Get room code for display
     const { data: room } = await supabase
       .from('rooms')
-      .select('code')
+      .select('code, manager_id')
       .eq('id', game.room_id)
       .single();
     const roomCode = room?.code || null;
+    const isManager = room?.manager_id === player.id;
 
     // Verify player is in this game
     if (!game.seating_order.includes(player.id)) {
@@ -317,6 +318,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       player_role: playerRole,
       special_role: specialRole,
       room_code: roomCode,
+      is_manager: isManager,
     });
   } catch (error) {
     return handleError(error);

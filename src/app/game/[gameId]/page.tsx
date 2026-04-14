@@ -13,9 +13,11 @@ import { ViewModeToggle } from '@/components/video/ViewModeToggle';
 import { VideoControls } from '@/components/video/VideoControls';
 import { ChatPanel } from '@/components/video/ChatPanel';
 import { ResizableSplit } from '@/components/video/ResizableSplit';
+import { TimerButton } from '@/components/video/TimerButton';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useGameState } from '@/hooks/useGameState';
+import { useSpeakingTimer } from '@/hooks/useSpeakingTimer';
 import { getPlayerId, hasPlayerId } from '@/lib/utils/player-id';
 
 /**
@@ -83,7 +85,7 @@ export default function GamePage() {
   const [isReady, setIsReady] = useState(false);
   const [initialLeaderIndex, setInitialLeaderIndex] = useState<number | null>(null);
   const { isConnected, viewMode, room } = useLiveKit();
-  const { roomCode, gameState } = useGameState(gameId);
+  const { roomCode, gameState, isManager } = useGameState(gameId);
 
   // Capture the initial leader index on first game state load
   useEffect(() => {
@@ -138,7 +140,22 @@ export default function GamePage() {
   // T036: Activity heartbeat for disconnect detection
   useHeartbeat({ enabled: isReady && hasPlayerId() });
 
-  const showVideo = isConnected && viewMode !== 'game';
+  // Find the leader's LiveKit identity for speaking timer
+  const leaderIdentity = useMemo(() => {
+    if (!gameState?.players || !room) return undefined;
+    const leader = gameState.players.find((p: any) => p.is_leader);
+    if (!leader) return undefined;
+    const participants = [room.localParticipant, ...Array.from(room.remoteParticipants.values())];
+    return participants.find(p => p.name === leader.nickname)?.identity;
+  }, [gameState?.players, room]);
+
+  // Speaking timer — only room manager can control
+  const speakingTimer = useSpeakingTimer({
+    isManager,
+    seatNumbers,
+    leaderIdentity,
+    questNumber: gameState?.game?.current_quest ?? 0,
+  });
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
@@ -148,6 +165,11 @@ export default function GamePage() {
           <>
             <ViewModeToggle />
             <div className="flex items-center gap-2">
+              <TimerButton
+                onStart={speakingTimer.startTimer}
+                isRunning={speakingTimer.timeRemaining !== null && speakingTimer.timeRemaining > 0}
+                isManager={speakingTimer.isManager}
+              />
               <ChatPanel />
               <VideoControls />
             </div>
@@ -181,7 +203,7 @@ export default function GamePage() {
               ${viewMode === 'game' ? 'hidden' : 'flex-1 min-w-0 h-full'}
             `}
           >
-            <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls />
+            <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls currentSpeaker={speakingTimer.currentSpeaker} timerColor={speakingTimer.timerColor} timerProgress={speakingTimer.timerProgress} timeRemaining={speakingTimer.timeRemaining} />
           </div>
         )}
       </div>

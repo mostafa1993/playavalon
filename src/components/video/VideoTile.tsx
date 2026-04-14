@@ -20,9 +20,17 @@ interface VideoTileProps {
   seatNumber?: number;
   /** If true, fill the parent container instead of using fixed aspect ratio */
   fillContainer?: boolean;
+  /** Timer color for speaking turn: green/yellow/red or null */
+  timerColor?: 'green' | 'yellow' | 'red' | null;
+  /** Timer progress 0-1 (1=full, 0=empty) or null */
+  timerProgress?: number | null;
+  /** Whether this participant is the current speaker */
+  isCurrentSpeaker?: boolean;
+  /** Time remaining in seconds */
+  timeRemaining?: number | null;
 }
 
-export function VideoTile({ participant, seatNumber, fillContainer = false }: VideoTileProps) {
+export function VideoTile({ participant, seatNumber, fillContainer = false, timerColor, timerProgress, isCurrentSpeaker = false, timeRemaining }: VideoTileProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const isSpeaking = useIsSpeaking(participant);
   // Force re-render when tracks change on this participant
@@ -91,14 +99,54 @@ export function VideoTile({ participant, seatNumber, fillContainer = false }: Vi
     }
   }, [micPublication?.track, isLocal]);
 
+  // Border color priority: speaking turn timer > audio speaking > default
+  const borderColorClass = isCurrentSpeaker
+    ? timerColor === 'red'
+      ? 'border-red-500'
+      : timerColor === 'yellow'
+      ? 'border-yellow-400'
+      : 'border-green-500'
+    : isSpeaking
+    ? 'border-avalon-gold'
+    : 'border-avalon-dark-border';
+
+  const borderWidth = isCurrentSpeaker ? 'border-4' : 'border-2';
+
   return (
     <div
       className={`
-        relative rounded-lg overflow-hidden bg-avalon-navy border-2 transition-colors
-        ${isSpeaking ? 'border-avalon-gold' : 'border-avalon-dark-border'}
+        relative rounded-lg overflow-hidden bg-avalon-navy ${borderWidth} transition-colors
+        ${borderColorClass}
         w-full h-full
       `}
     >
+      {/* Timer progress overlay */}
+      {isCurrentSpeaker && timerProgress != null && timerProgress < 1 && (
+        <div className="absolute inset-0 z-10 pointer-events-none">
+          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <rect
+              x="0" y={100 - (timerProgress ?? 0) * 100}
+              width="100" height={(timerProgress ?? 0) * 100}
+              fill={
+                timerColor === 'red' ? 'rgba(239,68,68,0.15)'
+                : timerColor === 'yellow' ? 'rgba(250,204,21,0.1)'
+                : 'rgba(34,197,94,0.08)'
+              }
+            />
+          </svg>
+        </div>
+      )}
+
+      {/* Turn indicator badge */}
+      {isCurrentSpeaker && (
+        <div className={`absolute top-1 left-1 z-20 px-1.5 py-0.5 rounded text-[10px] font-bold
+          ${timerColor === 'red' ? 'bg-red-500 text-white'
+            : timerColor === 'yellow' ? 'bg-yellow-400 text-black'
+            : 'bg-green-500 text-white'}`}
+        >
+          {timeRemaining != null ? `${Math.ceil(timeRemaining)}s` : 'TURN'}
+        </div>
+      )}
       {isCameraOn ? (
         <video
           ref={videoRefCallback}

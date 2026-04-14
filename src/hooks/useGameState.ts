@@ -25,6 +25,7 @@ interface UseGameStateResult {
   playerRole: 'good' | 'evil';
   specialRole: string | null;
   roomCode: string | null;
+  isManager: boolean;
   loading: boolean;
   error: string | null;
   /** T073: Session was taken over by another device */
@@ -38,6 +39,7 @@ export function useGameState(gameId: string | null): UseGameStateResult {
   const [playerRole, setPlayerRole] = useState<'good' | 'evil'>('good');
   const [specialRole, setSpecialRole] = useState<string | null>(null);
   const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [isManager, setIsManager] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // T073: Session takeover detection
@@ -149,6 +151,7 @@ export function useGameState(gameId: string | null): UseGameStateResult {
       setPlayerRole(responseData.player_role || 'good');
       setSpecialRole(responseData.special_role || null);
       setRoomCode(responseData.room_code || null);
+      setIsManager(responseData.is_manager || false);
       setError(null);
       // Mark that we had successful access
       hadGameAccessRef.current = true;
@@ -177,6 +180,7 @@ export function useGameState(gameId: string | null): UseGameStateResult {
     playerRole,
     specialRole,
     roomCode,
+    isManager,
     loading,
     error,
     sessionTakenOver,
