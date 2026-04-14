@@ -60,7 +60,7 @@ export function VideoGrid({ participants, seatNumbers, fullscreen = false }: Vid
   return (
     <div
       className={`
-        grid ${getGridLayout(count)} gap-1 p-1
+        grid ${getGridLayout(count)} gap-2 p-2
         ${fullscreen ? 'h-full' : ''}
         place-items-center place-content-center
       `}
@@ -69,7 +69,8 @@ export function VideoGrid({ participants, seatNumbers, fullscreen = false }: Vid
         <div
           key={participant.identity}
           className={`
-            ${count === 3 && i === 2 ? 'col-start-1 col-end-3 justify-self-center' : ''}
+            w-full flex items-center justify-center
+            ${count === 3 && i === 2 ? 'col-start-1 col-end-3' : ''}
           `}
         >
           <VideoTile
