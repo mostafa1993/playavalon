@@ -657,7 +657,16 @@ Optimization, mobile support, and quality-of-life features that aren't needed to
 - Useful for showing something to the group
 - LiveKit supports this natively
 
-### 3.4 Rejoin Video After Disconnect
+### 3.4 Random Speaking Order Indicator
+
+**What**: At each discussion turn, display a randomly selected seat number at the top of the game board to indicate who starts talking.
+
+- Random number (from the active player seat numbers) shown prominently at the top of the game area
+- Changes each turn/quest to keep discussion order fresh
+- Prevents the same person from always leading the conversation
+- Just a suggestion — not enforced, but gives structure to discussion
+
+### 3.5 Rejoin Video After Disconnect
 
 **What**: If a player clicks the end call button (or loses connection) during a game, they should be able to rejoin the video call.
 
@@ -704,9 +713,10 @@ Continuing the existing spec numbering:
 | 040   | AI personality profiles          | 2     | P2       |
 | 041   | Mobile layout + responsive video | 3     | P1       |
 | 042   | Seat numbers on video tiles      | 3     | P0       |
-| 043   | Rejoin video after disconnect    | 3     | P0       |
-| 044   | Screen sharing                   | 3     | P2       |
-| 045   | Game session recording           | 3     | P2       |
+| 043   | Random speaking order indicator  | 3     | P1       |
+| 044   | Rejoin video after disconnect    | 3     | P0       |
+| 045   | Screen sharing                   | 3     | P2       |
+| 046   | Game session recording           | 3     | P2       |
 
 ---
 
