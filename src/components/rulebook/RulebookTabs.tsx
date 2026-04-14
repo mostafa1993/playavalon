@@ -37,13 +37,13 @@ export function RulebookTabs({ activeTab, onTabChange }: RulebookTabsProps) {
             id={`tab-${tab.id}`}
             onClick={() => onTabChange(tab.id)}
             className={`
-              flex items-center gap-2 px-4 py-2 rounded-t-lg
+              flex items-center gap-2 px-4 py-2
               font-medium text-sm whitespace-nowrap
               transition-all duration-200
               focus:outline-none focus:ring-2 focus:ring-avalon-gold/50
               ${isActive
-                ? 'bg-avalon-navy border-b-2 border-avalon-gold text-avalon-gold'
-                : 'text-avalon-text-muted hover:text-avalon-text-secondary hover:bg-avalon-midnight/50'
+                ? 'text-avalon-gold'
+                : 'text-avalon-text-muted hover:text-avalon-text-secondary'
               }
             `}
           >
