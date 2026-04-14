@@ -27,11 +27,9 @@ import { getQuestRequirement } from '@/lib/domain/quest-config';
 
 interface GameBoardProps {
   gameId: string;
-  /** If true, remove max-width and margins for compact layout */
-  compact?: boolean;
 }
 
-export function GameBoard({ gameId, compact = false }: GameBoardProps) {
+export function GameBoard({ gameId }: GameBoardProps) {
   const router = useRouter();
   const { gameState, currentPlayerId, playerRole, specialRole, roomCode, loading, error, sessionTakenOver, refetch } = useGameState(gameId);
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -246,7 +244,7 @@ export function GameBoard({ gameId, compact = false }: GameBoardProps) {
   }
 
   return (
-    <div className={`${compact ? 'space-y-2' : 'max-w-2xl mx-auto space-y-6'}`}>
+    <div className="max-w-2xl mx-auto space-y-6">
       {/* Compact Room Code Header */}
       {roomCode && (
         <div className="flex items-center justify-between bg-avalon-navy/50 rounded-md px-3 py-1.5 border border-avalon-dark-border">
