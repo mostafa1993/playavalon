@@ -125,25 +125,25 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
       {isCurrentSpeaker && (
         <svg
           className="absolute inset-0 w-full h-full z-10 pointer-events-none"
-          viewBox="0 0 200 200"
+          viewBox="0 0 100 100"
           preserveAspectRatio="none"
         >
-          {/* Perimeter of a 190x190 rect with rx=12: approx 2*(190+190) = 760 */}
+          {/* Perimeter: 2*(98+98) = 392 */}
           {/* Background track (dim) */}
           <rect
-            x="5" y="5" width="190" height="190" rx="4" ry="4"
+            x="1" y="1" width="98" height="98" rx="3" ry="3"
             fill="none"
             stroke={ringColor}
-            strokeWidth="3"
-            strokeOpacity="0.15"
+            strokeWidth="2"
+            strokeOpacity="0.2"
           />
-          {/* Progress ring — shrinks clockwise */}
+          {/* Progress ring — shrinks */}
           <rect
-            x="5" y="5" width="190" height="190" rx="4" ry="4"
+            x="1" y="1" width="98" height="98" rx="3" ry="3"
             fill="none"
             stroke={ringColor}
-            strokeWidth="3"
-            strokeDasharray={`${progress * 760} ${760}`}
+            strokeWidth="2"
+            strokeDasharray={`${progress * 392} ${392}`}
             strokeLinecap="round"
             style={{ transition: 'stroke-dasharray 0.3s linear, stroke 0.5s ease' }}
           />
