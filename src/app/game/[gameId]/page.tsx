@@ -85,12 +85,14 @@ export default function GamePage() {
   useHeartbeat({ enabled: isReady && hasPlayerId() });
 
   // Find the leader's LiveKit identity for speaking timer
+  // Falls back to DB id if leader isn't in the video call (e.g., bots)
   const leaderIdentity = useMemo(() => {
     if (!gameState?.players || !room) return undefined;
     const leader = gameState.players.find((p: any) => p.is_leader);
     if (!leader) return undefined;
     const participants = [room.localParticipant, ...Array.from(room.remoteParticipants.values())];
-    return participants.find(p => p.name === leader.nickname)?.identity;
+    const lkParticipant = participants.find(p => p.name === leader.nickname);
+    return lkParticipant?.identity ?? `db-${leader.id}`;
   }, [gameState?.players, room]);
 
   // Speaking timer — only room manager can control
