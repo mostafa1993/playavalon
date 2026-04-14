@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { Lobby } from '@/components/Lobby';
 import { RoleRevealModal } from '@/components/RoleRevealModal';
 import { SessionTakeoverAlert } from '@/components/SessionTakeoverAlert';
 import { VideoRoom } from '@/components/video';
+import { ViewModeToggle } from '@/components/video/ViewModeToggle';
+import { VideoControls } from '@/components/video/VideoControls';
+import { ChatPanel } from '@/components/video/ChatPanel';
+import { ResizableSplit } from '@/components/video/ResizableSplit';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { useRoom } from '@/hooks/useRoom';
 import { usePlayer } from '@/hooks/usePlayer';
@@ -14,13 +18,54 @@ import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { getPlayerId } from '@/lib/utils/player-id';
 import type { SplitIntelVisibility, OberonSplitIntelVisibility } from '@/types/game';
 
+/**
+ * ScaleToFit — scales children to fit container without scrolling
+ */
+function ScaleToFit({ children, className }: { children: React.ReactNode; className?: string }) {
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const update = () => {
+      const outer = outerRef.current;
+      const inner = innerRef.current;
+      if (!outer || !inner) return;
+      inner.style.transform = 'scale(1)';
+      const naturalHeight = inner.scrollHeight;
+      const availableHeight = outer.clientHeight;
+      if (naturalHeight > availableHeight && naturalHeight > 0) {
+        setScale(Math.max(0.5, availableHeight / naturalHeight));
+      } else {
+        setScale(1);
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    if (outerRef.current) observer.observe(outerRef.current);
+    if (innerRef.current) observer.observe(innerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={outerRef} className={`overflow-hidden ${className || ''}`}>
+      <div
+        ref={innerRef}
+        style={{ transform: `scale(${scale})`, transformOrigin: 'top center', width: `${100 / scale}%` }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function RoomPage() {
   const params = useParams();
   const code = params.code as string;
   const router = useRouter();
   const { isRegistered, isLoading: playerLoading } = usePlayer();
   const { room, isLoading: roomLoading, error, isConnected, rolesInPlay, sessionTakenOver, leave, refresh } = useRoom(code);
-  const { disconnect: disconnectVideo } = useLiveKit();
+  const { disconnect: disconnectVideo, isConnected: videoConnected, viewMode } = useLiveKit();
 
   // T035: Activity heartbeat for disconnect detection
   useHeartbeat({ enabled: isRegistered && !roomLoading && !sessionTakenOver });
@@ -263,68 +308,114 @@ export default function RoomPage() {
     );
   }
 
-  return (
-    <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 bg-avalon-midnight min-h-screen">
-      <div className="w-full max-w-lg animate-fade-in space-y-4">
-        {/* Video Room */}
-        <VideoRoom roomCode={code} />
+  // Lobby content — used in all modes
+  const lobbyContent = (
+    <>
+      {/* Error Display */}
+      {roleError && (
+        <div className="p-4 bg-evil/20 border border-evil/50 rounded-lg animate-slide-up">
+          <p className="text-evil-light text-sm text-center">{roleError}</p>
+        </div>
+      )}
 
-        {/* Error Display */}
-        {roleError && (
-          <div className="p-4 bg-evil/20 border border-evil/50 rounded-lg animate-slide-up">
-            <p className="text-evil-light text-sm text-center">{roleError}</p>
-          </div>
-        )}
+      {/* Main Lobby */}
+      <Lobby
+        room={room}
+        rolesInPlay={rolesInPlay}
+        onLeave={handleLeave}
+        onDistributeRoles={handleDistributeRoles}
+        onStartGame={handleStartGame}
+        isDistributing={isDistributing}
+        isStarting={isStarting}
+        isConnected={isConnected}
+      />
 
-        {/* Main Lobby */}
-        <Lobby
-          room={room}
-          rolesInPlay={rolesInPlay}
-          onLeave={handleLeave}
-          onDistributeRoles={handleDistributeRoles}
-          onStartGame={handleStartGame}
-          isDistributing={isDistributing}
-          isStarting={isStarting}
-          isConnected={isConnected}
+      {/* Role Reveal Modal */}
+      {roleData && (
+        <RoleRevealModal
+          isOpen={showRoleModal}
+          onClose={() => setShowRoleModal(false)}
+          role={roleData.role}
+          specialRole={roleData.special_role}
+          roleName={roleData.role_name}
+          roleDescription={roleData.role_description}
+          knownPlayers={roleData.known_players}
+          knownPlayersLabel={roleData.known_players_label}
+          hiddenEvilCount={roleData.hidden_evil_count}
+          hasLadyOfLake={roleData.has_lady_of_lake}
+          isConfirmed={roleData.is_confirmed}
+          onConfirm={handleConfirmRole}
+          hasDecoy={roleData.has_decoy}
+          decoyWarning={roleData.decoy_warning}
+          splitIntel={roleData.split_intel}
+          oberonSplitIntel={roleData.oberon_split_intel}
         />
+      )}
 
-        {/* Role Reveal Modal */}
-        {roleData && (
-          <RoleRevealModal
-            isOpen={showRoleModal}
-            onClose={() => setShowRoleModal(false)}
-            role={roleData.role}
-            specialRole={roleData.special_role}
-            roleName={roleData.role_name}
-            roleDescription={roleData.role_description}
-            knownPlayers={roleData.known_players}
-            knownPlayersLabel={roleData.known_players_label}
-            hiddenEvilCount={roleData.hidden_evil_count}
-            hasLadyOfLake={roleData.has_lady_of_lake}
-            isConfirmed={roleData.is_confirmed}
-            onConfirm={handleConfirmRole}
-            hasDecoy={roleData.has_decoy}
-            decoyWarning={roleData.decoy_warning}
-            splitIntel={roleData.split_intel}
-            oberonSplitIntel={roleData.oberon_split_intel}
+      {/* Show Role Button (if already confirmed) */}
+      {roleData?.is_confirmed && (
+        <div className="mt-4">
+          <button
+            onClick={() => setShowRoleModal(true)}
+            className="w-full text-center text-avalon-text-secondary hover:text-avalon-gold transition-colors text-sm"
+          >
+            View my role →
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
+      {/* Fixed top bar — same as game page */}
+      {videoConnected && (
+        <div className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-1.5 bg-avalon-navy border-b border-avalon-dark-border z-50">
+          <ViewModeToggle />
+          <div className="flex items-center gap-2">
+            <ChatPanel />
+            <VideoControls />
+          </div>
+        </div>
+      )}
+
+      {/* Content area */}
+      <div className={`flex-1 min-h-0 ${videoConnected ? 'pt-[44px]' : ''}`}>
+        {videoConnected && viewMode === 'video' ? (
+          /* Video-only mode */
+          <div className="h-full">
+            <VideoRoom roomCode={code} fullscreen hideControls />
+          </div>
+        ) : videoConnected && viewMode === 'split' ? (
+          /* Split mode — lobby on left, video on right */
+          <ResizableSplit
+            defaultLeftPercent={35}
+            minLeftPercent={30}
+            maxLeftPercent={60}
+            left={
+              <ScaleToFit className="h-full">
+                <div className="p-4 space-y-4">
+                  {lobbyContent}
+                </div>
+              </ScaleToFit>
+            }
+            right={
+              <VideoRoom roomCode={code} fullscreen hideControls />
+            }
           />
-        )}
-
-        {/* Show Role Button (if already confirmed) */}
-        {roleData?.is_confirmed && (
-          <div className="mt-4">
-            <button
-              onClick={() => setShowRoleModal(true)}
-              className="w-full text-center text-avalon-text-secondary hover:text-avalon-gold transition-colors text-sm"
-            >
-              View my role →
-            </button>
+        ) : (
+          /* Game-only mode or not connected */
+          <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 overflow-y-auto">
+            <div className="w-full max-w-lg animate-fade-in space-y-4">
+              {!videoConnected && <VideoRoom roomCode={code} />}
+              {lobbyContent}
+            </div>
           </div>
         )}
       </div>
 
       {/* T072: Session Takeover Alert */}
       <SessionTakeoverAlert isOpen={sessionTakenOver} />
-    </div>
+    </main>
   );
 }
