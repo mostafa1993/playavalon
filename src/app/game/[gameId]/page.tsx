@@ -157,34 +157,31 @@ export default function GamePage() {
         ) : null}
       </div>
 
-      {/* Content area — full height */}
-      <div className="flex-1 min-h-0">
-        {viewMode === 'video' && isConnected ? (
-          /* Video-only mode */
-          <div className="h-full">
-            {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls />}
+      {/* Content area */}
+      <div className="flex-1 min-h-0 flex">
+        {/* Game panel — always rendered, visibility/size changes per mode */}
+        <div
+          className={`
+            overflow-y-auto transition-none
+            ${isConnected && viewMode === 'video' ? 'hidden' : ''}
+            ${isConnected && viewMode === 'split' ? 'w-[35%] min-w-[300px] max-w-[60%] flex-shrink-0 py-2 px-2' : ''}
+            ${!isConnected || viewMode === 'game' ? 'flex-1' : ''}
+          `}
+        >
+          <div className={`${!isConnected || viewMode === 'game' ? 'max-w-2xl mx-auto py-4 px-4 pb-8' : ''}`}>
+            {!isConnected && roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} />}
+            <GameBoard gameId={gameId} />
           </div>
-        ) : viewMode === 'split' && isConnected ? (
-          /* Split mode — draggable divider between game and video */
-          <ResizableSplit
-            defaultLeftPercent={35}
-            minLeftPercent={30}
-            maxLeftPercent={60}
-            left={
-              <div className="h-full overflow-y-auto py-2 px-2">
-                <GameBoard gameId={gameId} />
-              </div>
-            }
-            right={
-              roomCode ? <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls /> : <div />
-            }
-          />
-        ) : (
-          /* Game-only mode or not connected */
-          <div className="h-full overflow-y-auto">
-            <div className="max-w-2xl mx-auto py-4 px-4 pb-8">
-              <GameBoard gameId={gameId} />
-            </div>
+        </div>
+
+        {/* Video panel — always rendered when connected, visibility changes per mode */}
+        {isConnected && roomCode && (
+          <div
+            className={`
+              ${viewMode === 'game' ? 'hidden' : 'flex-1 min-w-0 h-full'}
+            `}
+          >
+            <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls />
           </div>
         )}
       </div>

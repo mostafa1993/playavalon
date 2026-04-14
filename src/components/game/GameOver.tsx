@@ -213,25 +213,25 @@ export function GameOver({
 
   // Original game over view with role reveal
   return (
-    <div className="flex flex-col items-center justify-center space-y-4">
+    <div className="flex flex-col items-center justify-center space-y-5">
       {/* Winner Banner */}
       <div
         className={`
-          w-full max-w-md text-center p-6 rounded-xl
+          w-full max-w-md text-center p-7 rounded-2xl
           ${winner === 'good'
             ? 'bg-gradient-to-br from-emerald-500/30 to-emerald-900/30 border border-emerald-500/50'
             : 'bg-gradient-to-br from-red-500/30 to-red-900/30 border border-red-500/50'}
         `}
       >
-        <div className="text-5xl mb-2">
+        <div className="text-6xl mb-3">
           {winner === 'good' ? '🏆' : '💀'}
         </div>
         <h1
-          className={`text-2xl font-bold ${winner === 'good' ? 'text-emerald-400' : 'text-red-400'}`}
+          className={`text-3xl font-bold mb-1 ${winner === 'good' ? 'text-emerald-400' : 'text-red-400'}`}
         >
           {winner === 'good' ? 'Good Wins!' : 'Evil Wins!'}
         </h1>
-        <p className="text-base text-avalon-silver/90 mt-1">{announcement}</p>
+        <p className="text-lg text-avalon-silver/90 mt-1">{announcement}</p>
         <p className="text-sm text-avalon-silver/70">{reasonText}</p>
       </div>
 
@@ -239,7 +239,7 @@ export function GameOver({
       {playerRole && (
         <div
           className={`
-            px-5 py-2 rounded-xl text-base font-bold
+            px-6 py-2.5 rounded-xl text-lg font-bold
             ${isWinner
               ? 'bg-avalon-gold/20 text-avalon-gold border border-avalon-gold/40'
               : 'bg-gray-500/20 text-gray-400 border border-gray-500/40'}
@@ -253,15 +253,15 @@ export function GameOver({
       )}
 
       {/* Final Score + Quest Results — combined row */}
-      <div className="flex items-center gap-8">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center gap-10">
+        <div className="flex items-center gap-5">
           <div className="text-center">
-            <div className="text-3xl font-bold text-emerald-400">{score.good}</div>
+            <div className="text-4xl font-bold text-emerald-400">{score.good}</div>
             <div className="text-xs text-avalon-silver/60">Good</div>
           </div>
           <div className="text-base text-avalon-silver/40">vs</div>
           <div className="text-center">
-            <div className="text-3xl font-bold text-red-400">{score.evil}</div>
+            <div className="text-4xl font-bold text-red-400">{score.evil}</div>
             <div className="text-xs text-avalon-silver/60">Evil</div>
           </div>
         </div>
@@ -292,15 +292,15 @@ export function GameOver({
 
       {/* Role Reveal Section */}
       {players.length > 0 && players[0].revealed_role && (
-        <div className="w-full max-w-2xl bg-avalon-dark-blue/50 rounded-xl p-4 border border-avalon-silver/20">
-          <h3 className="text-base font-bold text-avalon-silver text-center mb-3">
+        <div className="w-full max-w-2xl bg-avalon-dark-blue/50 rounded-xl p-5 border border-avalon-silver/20">
+          <h3 className="text-lg font-bold text-avalon-silver text-center mb-3">
             📜 Role Reveal
           </h3>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             {/* Good Team */}
-            <div className="space-y-1.5">
-              <h4 className="text-sm font-semibold text-emerald-400 text-center mb-1">
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-emerald-400 text-center mb-2">
                 ⚔️ Loyal Servants of Arthur
               </h4>
               {sortedPlayers
@@ -365,8 +365,8 @@ export function GameOver({
             </div>
 
             {/* Evil Team */}
-            <div className="space-y-1.5">
-              <h4 className="text-sm font-semibold text-red-400 text-center mb-1">
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-red-400 text-center mb-2">
                 😈 Minions of Mordred
               </h4>
               {sortedPlayers
