@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.claude
+scripts
+tests
+specs
+*.md
+.env*
+livekit-dev.yaml
+docker-compose-dev.yml
