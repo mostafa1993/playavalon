@@ -142,18 +142,22 @@ export default function GamePage() {
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
-      {/* Floating top bar — transparent, overlays content */}
-      {isConnected && (
-        <div className="fixed top-2 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
-          <ViewModeToggle />
-          <div className="flex items-center gap-2">
-            <ChatPanel />
-            <VideoControls />
-          </div>
-        </div>
-      )}
+      {/* Floating top-right bar — always visible */}
+      <div className="fixed top-6 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
+        {isConnected ? (
+          <>
+            <ViewModeToggle />
+            <div className="flex items-center gap-2">
+              <ChatPanel />
+              <VideoControls />
+            </div>
+          </>
+        ) : roomCode ? (
+          <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} inline />
+        ) : null}
+      </div>
 
-      {/* Content area — full height, no padding needed */}
+      {/* Content area — full height */}
       <div className="flex-1 min-h-0">
         {viewMode === 'video' && isConnected ? (
           /* Video-only mode */
@@ -177,10 +181,11 @@ export default function GamePage() {
           />
         ) : (
           /* Game-only mode or not connected */
-          <div className="max-w-2xl mx-auto py-6 px-4 space-y-3">
-            {!isConnected && roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} />}
-            <GameBoard gameId={gameId} />
-          </div>
+          <ScaleToFit className="h-full">
+            <div className="max-w-2xl mx-auto py-4 px-4">
+              <GameBoard gameId={gameId} />
+            </div>
+          </ScaleToFit>
         )}
       </div>
     </main>

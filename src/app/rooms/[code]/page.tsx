@@ -368,16 +368,20 @@ export default function RoomPage() {
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
-      {/* Floating top bar — transparent, overlays content */}
-      {videoConnected && (
-        <div className="fixed top-2 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
-          <ViewModeToggle />
-          <div className="flex items-center gap-2">
-            <ChatPanel />
-            <VideoControls />
-          </div>
-        </div>
-      )}
+      {/* Floating top-right bar — always visible */}
+      <div className="fixed top-6 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
+        {videoConnected ? (
+          <>
+            <ViewModeToggle />
+            <div className="flex items-center gap-2">
+              <ChatPanel />
+              <VideoControls />
+            </div>
+          </>
+        ) : (
+          <VideoRoom roomCode={code} inline />
+        )}
+      </div>
 
       {/* Content area — full height */}
       <div className="flex-1 min-h-0">
@@ -401,24 +405,10 @@ export default function RoomPage() {
               <VideoRoom roomCode={code} fullscreen hideControls />
             }
           />
-        ) : videoConnected && viewMode === 'game' ? (
-          /* Game-only mode — full lobby, audio stays on */
-          <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 overflow-y-auto">
-            <div className="w-full max-w-lg animate-fade-in space-y-4">
-              {lobbyContent}
-            </div>
-          </div>
         ) : (
-          /* Not connected — lobby with join buttons inline */
+          /* Game-only mode or not connected — full lobby */
           <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 overflow-y-auto">
             <div className="w-full max-w-lg animate-fade-in space-y-4">
-              {/* Join video inline — compact row */}
-              <div className="flex items-center justify-between bg-avalon-navy rounded-lg border border-avalon-dark-border px-4 py-2">
-                <span className="text-avalon-text-secondary text-sm">Join video call</span>
-                <div className="flex gap-2">
-                  <VideoRoom roomCode={code} inline />
-                </div>
-              </div>
               {lobbyContent}
             </div>
           </div>
