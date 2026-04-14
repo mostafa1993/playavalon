@@ -246,7 +246,7 @@ export function GameBoard({ gameId, compact = false }: GameBoardProps) {
   }
 
   return (
-    <div className={`${compact ? '' : 'max-w-2xl mx-auto'} space-y-6`}>
+    <div className={`${compact ? 'space-y-2' : 'max-w-2xl mx-auto space-y-6'}`}>
       {/* Compact Room Code Header */}
       {roomCode && (
         <div className="flex items-center justify-between bg-avalon-navy/50 rounded-md px-3 py-1.5 border border-avalon-dark-border">

@@ -104,7 +104,7 @@ export default function GamePage() {
         ) : viewMode === 'split' && isConnected ? (
           /* Split mode */
           <div className="flex gap-0 h-full">
-            <div className="w-[420px] flex-shrink-0 min-w-0 overflow-y-auto py-2 px-2">
+            <div className="w-[380px] flex-shrink-0 min-w-0 overflow-y-auto py-1 px-1">
               <GameBoard gameId={gameId} compact />
             </div>
             <div className="flex-1 min-w-0 h-full">
