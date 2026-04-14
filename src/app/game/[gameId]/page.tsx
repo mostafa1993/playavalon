@@ -85,7 +85,7 @@ export default function GamePage() {
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
       {/* Fixed top bar — always in the same position */}
       {isConnected && (
-        <div className="flex items-center justify-between px-3 py-1.5 bg-avalon-navy border-b border-avalon-dark-border flex-shrink-0 z-10">
+        <div className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-1.5 bg-avalon-navy border-b border-avalon-dark-border z-50">
           <ViewModeToggle />
           <div className="flex items-center gap-2">
             <ChatPanel />
@@ -94,8 +94,8 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* Content area */}
-      <div className="flex-1 min-h-0">
+      {/* Content area — add top padding when bar is visible */}
+      <div className={`flex-1 min-h-0 ${isConnected ? 'pt-[44px]' : ''}`}>
         {viewMode === 'video' && isConnected ? (
           /* Video-only mode */
           <div className="h-full">
@@ -104,8 +104,8 @@ export default function GamePage() {
         ) : viewMode === 'split' && isConnected ? (
           /* Split mode */
           <div className="flex gap-0 h-full">
-            <div className="w-[420px] flex-shrink-0 min-w-0 overflow-y-auto py-4 px-3">
-              <GameBoard gameId={gameId} />
+            <div className="w-[420px] flex-shrink-0 min-w-0 overflow-y-auto py-2 px-2">
+              <GameBoard gameId={gameId} compact />
             </div>
             <div className="flex-1 min-w-0 h-full">
               {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls />}
