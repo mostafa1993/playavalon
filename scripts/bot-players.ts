@@ -21,7 +21,7 @@ for (const line of envFile.split('\n')) {
   if (match) process.env[match[1]] = match[2];
 }
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = process.env.GAME_URL || 'http://localhost:3000';
 const POLL_INTERVAL = 2000; // 2 seconds
 
 const supabase = createClient(

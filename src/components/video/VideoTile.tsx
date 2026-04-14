@@ -18,9 +18,11 @@ interface VideoTileProps {
   participant: Participant;
   /** Seat number (1-based) shown as prefix to name during game */
   seatNumber?: number;
+  /** If true, fill the parent container instead of using fixed aspect ratio */
+  fillContainer?: boolean;
 }
 
-export function VideoTile({ participant, seatNumber }: VideoTileProps) {
+export function VideoTile({ participant, seatNumber, fillContainer = false }: VideoTileProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const isSpeaking = useIsSpeaking(participant);
   // Force re-render when tracks change on this participant
@@ -94,7 +96,7 @@ export function VideoTile({ participant, seatNumber }: VideoTileProps) {
       className={`
         relative rounded-lg overflow-hidden bg-avalon-navy border-2 transition-colors
         ${isSpeaking ? 'border-avalon-gold' : 'border-avalon-dark-border'}
-        aspect-video
+        ${fillContainer ? 'w-full h-full' : 'aspect-video'}
       `}
     >
       {isCameraOn ? (

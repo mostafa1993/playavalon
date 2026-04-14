@@ -77,20 +77,20 @@ export default function GamePage() {
   useHeartbeat({ enabled: isReady && hasPlayerId() });
 
   return (
-    <main className="min-h-screen bg-avalon-midnight py-6 px-4">
+    <main className={`min-h-screen bg-avalon-midnight ${isConnected && viewMode === 'video' ? 'p-0' : 'py-6 px-4'}`}>
       {isConnected && viewMode === 'video' ? (
-        /* Video-only mode: full screen video, game hidden */
-        <div className="max-w-5xl mx-auto">
-          {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} />}
+        /* Video-only mode: full screen video */
+        <div className="h-screen flex flex-col">
+          {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen />}
         </div>
       ) : isConnected && viewMode === 'split' ? (
-        /* Split mode: game board left (60%), video right (40%) */
-        <div className="max-w-7xl mx-auto flex gap-4">
-          <div className="flex-[3] min-w-0">
+        /* Split mode: game board left (50%), video right (50%) — no max-width, use full screen */
+        <div className="flex gap-2 h-[calc(100vh-3rem)]">
+          <div className="flex-1 min-w-0 overflow-y-auto">
             <GameBoard gameId={gameId} />
           </div>
-          <div className="flex-[2] min-w-[300px] max-w-[400px] sticky top-6 self-start">
-            {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} />}
+          <div className="flex-1 min-w-0 sticky top-0 self-start h-full">
+            {roomCode && <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen />}
           </div>
         </div>
       ) : (

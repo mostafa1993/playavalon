@@ -21,9 +21,11 @@ interface VideoRoomProps {
   autoConnect?: boolean;
   /** Map of participant identity (player_id) → seat number (1-based) */
   seatNumbers?: Map<string, number>;
+  /** If true, expand to fill parent container (used in video-only mode) */
+  fullscreen?: boolean;
 }
 
-export function VideoRoom({ roomCode, autoConnect = false, seatNumbers }: VideoRoomProps) {
+export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscreen = false }: VideoRoomProps) {
   const {
     room,
     isConnected,
@@ -146,20 +148,22 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers }: VideoR
 
   // Video or Split mode
   return (
-    <div className="flex flex-col bg-avalon-navy rounded-lg border border-avalon-dark-border overflow-hidden">
+    <div className={`flex flex-col bg-avalon-navy ${fullscreen ? 'h-full' : 'rounded-lg border border-avalon-dark-border'} overflow-hidden`}>
       {/* Header with toggle + chat */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-avalon-dark-border">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-avalon-dark-border flex-shrink-0">
         <ViewModeToggle />
         <ChatPanel />
       </div>
 
       {/* Video grid */}
       <div className="flex-1 min-h-0">
-        <VideoGrid participants={participants} seatNumbers={seatNumbers} />
+        <VideoGrid participants={participants} seatNumbers={seatNumbers} fullscreen={fullscreen} />
       </div>
 
       {/* Controls */}
-      <VideoControls />
+      <div className="flex-shrink-0">
+        <VideoControls />
+      </div>
     </div>
   );
 }
