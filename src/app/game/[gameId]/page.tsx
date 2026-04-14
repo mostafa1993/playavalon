@@ -5,7 +5,7 @@
  * Main game play screen with video calling split layout
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { GameBoard } from '@/components/game/GameBoard';
 import { VideoRoom } from '@/components/video';
@@ -17,6 +17,55 @@ import { useLiveKit } from '@/hooks/useLiveKit';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useGameState } from '@/hooks/useGameState';
 import { getPlayerId, hasPlayerId } from '@/lib/utils/player-id';
+
+/**
+ * ScaleToFit — scales its children down to fit the container without scrolling
+ */
+function ScaleToFit({ children, className }: { children: React.ReactNode; className?: string }) {
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const update = () => {
+      const outer = outerRef.current;
+      const inner = innerRef.current;
+      if (!outer || !inner) return;
+
+      // Reset scale to measure natural height
+      inner.style.transform = 'scale(1)';
+      const naturalHeight = inner.scrollHeight;
+      const availableHeight = outer.clientHeight;
+
+      if (naturalHeight > availableHeight && naturalHeight > 0) {
+        setScale(Math.max(0.5, availableHeight / naturalHeight));
+      } else {
+        setScale(1);
+      }
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    if (outerRef.current) observer.observe(outerRef.current);
+    if (innerRef.current) observer.observe(innerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={outerRef} className={`overflow-hidden ${className || ''}`}>
+      <div
+        ref={innerRef}
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: 'top center',
+          width: `${100 / scale}%`,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default function GamePage() {
   const router = useRouter();
@@ -106,12 +155,12 @@ export default function GamePage() {
           /* Split mode — draggable divider between game and video */
           <ResizableSplit
             defaultLeftPercent={35}
-            minLeftPercent={20}
+            minLeftPercent={30}
             maxLeftPercent={60}
             left={
-              <div className="h-full py-2 px-2 overflow-y-auto">
+              <ScaleToFit className="h-full">
                 <GameBoard gameId={gameId} />
-              </div>
+              </ScaleToFit>
             }
             right={
               roomCode ? <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls /> : <div />
