@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Video } from 'lucide-react';
 import { RoomEvent, type Participant, ConnectionState } from 'livekit-client';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { VideoGrid } from './VideoGrid';
@@ -103,8 +104,9 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
           setIsJoining(false);
         }
       }}
-      className="px-2.5 py-1 bg-avalon-gold text-avalon-midnight rounded-md text-xs font-medium hover:bg-avalon-gold-light transition-colors disabled:opacity-50"
+      className="px-2.5 py-1 bg-avalon-gold text-avalon-midnight rounded-md text-xs font-medium hover:bg-avalon-gold-light transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
     >
+      <Video size={14} />
       {isJoining ? 'Joining...' : 'Join video call'}
     </button>
   );
