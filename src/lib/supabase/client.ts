@@ -31,7 +31,17 @@ export function getSupabaseClient(): SupabaseClient {
 
   supabaseInstance = createSSRBrowserClient(
     supabaseUrl || 'https://placeholder.supabase.co',
-    supabaseAnonKey || 'placeholder-key'
+    supabaseAnonKey || 'placeholder-key',
+    {
+      auth: {
+        // Disable navigator.locks-based coordination. The default lock can
+        // deadlock across tab lifecycles: a previous tab that was closed
+        // mid-operation can leave a held lock that blocks subsequent
+        // getUser()/getSession() calls forever. We don't need cross-tab
+        // coordination; run the critical section directly.
+        lock: async <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> => fn(),
+      },
+    }
   );
 
   return supabaseInstance;
