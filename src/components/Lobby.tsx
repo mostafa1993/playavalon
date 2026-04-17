@@ -80,7 +80,7 @@ export function Lobby({
                 }
               `}
             >
-              {copied ? <Check size={14} /> : <Copy size={14} />}
+              {copied ? <Check size={16} /> : <Copy size={16} />}
             </span>
           </button>
         </div>

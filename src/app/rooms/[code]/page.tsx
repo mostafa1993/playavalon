@@ -368,8 +368,7 @@ export default function RoomPage() {
               <div className="w-full max-w-lg animate-fade-in space-y-4 pb-8">
                 {/* Join video bar — top center when not connected */}
                 {!videoConnected && (
-                  <div className="flex items-center justify-center gap-3 py-2 px-4 bg-avalon-navy/50 rounded-lg border border-avalon-dark-border">
-                    <span className="text-avalon-text-muted text-sm">Join video call</span>
+                  <div className="flex items-center justify-center py-2 px-4 bg-avalon-navy/50 rounded-lg border border-avalon-dark-border">
                     <VideoRoom roomCode={code} inline />
                   </div>
                 )}

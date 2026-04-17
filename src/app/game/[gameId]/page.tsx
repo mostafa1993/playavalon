@@ -135,8 +135,7 @@ export default function GamePage() {
           <div className={`${!isConnected || viewMode === 'game' ? 'max-w-2xl mx-auto py-4 px-4 pb-8' : ''}`}>
             {/* Join video bar — centered when not connected */}
             {!isConnected && roomCode && (
-              <div className="flex items-center justify-center gap-3 py-2 px-4 mb-3 bg-avalon-navy/50 rounded-lg border border-avalon-dark-border">
-                <span className="text-avalon-text-muted text-sm">Join video call</span>
+              <div className="flex items-center justify-center py-2 px-4 mb-3 bg-avalon-navy/50 rounded-lg border border-avalon-dark-border">
                 <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} inline />
               </div>
             )}

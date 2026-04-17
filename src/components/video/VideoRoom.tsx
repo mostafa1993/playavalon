@@ -105,7 +105,7 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
       }}
       className="px-2.5 py-1 bg-avalon-gold text-avalon-midnight rounded-md text-xs font-medium hover:bg-avalon-gold-light transition-colors disabled:opacity-50"
     >
-      {isJoining ? 'Joining...' : 'Join call'}
+      {isJoining ? 'Joining...' : 'Join video call'}
     </button>
   );
 

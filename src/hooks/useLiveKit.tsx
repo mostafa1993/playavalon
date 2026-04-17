@@ -103,8 +103,10 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
   // Keyboard shortcut: V to cycle view modes
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
+      const isArrowLeft = e.key === 'ArrowLeft';
+      const isArrowRight = e.key === 'ArrowRight';
       if (
-        e.key === 'v' &&
+        (isArrowLeft || isArrowRight) &&
         !e.ctrlKey &&
         !e.metaKey &&
         !e.altKey &&
@@ -114,7 +116,8 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
       ) {
         setViewModeState((prev) => {
           const modes: ViewMode[] = ['video', 'split', 'game'];
-          const next = modes[(modes.indexOf(prev) + 1) % modes.length];
+          const delta = isArrowRight ? 1 : -1;
+          const next = modes[(modes.indexOf(prev) + delta + modes.length) % modes.length];
           localStorage.setItem('avalon-view-mode', next);
           return next;
         });

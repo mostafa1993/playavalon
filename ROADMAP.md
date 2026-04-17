@@ -395,64 +395,62 @@ SUPABASE_SERVICE_ROLE_KEY=...
 
 ---
 
-## Phase 2 — AI Agent Player
+## Phase 2 — AI Agent Player (Turn-Based, Persian)
 
 ### Goal
-An AI agent that joins the game as a real player — it listens to other players speak, reasons about the game, and talks back with a voice and a simple avatar in the video grid.
+An AI agent that joins the game as a real player. It listens to each player's speech turn-by-turn, preprocesses each utterance in advance, and when it's the AI's turn, generates a strategic response and speaks it via TTS. The game is played in **Persian (Farsi)**.
 
-### 2.1 Architecture Overview
+### 2.1 Architecture Overview — Turn-Based Pipeline
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    LiveKit Room                      │
-│                                                      │
-│  Human Players ◄──── video/audio ────► AI Agent      │
-│                                                      │
-│  AI Agent publishes:                                 │
-│    - Audio track (TTS output)                        │
-│    - Video track (animated avatar)                   │
-│                                                      │
-│  AI Agent subscribes to:                             │
-│    - All human audio tracks (for STT)                │
-│    - No video tracks (doesn't need to see faces)     │
-└──────────────┬──────────────────────┬────────────────┘
-               │                      │
-               ▼                      ▼
-      Azure Speech-to-Text    Game State (Supabase)
-               │                      │
-               ▼                      │
-         ┌─────────┐                  │
-         │   LLM   │◄────────────────┘
-         │ (Claude) │   context: transcript + game state + role
-         └────┬────┘
-              │
-              ▼
-      Azure Text-to-Speech
-              │
-              ▼
-       Audio published to
-        LiveKit room
+  Player 1 turn (50s)              Player 2 turn (50s)              AI's turn
+  ┌──────────────┐                 ┌──────────────┐                 ┌──────────────────────┐
+  │ Record audio │                 │ Record audio │                 │ Collect all           │
+  │ from LiveKit │                 │ from LiveKit │                 │ preprocessed summaries│
+  │ audio track  │                 │ audio track  │                 │ + game state + role   │
+  └──────┬───────┘                 └──────┬───────┘                 └──────────┬───────────┘
+         │                                │                                    │
+         ▼                                ▼                                    ▼
+  ┌──────────────┐                 ┌──────────────┐                 ┌──────────────────────┐
+  │ Whisper STT  │                 │ Whisper STT  │                 │ LLM (Claude/GPT-4)   │
+  │ (full audio) │                 │ (full audio) │                 │ Generate response     │
+  └──────┬───────┘                 └──────┬───────┘                 │ in Persian            │
+         │                                │                         └──────────┬───────────┘
+         ▼                                ▼                                    │
+  ┌──────────────┐                 ┌──────────────┐                            ▼
+  │ LLM preproc  │                 │ LLM preproc  │                 ┌──────────────────────┐
+  │ - Summary    │                 │ - Summary    │                 │ Azure TTS (fa-IR)    │
+  │ - Sentiment  │                 │ - Sentiment  │                 │ Generate Persian      │
+  │ - Key claims │                 │ - Key claims │                 │ speech audio          │
+  │ - Accusations│                 │ - Accusations│                 └──────────┬───────────┘
+  └──────┬───────┘                 └──────┬───────┘                            │
+         │                                │                                    ▼
+         ▼                                ▼                         ┌──────────────────────┐
+  ┌──────────────────────────────────────────────┐                  │ Publish audio to     │
+  │        Preprocessed Context Store            │                  │ LiveKit room          │
+  │  (ready before AI's turn — zero wait)        │                  │ (AI "speaks")         │
+  └──────────────────────────────────────────────┘                  └──────────────────────┘
 ```
+
+**Key design principle**: preprocessing happens in parallel with other players' turns, so when the AI's turn comes, all context is already prepared. The AI responds in ~1-2 seconds instead of ~10+ seconds.
 
 ### 2.2 AI Agent Service
 
-**What**: A standalone service (Node.js or Python) that runs alongside the app and joins LiveKit rooms as a participant.
+**What**: A Node.js service (same language as the app, shared types) that runs alongside the app.
 
-**Why a separate service**:
-- Long-running process (stays connected for hours)
-- CPU/memory for audio processing
-- Independent scaling and restart from the web app
+**Why Node.js (not Python)**:
+- Same language as the app — shared types, shared API client code
+- Turn-based approach doesn't need Python's audio ML ecosystem
+- Audio recording from LiveKit → file → Whisper API is simple in Node
+- Simpler deployment (one language stack)
 
 **Service responsibilities**:
-1. Receive a command to join a specific game room (via API call from the app)
-2. Connect to LiveKit room as a participant named "AI Agent" (or a fun name)
-3. Subscribe to all human audio tracks
-4. Pipe audio to Azure STT for transcription
-5. Maintain a running transcript with speaker labels
-6. When it's the AI's turn (or during discussion), send context to the LLM
-7. Convert LLM response to speech via Azure TTS
-8. Publish audio + avatar video to the LiveKit room
-9. Submit game actions (votes, quest cards, team proposals) via the app's API routes
+1. Join LiveKit room as a participant
+2. Record each speaker's audio during their speaking timer turn
+3. After each turn: send audio to Whisper STT → get text
+4. After each turn: send text to LLM for preprocessing (summary, sentiment, key claims)
+5. When AI's turn: collect all preprocessed data → LLM generates response → TTS → play audio
+6. Submit game actions (votes, quest cards, team proposals) via the app's API routes
 
 **Docker Compose addition**:
 ```yaml
@@ -462,158 +460,318 @@ ai-agent:
   depends_on:
     - livekit
     - app
+  volumes:
+    - ai_audio:/tmp/audio  # Temporary audio recordings
 ```
 
-### 2.3 Speech-to-Text Pipeline
+### 2.3 Audio Recording (Per Turn)
 
-**What**: Transcribe human speech in real-time with speaker labels.
+**What**: Record each player's audio during their speaking timer turn.
 
-- Use **Azure Speech-to-Text** (real-time streaming API)
-- Each player's LiveKit audio track is a separate stream → automatic speaker identification (no diarization needed)
-- The agent subscribes to each participant's audio track individually
-- For each track: pipe raw audio → Azure STT streaming session → get transcription events
-- Build a labeled transcript:
-  ```
-  [Quest 2 | Discussion]
-  Sarah: "I think we should put Mike on this quest"
-  Mike: "No way, I failed the last one... wait, I mean I didn't fail it"
-  John: "That's exactly what someone who failed it would say"
-  ```
-- Store transcript in memory (per game session), optionally persist to Redis or Supabase for post-game review
-- Only transcribe during active discussion phases (mute STT during voting/quest execution to save cost)
+- Agent subscribes to all human audio tracks in the LiveKit room
+- When a player's speaking timer starts, begin recording their audio track
+- When their timer ends (or they're auto-muted), stop recording
+- Save as WAV/WebM file in temp storage
+- Speaker identity is automatic — each LiveKit track belongs to a known player
 
-### 2.4 LLM Reasoning Engine
+**Not continuous streaming** — only record during active speaking turns. This saves:
+- STT costs (only transcribe ~50s per player per quest, not hours)
+- Processing resources
+- Storage
 
-**What**: The brain — takes game context and decides what to say/do.
+### 2.4 Speech-to-Text (Whisper)
 
-**LLM choice**: Claude (via Anthropic API) or GPT-4 (via Azure AI Foundry). Claude recommended for its instruction-following and roleplay capabilities.
+**What**: Transcribe each player's recorded audio after their turn ends.
 
-**Context window per request**:
+- Use **OpenAI Whisper API** — best Persian (Farsi) support
+- Send the full audio file (not streaming) — better accuracy for Persian
+- Returns complete text with punctuation
+- One API call per player turn (~50s of audio)
+- Cost: ~$0.006 per minute → ~$0.005 per turn → ~$0.25 per full game
+
+**Why Whisper over Azure STT**:
+- Superior Persian transcription accuracy
+- Simpler API (upload file, get text)
+- No streaming session management needed (turn-based approach)
+
+### 2.5 LLM Preprocessing (Pipelined)
+
+**What**: After each player's turn is transcribed, immediately send to LLM for analysis. This runs in parallel with the next player's turn.
+
+**Preprocessing prompt** (runs after each player speaks):
 ```
-System prompt:
-  - You are playing Avalon as [role]. Your secret alignment is [good/evil].
-  - Game rules summary (condensed)
-  - Your role's special abilities and constraints
-  - Behavioral guidelines (don't be obviously AI, maintain persona)
+You are analyzing a player's speech in an Avalon board game (spoken in Persian).
 
-Game state:
-  - Current quest number, past quest results
-  - Team proposal history and vote patterns
-  - Your known information (who you see as evil if Merlin, etc.)
-  - Current phase, whose turn it is
+Player: {seat_number} - {player_name}
+Quest: {current_quest}
+Phase: {phase}
+Raw transcript: "{transcribed_text}"
 
-Transcript:
-  - Full labeled discussion from this game (trimmed to last N rounds if too long)
-
-Task:
-  - "It's discussion time. What do you say?" → response text
-  - "Propose a team of 3." → team selection + reasoning
-  - "Vote approve or reject." → vote + reasoning
-  - "Submit quest action (success/fail)." → action + reasoning
+Analyze and output JSON:
+{
+  "summary": "1-2 sentence summary of what they said",
+  "sentiment": "confident/defensive/accusatory/neutral/nervous",
+  "key_claims": ["claims they made about themselves or others"],
+  "accusations": ["who they accused and of what"],
+  "contradictions": ["anything that contradicts their previous statements"],
+  "trust_signals": "high/medium/low — how trustworthy they sound"
+}
 ```
+
+**Use a fast/cheap model** for preprocessing (Claude Haiku or GPT-4o-mini):
+- ~500 tokens in, ~200 tokens out per call
+- Cost: ~$0.001 per preprocessing
+- Latency: ~500ms — finishes well before next player's turn ends
+
+**Result**: by the time it's the AI's turn, it has structured analysis of every player's speech, not just raw text.
+
+### 2.6 Game Memory System
+
+**What**: The AI maintains a persistent mental model of each player throughout the game — like how a real player remembers behavior patterns, contradictions, and alliances across quests.
+
+**Structure** (files stored in temp storage or AI Postgres, one set per game):
+
+```
+/game-memory/{gameId}/
+  player-1-sarah.md      ← updated after every turn Sarah speaks
+  player-2-mike.md       ← updated after every turn Mike speaks
+  player-3-john.md       ← ...
+  game-overview.md       ← quest results, vote patterns, team history
+  my-strategy.md         ← AI's own suspicions, plans, role-specific notes
+```
+
+**Player memory file** (updated after each of their speaking turns):
+
+```markdown
+# Player 1 — Sarah (Seat 1)
+
+## Trust Level: Medium → Low (updated Quest 3)
+
+## Quest 1 — Discussion
+- Proposed a safe team, seemed cautious
+- Defended Mike when accused
+
+## Quest 2 — Discussion
+- Changed stance on Mike, now suspicious of him
+- Contradicted Quest 1 defense — possible evil distancing
+
+## Quest 3 — Discussion
+- Accused AI directly — could be deflecting
+- Vote pattern: approved every team with Player 4
+
+## Observations
+- Always agrees with Player 4 → possible evil pair
+- Gets defensive when questioned about Quest 2 fail
+- Claimed to be Percival in Quest 3 but no evidence
+```
+
+**AI strategy file** (updated after each preprocessing + before each response):
+
+```markdown
+# AI Strategy — Role: Merlin
+
+## Known Evil Players
+- Player 4 (confirmed — visible to me)
+- Player 2 (confirmed — visible to me)
+
+## Suspicions from Discussion
+- Sarah and Player 4 vote together → likely allied
+- Mike seems genuinely confused → likely good
+
+## My Plan
+- Hint at Player 4 being evil without being obvious
+- Support Mike's accusations to guide the team
+- Avoid direct accusations — Assassin is watching
+```
+
+**Game overview file** (updated after each quest):
+
+```markdown
+# Game Overview
+
+## Quest Results
+- Quest 1: SUCCESS (team: Sarah, Mike) — 0 fails
+- Quest 2: FAIL (team: Sarah, Player 4, John) — 1 fail
+- Quest 3: in progress
+
+## Vote Patterns
+- Player 4 rejects every team without themselves
+- Sarah approves everything Player 4 approves
+
+## Team Proposal History
+- Quest 1: Sarah proposed [Sarah, Mike] — approved 4-1
+- Quest 2: Player 4 proposed [Sarah, Player 4, John] — approved 3-2
+```
+
+**How memory is updated**:
+
+After each player speaks:
+1. STT transcribes their speech
+2. LLM preprocessing summarizes + analyzes
+3. **Memory update call** (cheap model): takes the new analysis + existing player memory file → outputs updated file
+4. Updated file is written back
+
+Before AI's turn:
+1. **Strategy update call**: takes all player memory files + game overview → updates `my-strategy.md`
+2. Final response generation reads `my-strategy.md` + relevant player files as context
+
+**Why files/markdown (not structured DB)**:
+- LLMs work best with natural language context, not SQL queries
+- Easy to include entire file in prompt context
+- Human-readable for debugging and post-game review
+- Can be stored in AI Postgres as text columns if preferred
+
+**Memory budget**: each player file ~500-1000 tokens after a full game. With 10 players + overview + strategy = ~8-12k tokens total. Well within context limits.
+
+### 2.7 AI Response Generation
+
+**What**: When it's the AI's turn, generate a strategic response using all preprocessed context.
+
+**Context assembled for the final LLM call**:
+```
+System prompt (Persian):
+  - You are playing Avalon. Your role is {role}. Speak in Persian.
+  - Game rules summary (in Persian)
+  - Your role's abilities and constraints
+  - Personality: {personality_profile}
+  - IMPORTANT: You must sound natural, like a real Persian speaker. Use informal
+    conversational Persian, not formal/literary.
+
+Game memory (loaded from files):
+  - my-strategy.md: {AI's current suspicions, plans, known info}
+  - game-overview.md: {quest results, vote patterns, team history}
+  - Player files: {trust levels, observations, contradictions for each player}
+
+Current quest context:
+  Player 1 (Sarah): {this turn's summary, sentiment, key_claims}
+  Player 2 (Mike): {this turn's summary, sentiment, key_claims}
+  ...
+
+Your task: Generate your spoken response for this discussion round.
+Think strategically based on your role and memory. Keep it 2-4 sentences.
+```
+
+**Use the best model** for the final response (Claude Opus or GPT-4):
+- Needs strong Persian language generation
+- Needs strategic reasoning (bluffing, deduction)
+- ~5-10k tokens in (including memory files), ~100-200 tokens out
+- Latency: ~1-2s (memory is pre-loaded, not computed on the fly)
 
 **Decision types**:
 | Phase            | AI Decision                          | Output                  |
 |-----------------|--------------------------------------|-------------------------|
-| Discussion       | What to say                          | Spoken text             |
-| Team building    | Propose team (if leader)             | List of player names    |
-| Voting           | Approve or reject                    | Vote + optional comment |
+| Discussion       | What to say (Persian speech)         | Persian text → TTS      |
+| Team building    | Propose team (if leader)             | Team + explanation      |
+| Voting           | Approve or reject                    | Vote + spoken reason    |
 | Quest execution  | Success or fail                      | Quest action            |
-| Assassin phase   | Who is Merlin (if Assassin)          | Player name             |
-| Lady of the Lake | Who to investigate (if holding Lady) | Player name             |
+| Assassin phase   | Who is Merlin (if Assassin)          | Player name + reason    |
 | Merlin Quiz      | Who do you think is Merlin           | Player name             |
 
-**Token management**:
-- Keep a rolling context window — full transcript for current quest, summarized for earlier quests
-- Estimate ~500-1000 tokens per discussion round, ~10-15 rounds per game → 5k-15k transcript tokens
-- Total context per LLM call: ~3-5k (system + game state) + 5-15k (transcript) = ~8-20k tokens
-- Use prompt caching (system prompt + game rules are static across calls)
+### 2.7 Text-to-Speech (Persian)
 
-### 2.5 Text-to-Speech
+**What**: Convert the AI's Persian text response into natural speech.
 
-**What**: Convert the LLM's text response into natural speech audio.
+- **Primary: Azure TTS** — `fa-IR-DilaraNeural` or `fa-IR-FaridNeural` (Persian neural voices)
+- **Alternative: ElevenLabs** — supports Persian, more natural sounding but more expensive
+- Generate audio as PCM/Opus → publish to LiveKit room's audio track
+- Latency: ~300-500ms for first audio chunk
 
-- Use **Azure Text-to-Speech** (Neural voices)
-- Pick a distinct voice that's clearly "the AI" but still pleasant (e.g., `en-US-GuyNeural` or `en-US-AriaNeural`)
-- Generate audio as raw PCM or Opus (compatible with LiveKit audio track)
-- Stream the TTS output directly into the LiveKit room's audio track
-- Typical latency: 200-500ms for the first audio chunk (streaming mode)
+### 2.8 Simple Animated Avatar
 
-### 2.6 Simple Animated Avatar
+**What**: A minimal visual presence in the video grid.
 
-**What**: A minimal visual presence in the video grid — not a realistic face, just enough to feel like a participant.
+**Canvas-based avatar** (server-side, `node-canvas`):
+- Static character illustration as base
+- Mouth animation synced to TTS audio amplitude when speaking
+- State indicators: idle / listening / thinking / speaking
+- Published as a video track to LiveKit
 
-**Approach: Canvas-based animated avatar** (simplest that works)
-
-- A `<canvas>` element (or server-side canvas via `node-canvas`) that renders:
-  - A character illustration or icon (static image as the base)
-  - Simple mouth animation when speaking (open/close synced to audio amplitude)
-  - Name label overlay
-  - Optional: subtle idle animation (slight movement, blinking) so it doesn't look frozen
-- The canvas output is captured as a video track and published to LiveKit
-- This runs inside the AI agent service (headless, using `node-canvas` or `puppeteer` for rendering)
-
-**Why not Azure Talking Avatar**:
-- Adds complexity, cost, and another Azure dependency
-- A simple animated character fits the board game vibe better than a realistic human face
-- Can always upgrade later
-
-**Avatar states**:
 | State     | Visual                                         |
 |-----------|-------------------------------------------------|
-| Idle      | Static character with subtle breathing animation |
-| Listening | Small indicator (e.g., ear glow or "..." bubble) |
-| Thinking  | Thinking animation (dots, gears, etc.)           |
-| Speaking  | Mouth animation synced to audio amplitude        |
+| Idle      | Static character, subtle breathing animation    |
+| Listening | Ear glow or "..." bubble                        |
+| Thinking  | Dots animation (when LLM is generating)         |
+| Speaking  | Mouth animation synced to audio                 |
 
-### 2.7 Game Integration
+### 2.9 Game Integration
 
-**What**: The AI agent interacts with the game through the existing API routes — it's treated as a regular player.
+**What**: AI agent interacts with the game through existing API routes — treated as a regular player.
 
 **Joining a game**:
-1. Room manager toggles "Add AI Player" in lobby settings
-2. App creates a player record for the AI agent (like any other player)
-3. App calls the AI agent service: `POST /agent/join { roomCode, playerId, role }`
-4. Agent connects to LiveKit room + starts listening
-5. Agent appears in the player list and video grid like everyone else
+1. Room manager toggles "Add AI Player" in lobby
+2. App creates a player record for the AI
+3. App calls agent service: `POST /agent/join { roomCode, playerId }`
+4. Agent connects to LiveKit room
+5. Agent appears in player list and video grid
+
+**Integration with speaking timer**:
+- Agent listens for speaking timer data channel messages
+- Knows when each player's turn starts/ends → triggers recording
+- Knows when its own turn starts → triggers response generation
+- After generating response + TTS, the audio plays during its timer window
 
 **Acting in the game**:
-- Agent polls or subscribes to game state changes (via Supabase Realtime or app webhooks)
-- When the game phase changes and it's the AI's turn, the agent:
-  1. Queries current game state from the API
-  2. Sends context to the LLM
-  3. Gets a decision + spoken response
-  4. Submits the game action via the API (e.g., `POST /api/games/{id}/vote`)
-  5. Speaks the response via TTS → LiveKit audio track
+- Agent subscribes to game state via Supabase Realtime
+- Automatically submits votes, quest actions, team proposals via API
+- Speaks its reasoning via TTS during discussion phases
 
-**Discussion participation**:
-- During open discussion, the AI listens to the full conversation
-- It speaks when there's a natural pause (silence detection: ~3 seconds of no one talking)
-- It limits itself to 1-2 comments per discussion round (avoids dominating the conversation)
-- It can be "asked a question" — if someone says the AI's name, it responds next
+### 2.10 AI Personality & Strategy Profiles
 
-### 2.8 AI Personality & Strategy Profiles
+**What**: Configurable personality (in Persian).
 
-**What**: Configurable personality to make the AI fun to play with.
+- **محتاط (Cautious)**: Plays safe, doesn't accuse unless strong evidence
+- **تهاجمی (Aggressive)**: Accuses early, takes risks, bluffs confidently
+- **تحلیلگر (Analytical)**: Focuses on vote patterns, speaks methodically
+- **پیش‌فرض (Default)**: Balanced mix, adapts based on role
 
-- **Cautious**: Plays safe, doesn't accuse unless strong evidence, proposes "safe" teams
-- **Aggressive**: Accuses early, takes risks, bluffs confidently as evil
-- **Analytical**: Focuses on vote patterns and statistics, speaks methodically
-- **Default**: Balanced mix, adapts based on role
+Room manager picks a personality when adding the AI player.
 
-The room manager picks a personality when adding the AI player (or it's random).
+### 2.11 Latency Budget (Turn-Based)
 
-### 2.9 Latency Budget
+| Step                              | Time    | When it happens                          |
+|-----------------------------------|---------|------------------------------------------|
+| Record player audio               | 50s     | During their speaking turn               |
+| Whisper STT                       | ~3-5s   | After their turn ends (in parallel)      |
+| LLM preprocessing                 | ~0.5-1s | After STT (in parallel with next player) |
+| **All preprocessing done before AI's turn** | **0s** | **Already completed** |
+| LLM response generation           | ~1-2s   | When AI's turn starts                    |
+| TTS audio generation              | ~0.5s   | After LLM response                      |
+| **Total delay when AI starts speaking** | **~1.5-2.5s** | **Feels like natural thinking** |
 
-| Step                              | Target   | Notes                                    |
-|-----------------------------------|----------|------------------------------------------|
-| Silence detection (end of speech) | ~1-2s    | Wait for natural pause                   |
-| STT finalization                  | ~300ms   | Last audio chunk → final transcript      |
-| LLM reasoning                    | ~1-3s    | Depends on model and response length     |
-| TTS first audio chunk            | ~300ms   | Streaming mode                           |
-| **Total (turn to start speaking)** | **~2-5s** | Feels like natural thinking time        |
+### 2.12 Data Storage (Self-Hosted Postgres)
 
-This latency is fine — in a board game, 2-5 seconds of "thinking" before speaking is completely natural. Faster would actually feel uncanny.
+**What**: Separate Postgres database for AI data (game data stays on Supabase).
+
+```yaml
+ai-db:
+  image: postgres:16-alpine
+  environment:
+    POSTGRES_DB: avalon_ai
+    POSTGRES_PASSWORD: ${AI_DB_PASSWORD}
+  volumes:
+    - ai_data:/var/lib/postgresql/data
+```
+
+Stores:
+- Transcripts per game session (raw + preprocessed)
+- AI reasoning logs (what it decided and why)
+- Performance metrics (how often AI won, accuracy of reads)
+- Post-game review data
+
+### 2.13 Cost Estimate (Per Game Session, ~3-4 Hours)
+
+| Service                          | Usage                              | Cost         |
+|----------------------------------|------------------------------------|--------------|
+| Whisper STT                      | ~50 turns × 50s = ~42 min          | ~$0.25       |
+| LLM preprocessing (Haiku/mini)   | ~50 calls × ~700 tokens            | ~$0.10       |
+| LLM response (Claude/GPT-4)     | ~10 calls × ~3k tokens             | ~$1-2        |
+| Azure TTS (Persian)              | ~10 responses × ~50 words          | ~$0.10       |
+| **Total per session**            |                                    | **~$1.50-2.50** |
+
+Much cheaper than the original estimate ($6-8) because:
+- Turn-based STT (not continuous) — 90% less audio to transcribe
+- Preprocessing with cheap models — saves on expensive model tokens
+- Fewer LLM calls — only when AI speaks, not continuous listening
 
 ---
 
@@ -703,32 +861,36 @@ Continuing the existing spec numbering:
 | 030   | Adaptive resolution (720p/480p)  | 1     | P1       |
 | 031   | Watcher video (view-only)        | 1     | P2       |
 | 032   | VM deployment + Docker Compose   | 1     | P0       |
-| 033   | AI agent service scaffold        | 2     | P0       |
-| 034   | STT pipeline (Azure)             | 2     | P0       |
-| 035   | LLM reasoning engine             | 2     | P0       |
-| 036   | TTS pipeline (Azure)             | 2     | P0       |
-| 037   | Simple animated avatar           | 2     | P1       |
-| 038   | AI game integration (API actions)| 2     | P0       |
-| 039   | AI discussion participation      | 2     | P1       |
-| 040   | AI personality profiles          | 2     | P2       |
+| 033   | AI agent service scaffold (Node) | 2     | P0       |
+| 034   | Audio recording per turn         | 2     | P0       |
+| 035   | Whisper STT integration          | 2     | P0       |
+| 036   | LLM preprocessing pipeline       | 2     | P0       |
+| 037   | Game memory system (per-player)  | 2     | P0       |
+| 038   | AI response generation (Persian) | 2     | P0       |
+| 039   | Azure TTS Persian voice          | 2     | P0       |
+| 040   | AI game integration (API actions)| 2     | P0       |
+| 041   | Simple animated avatar           | 2     | P1       |
+| 042   | AI personality profiles (Persian)| 2     | P2       |
+| 043   | AI Postgres database             | 2     | P1       |
 | 041   | Mobile layout + responsive video | 3     | P1       |
 | 042   | Seat numbers on video tiles      | 3     | P0       |
-| 043   | Random speaking order indicator  | 3     | P1       |
-| 044   | Rejoin video after disconnect    | 3     | P0       |
-| 045   | Screen sharing                   | 3     | P2       |
-| 046   | Game session recording           | 3     | P2       |
+| 044   | Random speaking order indicator  | 3     | P1       |
+| 045   | Rejoin video after disconnect    | 3     | P0       |
+| 046   | Screen sharing                   | 3     | P2       |
+| 047   | Game session recording           | 3     | P2       |
 
 ---
 
 ## Cost Estimate (Per Game Session, ~3-4 Hours)
 
-| Service                      | Usage                        | Cost         |
-|------------------------------|------------------------------|--------------|
-| VM (4 vCPU, 16GB, game-only) | ~4 hours                     | ~$0.50       |
-| Azure STT                    | ~2 hours of transcription    | ~$2.00       |
-| LLM (Claude, prompt-cached)  | ~50 calls, ~15k tokens avg   | ~$3-5        |
-| Azure TTS                    | ~50 responses, ~100 words avg| ~$0.50       |
-| **Total per session**        |                              | **~$6-8**    |
+| Service                          | Usage                              | Cost         |
+|----------------------------------|------------------------------------|--------------|
+| VM (4 vCPU, 16GB, game-only)     | ~4 hours                           | ~$0.50       |
+| Whisper STT                      | ~50 turns × 50s = ~42 min          | ~$0.25       |
+| LLM preprocessing (Haiku/mini)   | ~50 calls × ~700 tokens            | ~$0.10       |
+| LLM response (Claude/GPT-4)     | ~10 calls × ~3k tokens             | ~$1-2        |
+| Azure TTS (Persian)              | ~10 responses × ~50 words          | ~$0.10       |
+| **Total per session**            |                                    | **~$2-3**    |
 
 If the VM runs 24/7: add ~$50-100/month. Consider auto-start/stop scripts if playing weekly.
 
