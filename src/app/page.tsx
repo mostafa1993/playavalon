@@ -88,97 +88,129 @@ export default function Home() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="w-full max-w-md text-center space-y-6">
-          <div>
-            <h1 className="font-display text-5xl font-bold text-avalon-gold">Avalon</h1>
-            <p className="text-avalon-text-muted mt-2">
-              Social deduction in the realm of King Arthur
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <Button variant="primary" fullWidth onClick={() => router.push('/login')}>
-              Log in
-            </Button>
-            <Button variant="secondary" fullWidth onClick={() => router.push('/signup')}>
-              Sign up
-            </Button>
-            <Link href="/rules" className="text-avalon-text-muted text-sm hover:text-avalon-gold inline-flex items-center justify-center gap-1 mt-2">
-              <BookOpen size={14} /> Rulebook
-            </Link>
-          </div>
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md text-center space-y-3 mb-8">
+          <h1 className="font-display text-6xl font-bold text-avalon-gold tracking-wide">
+            AVALON
+          </h1>
+          <p className="text-avalon-text-muted italic">
+            The Resistance: Social Deduction
+          </p>
+        </div>
+
+        <div className="w-full max-w-md bg-avalon-navy/50 border border-avalon-dark-border rounded-lg p-6 space-y-3">
+          <Button variant="primary" fullWidth onClick={() => router.push('/login')}>
+            Log in
+          </Button>
+          <Button variant="secondary" fullWidth onClick={() => router.push('/signup')}>
+            Sign up
+          </Button>
+        </div>
+
+        <div className="mt-8 text-center space-y-2">
+          <Link
+            href="/rules"
+            className="text-avalon-text-muted text-sm hover:text-avalon-gold inline-flex items-center justify-center gap-1.5"
+          >
+            <BookOpen size={14} /> View Rulebook
+          </Link>
+          <p className="text-avalon-text-muted text-xs">
+            For 5-10 players • Real-time multiplayer
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-md space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-display text-3xl font-bold text-avalon-gold">Avalon</h1>
-            <p className="text-avalon-text-muted text-sm">
-              Welcome, <span className="text-avalon-text">{profile?.display_name ?? user.email}</span>
-            </p>
-          </div>
-          <button
-            onClick={signOut}
-            className="text-avalon-text-muted hover:text-avalon-gold text-xs inline-flex items-center gap-1"
-            title="Log out"
-          >
-            <LogOut size={14} /> Log out
-          </button>
-        </div>
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10 relative">
+      <button
+        onClick={signOut}
+        className="absolute top-4 right-4 text-avalon-text-muted hover:text-avalon-gold text-xs inline-flex items-center gap-1"
+        title="Log out"
+      >
+        <LogOut size={14} /> Log out
+      </button>
 
-        <div className="space-y-4">
-          <Button
-            variant="primary"
-            fullWidth
-            onClick={() => setIsCreateModalOpen(true)}
-            isLoading={isCreatingRoom}
-          >
-            Create a room
-          </Button>
-
-          <form onSubmit={handleJoinRoom} className="space-y-2">
-            <Input
-              label="Join by room code"
-              value={roomCodeInput}
-              onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-              placeholder="ABC123"
-              maxLength={6}
-              className="text-center tracking-widest font-mono text-lg"
-              error={roomCodeError ?? undefined}
-              fullWidth
-            />
-            <Button
-              type="submit"
-              variant="secondary"
-              fullWidth
-              isLoading={isJoiningRoom}
-              disabled={roomCodeInput.length !== 6}
-            >
-              Join
-            </Button>
-          </form>
-
-          {generalError && (
-            <p className="text-avalon-crimson text-sm text-center">{generalError}</p>
-          )}
-
-          <Link href="/rules" className="text-avalon-text-muted text-sm hover:text-avalon-gold inline-flex items-center justify-center gap-1 w-full">
-            <BookOpen size={14} /> Rulebook
-          </Link>
-        </div>
-
-        <CreateRoomModal
-          isOpen={isCreateModalOpen}
-          onClose={() => setIsCreateModalOpen(false)}
-          onCreateRoom={handleCreateRoom}
-          isLoading={isCreatingRoom}
-        />
+      <div className="w-full max-w-md text-center space-y-3 mb-8">
+        <h1 className="font-display text-6xl font-bold text-avalon-gold tracking-wide">
+          AVALON
+        </h1>
+        <p className="text-avalon-text-muted italic">
+          The Resistance: Social Deduction
+        </p>
       </div>
+
+      <div className="w-full max-w-md bg-avalon-navy/50 border border-avalon-dark-border rounded-lg p-6 space-y-5">
+        <div className="text-center">
+          <h2 className="font-display text-2xl font-bold text-avalon-gold">
+            Welcome, {profile?.display_name ?? user.email}
+          </h2>
+          <p className="text-avalon-text-muted text-sm mt-1">
+            Start a new game or join one with a code
+          </p>
+        </div>
+
+        <Button
+          variant="primary"
+          fullWidth
+          onClick={() => setIsCreateModalOpen(true)}
+          isLoading={isCreatingRoom}
+        >
+          Create a room
+        </Button>
+
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-avalon-dark-border" />
+          <span className="text-avalon-text-muted text-xs uppercase tracking-wider">or</span>
+          <div className="flex-1 h-px bg-avalon-dark-border" />
+        </div>
+
+        <form onSubmit={handleJoinRoom} className="space-y-2">
+          <Input
+            label="Join by room code"
+            value={roomCodeInput}
+            onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
+            placeholder="ABC123"
+            maxLength={6}
+            className="text-center tracking-widest font-mono text-lg"
+            error={roomCodeError ?? undefined}
+            fullWidth
+          />
+          <Button
+            type="submit"
+            variant="secondary"
+            fullWidth
+            isLoading={isJoiningRoom}
+            disabled={roomCodeInput.length !== 6}
+          >
+            Join
+          </Button>
+        </form>
+
+        {generalError && (
+          <p className="text-avalon-crimson text-sm text-center">{generalError}</p>
+        )}
+      </div>
+
+      <div className="mt-8 text-center space-y-2">
+        <Link
+          href="/rules"
+          className="text-avalon-text-muted text-sm hover:text-avalon-gold inline-flex items-center justify-center gap-1.5"
+        >
+          <BookOpen size={14} /> View Rulebook
+        </Link>
+        <p className="text-avalon-text-muted text-xs">
+          For 5-10 players • Real-time multiplayer
+        </p>
+      </div>
+
+      <CreateRoomModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCreateRoom={handleCreateRoom}
+        isLoading={isCreatingRoom}
+      />
     </div>
   );
 }
