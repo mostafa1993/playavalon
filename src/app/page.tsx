@@ -9,7 +9,7 @@ import { CreateRoomModal } from '@/components/CreateRoomModal';
 import { useAuth } from '@/hooks/useAuth';
 import { validateRoomCode } from '@/lib/domain/validation';
 import type { RoleConfig } from '@/types/role-config';
-import { BookOpen, LogOut } from 'lucide-react';
+import { BookOpen, LogOut, Swords } from 'lucide-react';
 
 export default function Home() {
   const router = useRouter();
@@ -142,18 +142,17 @@ export default function Home() {
       </div>
 
       <div className="w-full max-w-md bg-avalon-navy/50 border border-avalon-dark-border rounded-lg p-6 space-y-5">
-        <div className="text-center">
-          <h2 className="font-display text-2xl font-bold text-avalon-gold">
-            Welcome, {profile?.display_name ?? user.email}
+        <div className="text-center space-y-1">
+          <p className="text-avalon-text-muted text-sm">Welcome back,</p>
+          <h2 className="font-display text-3xl font-bold text-avalon-gold">
+            {profile?.display_name ?? user.email}
           </h2>
-          <p className="text-avalon-text-muted text-sm mt-1">
-            Start a new game or join one with a code
-          </p>
         </div>
 
         <Button
           variant="primary"
           fullWidth
+          leftIcon={<Swords size={18} />}
           onClick={() => setIsCreateModalOpen(true)}
           isLoading={isCreatingRoom}
         >
@@ -168,10 +167,10 @@ export default function Home() {
 
         <form onSubmit={handleJoinRoom} className="space-y-2">
           <Input
-            label="Join by room code"
+            label="Join by Room Code"
             value={roomCodeInput}
             onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-            placeholder="ABC123"
+            placeholder="Enter 6-character code"
             maxLength={6}
             className="text-center tracking-widest font-mono text-lg"
             error={roomCodeError ?? undefined}
@@ -184,13 +183,22 @@ export default function Home() {
             isLoading={isJoiningRoom}
             disabled={roomCodeInput.length !== 6}
           >
-            Join
+            Join Room
           </Button>
         </form>
 
         {generalError && (
           <p className="text-avalon-crimson text-sm text-center">{generalError}</p>
         )}
+
+        <div className="pt-2 border-t border-avalon-dark-border text-center">
+          <Link
+            href="/rooms"
+            className="text-avalon-text-muted text-sm hover:text-avalon-gold transition-colors"
+          >
+            Browse active rooms →
+          </Link>
+        </div>
       </div>
 
       <div className="mt-8 text-center space-y-2">
