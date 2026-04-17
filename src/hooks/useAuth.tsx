@@ -9,8 +9,6 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import type { User } from '@supabase/supabase-js';
-import { getSupabaseClient } from '@/lib/supabase/client';
 
 export interface PlayerProfile {
   id: string;
@@ -18,8 +16,13 @@ export interface PlayerProfile {
   display_name: string;
 }
 
+interface AuthUser {
+  id: string;
+  email: string | null;
+}
+
 interface AuthContextValue {
-  user: User | null;
+  user: AuthUser | null;
   profile: PlayerProfile | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -28,108 +31,50 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+async function fetchMe(): Promise<{ user: AuthUser | null; profile: PlayerProfile | null }> {
+  const res = await fetch('/api/auth/me', { cache: 'no-store' });
+  if (!res.ok) return { user: null, profile: null };
+  return res.json();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = useCallback(async (userId: string) => {
-    const supabase = getSupabaseClient();
-    const { data } = await supabase
-      .from('players')
-      .select('id, username, display_name')
-      .eq('id', userId)
-      .maybeSingle();
-    setProfile((data as PlayerProfile | null) ?? null);
+  const refresh = useCallback(async () => {
+    const { user, profile } = await fetchMe();
+    setUser(user);
+    setProfile(profile);
   }, []);
 
-  const refresh = useCallback(async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    setUser(currentUser);
-    if (currentUser) {
-      await loadProfile(currentUser.id);
-    } else {
-      setProfile(null);
-    }
-  }, [loadProfile]);
-
   useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log('[useAuth] mount: initializing');
-    const supabase = getSupabaseClient();
-    // eslint-disable-next-line no-console
-    console.log('[useAuth] got supabase client');
     let mounted = true;
-
     (async () => {
       try {
-        // eslint-disable-next-line no-console
-        console.log('[useAuth] calling getSession...');
-        const withTimeout = <T,>(p: Promise<T>, ms: number, label: string) =>
-          Promise.race([
-            p,
-            new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${label} TIMEOUT ${ms}ms`)), ms)),
-          ]);
-        const { data: { session } } = await withTimeout(
-          supabase.auth.getSession(),
-          5000,
-          'getSession'
-        );
-        const currentUser = session?.user ?? null;
-        // eslint-disable-next-line no-console
-        console.log('[useAuth] getSession returned user:', currentUser?.id ?? 'null');
+        const { user, profile } = await fetchMe();
         if (!mounted) return;
-        setUser(currentUser);
-        if (currentUser) {
-          try {
-            // eslint-disable-next-line no-console
-            console.log('[useAuth] loading profile for', currentUser.id);
-            await loadProfile(currentUser.id);
-            // eslint-disable-next-line no-console
-            console.log('[useAuth] profile loaded');
-          } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('[useAuth] loadProfile failed:', err);
-          }
-        }
+        setUser(user);
+        setProfile(profile);
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error('[useAuth] init failed:', err);
+        console.error('[useAuth] fetch /api/auth/me failed:', err);
       } finally {
-        // eslint-disable-next-line no-console
-        console.log('[useAuth] setting loading=false');
         if (mounted) setLoading(false);
       }
     })();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!mounted) return;
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        try {
-          await loadProfile(session.user.id);
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error('[useAuth] loadProfile (onAuthChange) failed:', err);
-        }
-      } else {
-        setProfile(null);
-      }
-    });
-
     return () => {
       mounted = false;
-      subscription.unsubscribe();
     };
-  }, [loadProfile]);
+  }, []);
 
   const signOut = useCallback(async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch {
-      // Even if the server request fails, clear local state and redirect.
+      // Best-effort — clear local state and redirect regardless.
     }
     setUser(null);
     setProfile(null);
