@@ -11,7 +11,6 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,11 +29,6 @@ export default function SignupPage() {
 
       if (!res.ok) {
         setError(data.error || 'Signup failed');
-        return;
-      }
-
-      if (data.requiresEmailConfirmation) {
-        setNeedsConfirmation(true);
         return;
       }
 
@@ -59,16 +53,6 @@ export default function SignupPage() {
           <p className="text-avalon-text-muted text-sm mt-2">Join the realm of Avalon</p>
         </div>
 
-        {needsConfirmation ? (
-          <div className="bg-avalon-navy/50 border border-avalon-dark-border rounded-lg p-4 text-center space-y-2">
-            <p className="text-avalon-text">
-              Check your inbox at <span className="text-avalon-gold">{email}</span> to confirm your account.
-            </p>
-            <p className="text-avalon-text-muted text-sm">
-              Click the link in the email, then log in.
-            </p>
-          </div>
-        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="Username"
@@ -116,7 +100,6 @@ export default function SignupPage() {
             Sign up
           </Button>
         </form>
-        )}
 
         <div className="text-center text-sm text-avalon-text-muted">
           Already have an account?{' '}

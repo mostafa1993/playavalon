@@ -63,12 +63,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Username already taken' }, { status: 409 });
   }
 
-  const autoConfirmEmail = process.env.NODE_ENV !== 'production';
-
   const { data: created, error: createError } = await service.auth.admin.createUser({
     email,
     password,
-    email_confirm: autoConfirmEmail,
+    email_confirm: true,
     user_metadata: { username, display_name: displayName },
   });
 
@@ -92,16 +90,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Prod: email must be confirmed before login; send verification and ask user to check inbox.
-  if (!autoConfirmEmail) {
-    return NextResponse.json({
-      ok: true,
-      userId: created.user.id,
-      requiresEmailConfirmation: true,
-    });
-  }
-
-  // Dev: email already confirmed — auto-login so signup feels seamless.
+  // Email is auto-confirmed — sign the user in so signup feels seamless.
   const route = await createRouteClient();
   const { error: signInError } = await route.auth.signInWithPassword({ email, password });
 
