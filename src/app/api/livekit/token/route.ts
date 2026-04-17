@@ -5,8 +5,8 @@
 
 import { NextResponse } from 'next/server';
 import { AccessToken } from 'livekit-server-sdk';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
+import { findPlayerById } from '@/lib/supabase/players';
 import { findRoomByCode, isPlayerInRoom } from '@/lib/supabase/rooms';
 import { errors, handleError } from '@/lib/utils/errors';
 
@@ -25,8 +25,8 @@ export async function POST(request: Request) {
       return errors.internalError('LiveKit is not configured');
     }
 
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -37,10 +37,10 @@ export async function POST(request: Request) {
       return errors.invalidRequest('roomCode is required');
     }
 
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
 
-    // Verify player exists
-    const player = await findPlayerByPlayerId(supabase, playerId);
+    // Get player profile for LiveKit participant metadata
+    const player = await findPlayerById(supabase, user.id);
     if (!player) {
       return errors.playerNotFound();
     }
@@ -51,16 +51,16 @@ export async function POST(request: Request) {
       return errors.roomNotFound();
     }
 
-    // Verify player is in this room (room_players uses player's DB id, not localStorage id)
-    const inRoom = await isPlayerInRoom(supabase, room.id, player.id);
+    // Verify player is in this room
+    const inRoom = await isPlayerInRoom(supabase, room.id, user.id);
     if (!inRoom) {
       return errors.notRoomMember();
     }
 
     // Generate LiveKit access token
     const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
-      identity: playerId,
-      name: player.nickname,
+      identity: user.id,
+      name: player.display_name,
       ttl: '6h',
     });
 

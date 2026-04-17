@@ -4,8 +4,8 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId, getPlayerCurrentRoom } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
+import { getPlayerCurrentRoom } from '@/lib/supabase/players';
 import {
   findRoomByCode,
   addPlayerToRoom,
@@ -27,9 +27,8 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { code } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -42,13 +41,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Find the room
     const room = await findRoomByCode(supabase, code);
@@ -57,7 +50,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Check if player is already in this room (rejoin)
-    const alreadyInRoom = await isPlayerInRoom(supabase, room.id, player.id);
+    const alreadyInRoom = await isPlayerInRoom(supabase, room.id, user.id);
     if (alreadyInRoom) {
       // Update connection status for rejoin
       await supabase
@@ -67,12 +60,12 @@ export async function POST(request: Request, { params }: RouteParams) {
           disconnected_at: null,
         })
         .eq('room_id', room.id)
-        .eq('player_id', player.id);
+        .eq('player_id', user.id);
 
       return NextResponse.json({
         data: {
           room_id: room.id,
-          player_id: player.id,
+          user_id: user.id,
           joined_at: new Date().toISOString(),
           is_rejoin: true,
         },
@@ -80,7 +73,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Check if player is in another room
-    const currentRoom = await getPlayerCurrentRoom(supabase, playerId);
+    const currentRoom = await getPlayerCurrentRoom(supabase, user.id);
     if (currentRoom) {
       return errors.playerAlreadyInRoom();
     }
@@ -97,41 +90,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       return errors.roomNotWaiting();
     }
 
-    // Check for nickname collision in room
-    const { data: existingPlayers } = await supabase
-      .from('room_players')
-      .select(`
-        player_id,
-        players!inner (
-          nickname
-        )
-      `)
-      .eq('room_id', room.id);
-
-    const nicknameExists = existingPlayers?.some(
-      (rp: { players: { nickname: string }[] }) =>
-        rp.players[0]?.nickname.toLowerCase() === player.nickname.toLowerCase()
-    );
-
-    if (nicknameExists) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'NICKNAME_TAKEN',
-            message: 'Another player in this room has the same nickname',
-          },
-        },
-        { status: 409 }
-      );
-    }
-
-    // Add player to room
-    const roomPlayer = await addPlayerToRoom(supabase, room.id, player.id);
+    // Add player to room (usernames are globally unique, so no in-room nickname collision check needed)
+    const roomPlayer = await addPlayerToRoom(supabase, room.id, user.id);
 
     return NextResponse.json({
       data: {
         room_id: room.id,
-        player_id: player.id,
+        user_id: user.id,
         joined_at: roomPlayer.joined_at,
         is_rejoin: false,
       },

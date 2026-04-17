@@ -5,18 +5,18 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { RoomList } from '@/components/RoomList';
 import { CreateRoomModal } from '@/components/CreateRoomModal';
-import { usePlayer } from '@/hooks/usePlayer';
-import { createBrowserClient } from '@/lib/supabase/client';
-import { getPlayerId } from '@/lib/utils/player-id';
+import { useAuth } from '@/hooks/useAuth';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import { RefreshCw } from 'lucide-react';
 import type { RoomListItem } from '@/types/room';
+import type { RoleConfig } from '@/types/role-config';
 
 /**
  * Active rooms list page
  */
 export default function RoomsPage() {
   const router = useRouter();
-  const { isRegistered, isLoading: playerLoading, playerId } = usePlayer();
+  const { user, loading: authLoading } = useAuth();
 
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,9 +26,6 @@ export default function RoomsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
 
-  /**
-   * Fetch rooms from API
-   */
   const fetchRooms = useCallback(async () => {
     try {
       const response = await fetch('/api/rooms');
@@ -45,12 +42,10 @@ export default function RoomsPage() {
     }
   }, []);
 
-  // Initial fetch and real-time subscription
   useEffect(() => {
     fetchRooms();
 
-    // Set up Supabase Realtime subscription for room changes
-    const supabase = createBrowserClient();
+    const supabase = getSupabaseClient();
 
     const channel = supabase
       .channel('rooms-list')
@@ -62,7 +57,6 @@ export default function RoomsPage() {
           table: 'rooms',
         },
         () => {
-          // Refresh room list on any room change
           fetchRooms();
         }
       )
@@ -74,7 +68,6 @@ export default function RoomsPage() {
           table: 'room_players',
         },
         () => {
-          // Refresh on player count changes
           fetchRooms();
         }
       )
@@ -85,18 +78,15 @@ export default function RoomsPage() {
     };
   }, [fetchRooms]);
 
-  // Redirect to home if not registered
+  // Redirect to login if not authenticated
   useEffect(() => {
-    if (!playerLoading && !isRegistered) {
-      router.push('/');
+    if (!authLoading && !user) {
+      router.push('/login?returnTo=/rooms');
     }
-  }, [playerLoading, isRegistered, router]);
+  }, [authLoading, user, router]);
 
-  /**
-   * Handle joining a room
-   */
   const handleJoinRoom = async (code: string) => {
-    if (!playerId) return;
+    if (!user) return;
 
     setJoiningCode(code);
     setError(null);
@@ -104,9 +94,6 @@ export default function RoomsPage() {
     try {
       const response = await fetch(`/api/rooms/${code}/join`, {
         method: 'POST',
-        headers: {
-          'X-Player-ID': playerId,
-        },
       });
 
       const data = await response.json();
@@ -115,7 +102,6 @@ export default function RoomsPage() {
         throw new Error(data.error?.message || 'Failed to join room');
       }
 
-      // Redirect to the room lobby
       router.push(`/rooms/${code}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join room');
@@ -123,22 +109,14 @@ export default function RoomsPage() {
     }
   };
 
-  /**
-   * Feature 015: Handle watching a game
-   */
   const handleWatchRoom = (code: string, gameId: string) => {
     setWatchingCode(code);
     setError(null);
-    // Navigate to watcher view (join will happen on page load)
     router.push(`/watch/${gameId}`);
   };
 
-  /**
-   * Handle room creation
-   */
-  const handleCreateRoom = async (expectedPlayers: number) => {
-    const id = getPlayerId();
-    if (!id) return;
+  const handleCreateRoom = async (expectedPlayers: number, roleConfig: RoleConfig) => {
+    if (!user) return;
 
     setIsCreatingRoom(true);
     setError(null);
@@ -148,9 +126,8 @@ export default function RoomsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Player-ID': id,
         },
-        body: JSON.stringify({ expected_players: expectedPlayers }),
+        body: JSON.stringify({ expected_players: expectedPlayers, role_config: roleConfig }),
       });
 
       const data = await response.json();
@@ -159,7 +136,6 @@ export default function RoomsPage() {
         throw new Error(data.error?.message || 'Failed to create room');
       }
 
-      // Redirect to the room lobby
       router.push(`/rooms/${data.data.code}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create room');
@@ -169,8 +145,7 @@ export default function RoomsPage() {
     }
   };
 
-  // Loading state
-  if (playerLoading || isLoading) {
+  if (authLoading || isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-avalon-midnight min-h-screen">
         <div className="text-center space-y-4">
@@ -184,7 +159,6 @@ export default function RoomsPage() {
   return (
     <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 bg-avalon-midnight">
       <div className="w-full max-w-lg space-y-6 animate-fade-in">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-display font-bold text-avalon-gold">
@@ -202,14 +176,12 @@ export default function RoomsPage() {
           </button>
         </div>
 
-        {/* Error Display */}
         {error && (
           <div className="p-4 bg-evil/20 border border-evil/50 rounded-lg animate-slide-up">
             <p className="text-evil-light text-sm text-center">{error}</p>
           </div>
         )}
 
-        {/* Create Room Button */}
         <Button
           variant="primary"
           fullWidth
@@ -218,7 +190,6 @@ export default function RoomsPage() {
           ⚔️ Create a Room
         </Button>
 
-        {/* Room List */}
         <RoomList
           rooms={rooms}
           onJoin={handleJoinRoom}
@@ -227,7 +198,6 @@ export default function RoomsPage() {
           watchingCode={watchingCode}
         />
 
-        {/* Refresh Button */}
         <button
           onClick={fetchRooms}
           className="w-full text-center text-avalon-text-secondary hover:text-avalon-gold transition-colors text-sm"
@@ -236,7 +206,6 @@ export default function RoomsPage() {
         </button>
       </div>
 
-      {/* Create Room Modal */}
       <CreateRoomModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}

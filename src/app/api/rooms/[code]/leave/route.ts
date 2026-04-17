@@ -4,8 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import {
   findRoomByCode,
   removePlayerFromRoom,
@@ -29,9 +28,8 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { code } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -44,13 +42,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Find the room
     const room = await findRoomByCode(supabase, code);
@@ -59,16 +51,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Check if player is in this room
-    const isMember = await isPlayerInRoom(supabase, room.id, player.id);
+    const isMember = await isPlayerInRoom(supabase, room.id, user.id);
     if (!isMember) {
       return errors.notRoomMember();
     }
 
     // Remove player from room
-    await removePlayerFromRoom(supabase, room.id, player.id);
+    await removePlayerFromRoom(supabase, room.id, user.id);
 
     // Check if player was manager
-    const wasManager = room.manager_id === player.id;
+    const wasManager = room.manager_id === user.id;
 
     // Get remaining player count
     const remainingPlayers = await getRoomPlayerCount(supabase, room.id);

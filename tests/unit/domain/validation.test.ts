@@ -4,7 +4,6 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  validateNickname,
   validatePlayerCount,
   validateUUID,
   validateRoomCode,
@@ -15,42 +14,6 @@ import {
 } from '@/lib/domain/validation';
 
 describe('validation', () => {
-  describe('validateNickname', () => {
-    it('should accept valid nicknames', () => {
-      expect(validateNickname('John').valid).toBe(true);
-      expect(validateNickname('Player 1').valid).toBe(true);
-      expect(validateNickname('Cool-Name_123').valid).toBe(true);
-      expect(validateNickname('ABC').valid).toBe(true); // Min length
-      expect(validateNickname('A'.repeat(20)).valid).toBe(true); // Max length
-    });
-
-    it('should reject empty or whitespace-only nicknames', () => {
-      expect(validateNickname('').valid).toBe(false);
-      expect(validateNickname('   ').valid).toBe(false);
-    });
-
-    it('should reject too short nicknames', () => {
-      expect(validateNickname('AB').valid).toBe(false);
-      expect(validateNickname('A').valid).toBe(false);
-    });
-
-    it('should reject too long nicknames', () => {
-      expect(validateNickname('A'.repeat(21)).valid).toBe(false);
-    });
-
-    it('should reject nicknames with special characters', () => {
-      expect(validateNickname('Name@123').valid).toBe(false);
-      expect(validateNickname('Name!').valid).toBe(false);
-      expect(validateNickname('Name#$%').valid).toBe(false);
-    });
-
-    it('should reject non-string input', () => {
-      expect(validateNickname(null as unknown as string).valid).toBe(false);
-      expect(validateNickname(undefined as unknown as string).valid).toBe(false);
-      expect(validateNickname(123 as unknown as string).valid).toBe(false);
-    });
-  });
-
   describe('validatePlayerCount', () => {
     it('should accept valid player counts', () => {
       for (let count = 5; count <= 10; count++) {

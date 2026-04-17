@@ -50,7 +50,7 @@ export function RoomCard({
           <div className="flex items-center gap-4 text-sm text-avalon-silver">
             <span className="flex items-center gap-1">
               <span>🏠</span>
-              <span className="truncate">{room.manager_nickname}</span>
+              <span className="truncate">{room.manager_display_name}</span>
             </span>
             <span className="flex items-center gap-1">
               <span>👥</span>

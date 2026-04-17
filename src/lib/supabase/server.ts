@@ -1,23 +1,32 @@
 /**
- * Server-side Supabase client
- * Uses service role key - ONLY for API routes
+ * Server-side Supabase clients
+ *
+ * Two client types:
+ *   - createServiceClient(): service-role key, bypasses RLS. Use in API routes for
+ *     privileged operations (creating users, writing game state, etc.).
+ *   - createRouteClient(): cookie-backed auth client. Reads the current user's
+ *     session from Next.js cookies. Use when you need auth.uid() to be set,
+ *     or when RLS should apply.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient as createSSRClient } from '@supabase/ssr';
+import { createClient as createServiceRoleClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
+import type { User } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 /**
- * Create a server-side Supabase client with service role
- * This bypasses RLS - use with caution and only in API routes
+ * Service-role client. Bypasses RLS. Server-only.
  */
-export function createServerClient() {
+export function createServiceClient() {
   if (!supabaseUrl || !supabaseServiceKey) {
     throw new Error('Missing Supabase server environment variables');
   }
 
-  return createClient(supabaseUrl, supabaseServiceKey, {
+  return createServiceRoleClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -26,39 +35,52 @@ export function createServerClient() {
 }
 
 /**
- * Create a server client with player context set in Postgres session
- * This allows RLS policies to work with the player_id
- * @param playerId - The player's localStorage UUID
+ * Auth client for Next.js server contexts (route handlers, server components,
+ * server actions). Reads/writes the session cookie. RLS applies as the
+ * current user.
  */
-export async function createServerClientWithPlayer(playerId: string) {
-  const client = createServerClient();
+export async function createRouteClient() {
+  const cookieStore = await cookies();
 
-  // Set the player_id in the Postgres session for RLS
-  await client.rpc('set_config', {
-    setting_name: 'app.player_id',
-    new_value: playerId,
-    is_local: true,
+  return createSSRClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          );
+        } catch {
+          // `setAll` is called from a Server Component; cookies can't be mutated there.
+          // The middleware handles session refresh, so this is safe to ignore.
+        }
+      },
+    },
   });
-
-  return client;
 }
 
 /**
- * Get the player ID from request headers
- * @param request - The incoming request
- * @returns The player ID or null if not provided
+ * Get the currently authenticated user, or null if not signed in.
+ *
+ * Use at the top of any protected API route / server action.
  */
-export function getPlayerIdFromRequest(request: Request): string | null {
-  return request.headers.get('X-Player-ID');
+export async function getCurrentUser(): Promise<User | null> {
+  const client = await createRouteClient();
+  const { data: { user } } = await client.auth.getUser();
+  return user;
 }
 
 /**
- * Validate that a player ID is provided
- * @param playerId - The player ID to validate
- * @throws Error if player ID is missing
+ * Require an authenticated user. Throws if no session.
+ *
+ * @throws Error with status-like message; caller should return 401.
  */
-export function requirePlayerId(playerId: string | null): asserts playerId is string {
-  if (!playerId) {
-    throw new Error('UNAUTHORIZED: Player ID required');
+export async function requireUser(): Promise<User> {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('UNAUTHORIZED: Authentication required');
   }
+  return user;
 }

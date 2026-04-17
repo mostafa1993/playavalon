@@ -5,13 +5,12 @@
  * Feature 015: /app/watch/[gameId]/page.tsx
  *
  * Entry point for spectators watching a game.
- * Uses WatcherGameBoard for read-only game display.
  */
 
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { WatcherGameBoard } from '@/components/game/WatcherGameBoard';
-import { getPlayerId, getStoredNickname } from '@/lib/utils/player-id';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Eye } from 'lucide-react';
 
@@ -27,36 +26,32 @@ export default function WatcherPage({
   const resolvedParams = use(params);
   const gameId = resolvedParams.gameId;
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
 
   const [isJoining, setIsJoining] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasJoined, setHasJoined] = useState(false);
 
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push(`/login?returnTo=/watch/${gameId}`);
+    }
+  }, [authLoading, user, router, gameId]);
+
   // Join as watcher on mount
   useEffect(() => {
+    if (!user) return;
+
     async function joinAsWatcher() {
       try {
-        const playerId = getPlayerId();
-        const nickname = getStoredNickname();
-
-        // Check if user has a nickname
-        if (!nickname) {
-          setError('Please register a nickname first');
-          setIsJoining(false);
-          return;
-        }
-
-        // Attempt to join as watcher
         const response = await fetch(`/api/watch/${gameId}/join`, {
           method: 'POST',
-          headers: { 'X-Player-ID': playerId },
         });
 
         if (!response.ok) {
           const data = await response.json();
           const errorCode = data.error?.code;
 
-          // Provide user-friendly error messages
           switch (errorCode) {
             case 'GAME_NOT_STARTED':
               setError('Game hasn\'t started yet. Watching will be available once the game begins.');
@@ -67,8 +62,8 @@ export default function WatcherPage({
             case 'GAME_NOT_FOUND':
               setError('Game not found.');
               break;
-            case 'NICKNAME_REQUIRED':
-              setError('Please register a nickname before watching.');
+            case 'UNAUTHORIZED':
+              setError('You must be logged in to watch games.');
               break;
             default:
               setError(data.error?.message || 'Failed to join as watcher');
@@ -87,10 +82,9 @@ export default function WatcherPage({
     }
 
     joinAsWatcher();
-  }, [gameId]);
+  }, [gameId, user]);
 
-  // Loading state
-  if (isJoining) {
+  if (authLoading || isJoining) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-8 bg-avalon-midnight min-h-screen">
         <div className="text-center">
@@ -101,7 +95,6 @@ export default function WatcherPage({
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-8 bg-avalon-midnight min-h-screen">
@@ -119,7 +112,6 @@ export default function WatcherPage({
     );
   }
 
-  // Success - show game board
   if (hasJoined) {
     return (
       <div className="flex-1 flex flex-col p-6 md:p-8 bg-avalon-midnight min-h-screen">
@@ -128,6 +120,5 @@ export default function WatcherPage({
     );
   }
 
-  // Fallback
   return null;
 }

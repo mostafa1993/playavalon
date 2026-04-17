@@ -59,7 +59,7 @@ export function errorResponse(
  * Common error responses
  */
 export const errors = {
-  unauthorized: (message = 'Player ID required') =>
+  unauthorized: (message = 'Authentication required') =>
     errorResponse(ERROR_CODES.UNAUTHORIZED, message, 401),
 
   notFound: (resource = 'Resource') =>
@@ -72,13 +72,7 @@ export const errors = {
     errorResponse(ERROR_CODES.INTERNAL_ERROR, message, 500),
 
   playerNotFound: () =>
-    errorResponse(ERROR_CODES.PLAYER_NOT_FOUND, 'Player not registered', 404),
-
-  invalidNickname: () =>
-    errorResponse(ERROR_CODES.INVALID_NICKNAME, 'Nickname must be 3-20 characters', 400),
-
-  invalidPlayerId: () =>
-    errorResponse(ERROR_CODES.INVALID_PLAYER_ID, 'Invalid player ID format', 400),
+    errorResponse(ERROR_CODES.PLAYER_NOT_FOUND, 'Player profile not found', 404),
 
   invalidPlayerCount: () =>
     errorResponse(ERROR_CODES.INVALID_PLAYER_COUNT, 'Player count must be 5-10', 400),
@@ -94,9 +88,6 @@ export const errors = {
 
   roomNotWaiting: () =>
     errorResponse(ERROR_CODES.ROOM_NOT_WAITING, 'Room is not accepting players', 409),
-
-  nicknameTaken: () =>
-    errorResponse(ERROR_CODES.NICKNAME_TAKEN, 'Nickname already taken in this room', 409),
 
   notRoomMember: () =>
     errorResponse(ERROR_CODES.NOT_ROOM_MEMBER, 'You are not a member of this room', 403),

@@ -108,10 +108,10 @@ export function QuestExecution({
                     ${isMe ? 'bg-avalon-gold/30 text-avalon-gold' : 'bg-emerald-500/20 text-emerald-400'}
                   `}
                 >
-                  {member.nickname.charAt(0).toUpperCase()}
+                  {member.display_name.charAt(0).toUpperCase()}
                 </div>
                 <span className={`text-xs mt-1 ${isMe ? 'text-avalon-gold' : 'text-avalon-silver/80'}`}>
-                  {isMe ? 'You' : member.nickname}
+                  {isMe ? 'You' : member.display_name}
                 </span>
               </div>
             );

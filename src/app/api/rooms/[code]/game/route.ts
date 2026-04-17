@@ -4,8 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { findRoomByCode, isPlayerInRoom } from '@/lib/supabase/rooms';
 import { getGameByRoomId } from '@/lib/supabase/games';
 import { validateRoomCode } from '@/lib/domain/validation';
@@ -23,9 +22,8 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { code } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -38,13 +36,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Find the room
     const room = await findRoomByCode(supabase, code);
@@ -53,7 +45,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Check if player is in this room
-    const isMember = await isPlayerInRoom(supabase, room.id, player.id);
+    const isMember = await isPlayerInRoom(supabase, room.id, user.id);
     if (!isMember) {
       return errors.notRoomMember();
     }
@@ -61,7 +53,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Get game for room (handle case where games table might not exist yet)
     try {
       const game = await getGameByRoomId(supabase, room.id);
-      
+
       if (!game) {
         return NextResponse.json({
           data: {
@@ -95,4 +87,3 @@ export async function GET(request: Request, { params }: RouteParams) {
     return handleError(error);
   }
 }
-

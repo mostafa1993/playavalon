@@ -12,23 +12,28 @@ import { VideoRoom } from '@/components/video';
 import { ViewModeToggle } from '@/components/video/ViewModeToggle';
 import { VideoControls } from '@/components/video/VideoControls';
 import { ChatPanel } from '@/components/video/ChatPanel';
-import { ResizableSplit } from '@/components/video/ResizableSplit';
 import { TimerButton } from '@/components/video/TimerButton';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useGameState } from '@/hooks/useGameState';
 import { useSpeakingTimer } from '@/hooks/useSpeakingTimer';
-import { getPlayerId, hasPlayerId } from '@/lib/utils/player-id';
-import { ScaleToFit } from '@/components/ui/ScaleToFit';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function GamePage() {
   const router = useRouter();
   const params = useParams();
   const gameId = params.gameId as string;
-  const [isReady, setIsReady] = useState(false);
+  const { user, loading: authLoading } = useAuth();
   const [initialLeaderIndex, setInitialLeaderIndex] = useState<number | null>(null);
   const { isConnected, viewMode, room } = useLiveKit();
   const { roomCode, gameState, isManager } = useGameState(gameId);
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push(`/login?returnTo=/game/${gameId}`);
+    }
+  }, [authLoading, user, router, gameId]);
 
   // Capture the initial leader index on first game state load
   useEffect(() => {
@@ -58,10 +63,10 @@ export default function GamePage() {
     for (let i = 0; i < playerCount; i++) {
       const seatNum = ((i - leader_index + playerCount) % playerCount) + 1;
       const dbPlayerId = seating_order[i];
-      const gamePlayer = gameState.players.find((p: any) => p.id === dbPlayerId);
+      const gamePlayer = gameState.players.find((p) => p.id === dbPlayerId);
       if (!gamePlayer) continue;
 
-      const lkParticipant = participants.find(p => p.name === gamePlayer.nickname);
+      const lkParticipant = participants.find(p => p.name === gamePlayer.display_name);
       if (lkParticipant) {
         map.set(lkParticipant.identity, seatNum);
       }
@@ -71,31 +76,19 @@ export default function GamePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seatingOrderKey, initialLeaderIndex, participantCount]);
 
-  // Redirect to home if not registered
-  useEffect(() => {
-    const id = getPlayerId();
-    if (!id) {
-      router.push('/');
-    } else {
-      setIsReady(true);
-    }
-  }, [router]);
-
-  // T036: Activity heartbeat for disconnect detection
-  useHeartbeat({ enabled: isReady && hasPlayerId() });
+  // Activity heartbeat for disconnect detection
+  useHeartbeat({ enabled: !!user });
 
   // Find the leader's LiveKit identity for speaking timer
-  // Falls back to DB id if leader isn't in the video call (e.g., bots)
   const leaderIdentity = useMemo(() => {
     if (!gameState?.players || !room) return undefined;
-    const leader = gameState.players.find((p: any) => p.is_leader);
+    const leader = gameState.players.find((p) => p.is_leader);
     if (!leader) return undefined;
     const participants = [room.localParticipant, ...Array.from(room.remoteParticipants.values())];
-    const lkParticipant = participants.find(p => p.name === leader.nickname);
+    const lkParticipant = participants.find(p => p.name === leader.display_name);
     return lkParticipant?.identity ?? `db-${leader.id}`;
   }, [gameState?.players, room]);
 
-  // Speaking timer — only room manager can control
   const speakingTimer = useSpeakingTimer({
     isManager,
     seatNumbers,
@@ -105,7 +98,6 @@ export default function GamePage() {
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
-      {/* Floating top-right bar — only when connected */}
       {isConnected && (
         <div className="fixed top-6 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
           <ViewModeToggle />
@@ -121,9 +113,7 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* Content area */}
       <div className="flex-1 min-h-0 flex">
-        {/* Game panel — always rendered, visibility/size changes per mode */}
         <div
           className={`
             overflow-y-auto transition-none
@@ -133,7 +123,6 @@ export default function GamePage() {
           `}
         >
           <div className={`${!isConnected || viewMode === 'game' ? 'max-w-2xl mx-auto py-4 px-4 pb-8' : ''}`}>
-            {/* Join video bar — centered when not connected */}
             {!isConnected && roomCode && (
               <div className="flex items-center justify-center py-2 px-4 mb-3 bg-avalon-navy/50 rounded-lg border border-avalon-dark-border">
                 <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} inline />
@@ -143,7 +132,6 @@ export default function GamePage() {
           </div>
         </div>
 
-        {/* Video panel — always rendered when connected, visibility changes per mode */}
         {isConnected && roomCode && (
           <div
             className={`

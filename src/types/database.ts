@@ -12,29 +12,26 @@ export interface Database {
     Tables: {
       players: {
         Row: {
-          id: string;
-          player_id: string;
-          nickname: string;
-          nickname_lower: string;      // Phase 6: Generated column for case-insensitive uniqueness
-          last_activity_at: string;    // Phase 6: Heartbeat timestamp for disconnect detection
+          id: string;                  // Equals auth.users.id
+          username: string;            // Unique, lowercase
+          display_name: string;        // Cosmetic, shown in UI
+          last_activity_at: string;    // Heartbeat timestamp for disconnect detection
           created_at: string;
           updated_at: string;
         };
         Insert: {
-          id?: string;
-          player_id: string;
-          nickname: string;
-          // nickname_lower is generated, not insertable
-          last_activity_at?: string;   // Phase 6
+          id: string;                  // Must match auth.users.id
+          username: string;
+          display_name: string;
+          last_activity_at?: string;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
-          player_id?: string;
-          nickname?: string;
-          // nickname_lower is generated, not updatable directly
-          last_activity_at?: string;   // Phase 6
+          username?: string;
+          display_name?: string;
+          last_activity_at?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -145,7 +142,7 @@ export interface Database {
     Functions: {
       get_evil_teammates: {
         Args: { p_room_id: string; p_player_id: string };
-        Returns: Array<{ nickname: string }>;
+        Returns: Array<{ display_name: string }>;
       };
       archive_stale_rooms: {
         Args: Record<string, never>;
@@ -156,29 +153,9 @@ export interface Database {
           total_archived: number;
         }>;
       };
-      // Phase 6: Player Reconnection Functions
-      check_nickname_available: {
-        Args: { p_nickname: string };
+      check_username_available: {
+        Args: { p_username: string };
         Returns: boolean;
-      };
-      find_player_in_room: {
-        Args: { p_room_code: string; p_nickname: string };
-        Returns: Array<{
-          player_id: string;
-          room_player_id: string;
-          nickname: string;
-          last_activity_at: string;
-          room_id: string;
-        }>;
-      };
-      reclaim_seat: {
-        Args: { p_room_code: string; p_nickname: string; p_new_player_id: string };
-        Returns: Array<{
-          success: boolean;
-          error_code: string | null;
-          room_id: string | null;
-          old_player_id: string | null;
-        }>;
       };
     };
   };

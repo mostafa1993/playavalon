@@ -23,7 +23,6 @@ import { RulebookModal } from '@/components/rulebook/RulebookModal';
 import { Button } from '@/components/ui/Button';
 import { getPhaseName, getPhaseDescription } from '@/lib/domain/game-state-machine';
 import { getQuestRequirement } from '@/lib/domain/quest-config';
-import { getPlayerId } from '@/lib/utils/player-id';
 import { Eye } from 'lucide-react';
 import type { WatcherGameState } from '@/types/watcher';
 
@@ -85,10 +84,8 @@ export function WatcherGameBoard({ gameId }: WatcherGameBoardProps) {
   // Handle stop watching
   const handleStopWatching = useCallback(async () => {
     try {
-      const playerId = getPlayerId();
       await fetch(`/api/watch/${gameId}/leave`, {
         method: 'POST',
-        headers: { 'X-Player-ID': playerId },
       });
     } catch {
       // Ignore errors on leave
@@ -176,12 +173,12 @@ export function WatcherGameBoard({ gameId }: WatcherGameBoardProps) {
           <span className="text-2xl">🌊</span>
           <div className="flex-1">
             <p className="text-blue-200 text-sm">
-              <span className="font-medium">{lady_of_lake.last_investigation.investigator_nickname}</span>
+              <span className="font-medium">{lady_of_lake.last_investigation.investigator_display_name}</span>
               {' '}investigated{' '}
-              <span className="font-medium">{lady_of_lake.last_investigation.target_nickname}</span>
+              <span className="font-medium">{lady_of_lake.last_investigation.target_display_name}</span>
             </p>
             <p className="text-blue-300/60 text-xs">
-              🌊 {lady_of_lake.holder_nickname} now holds the Lady of the Lake
+              🌊 {lady_of_lake.holder_display_name} now holds the Lady of the Lake
             </p>
           </div>
         </div>
@@ -288,7 +285,7 @@ function WatcherPhaseContent({ gameState }: WatcherPhaseContentProps) {
 
         {/* Waiting message - same as non-leaders see */}
         <div className="text-center text-avalon-silver/60 animate-pulse">
-          Waiting for {leader?.nickname || 'Leader'} to propose a team...
+          Waiting for {leader?.display_name || 'Leader'} to propose a team...
         </div>
       </div>
     );
@@ -394,7 +391,7 @@ function WatcherPhaseContent({ gameState }: WatcherPhaseContentProps) {
 
   // Lady of the Lake Phase - matches player view (LadyOfLakePhase component)
   if (game.phase === 'lady_of_lake') {
-    const holder = players.find(p => p.nickname === gameState.lady_of_lake?.holder_nickname);
+    const holder = players.find(p => p.display_name === gameState.lady_of_lake?.holder_display_name);
 
     return (
       <div className="space-y-4">
@@ -409,7 +406,7 @@ function WatcherPhaseContent({ gameState }: WatcherPhaseContentProps) {
 
         {/* Waiting message */}
         <div className="text-center text-avalon-silver/60 animate-pulse">
-          <span className="font-medium text-blue-300">{holder?.nickname || 'Lady Holder'}</span>
+          <span className="font-medium text-blue-300">{holder?.display_name || 'Lady Holder'}</span>
           {' '}is choosing a player to investigate...
         </div>
       </div>
@@ -493,7 +490,7 @@ function WatcherGameOverView({ gameState }: WatcherGameOverViewProps) {
                 .filter(p => p.revealed_role === 'good')
                 .map(p => (
                   <div key={p.id} className="text-sm">
-                    <span className="text-avalon-silver">{p.nickname}</span>
+                    <span className="text-avalon-silver">{p.display_name}</span>
                     {p.revealed_special_role && (
                       <span className="text-emerald-300/70 ml-1 text-xs capitalize">
                         ({p.revealed_special_role.replace(/_/g, ' ')})
@@ -512,7 +509,7 @@ function WatcherGameOverView({ gameState }: WatcherGameOverViewProps) {
                 .filter(p => p.revealed_role === 'evil')
                 .map(p => (
                   <div key={p.id} className="text-sm">
-                    <span className="text-avalon-silver">{p.nickname}</span>
+                    <span className="text-avalon-silver">{p.display_name}</span>
                     {p.revealed_special_role && (
                       <span className="text-red-300/70 ml-1 text-xs capitalize">
                         ({p.revealed_special_role.replace(/_/g, ' ')})

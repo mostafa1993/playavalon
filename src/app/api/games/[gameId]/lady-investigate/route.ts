@@ -3,24 +3,24 @@
  * Submit Lady of the Lake investigation
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { NextResponse } from 'next/server';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById } from '@/lib/supabase/games';
 import { getPlayerRole } from '@/lib/supabase/roles';
-import { 
-  createInvestigation, 
+import {
+  createInvestigation,
   getInvestigatedPlayerIds,
   getPreviousLadyHolderIds,
 } from '@/lib/supabase/lady-investigations';
-import { 
-  validateInvestigationTarget, 
-  getInvestigationResult 
+import {
+  validateInvestigationTarget,
+  getInvestigationResult
 } from '@/lib/domain/lady-of-lake';
 import { isLadyPhase } from '@/lib/domain/game-state-machine';
 import type { LadyInvestigateResponse } from '@/types/game';
 
 export async function POST(
-  request: NextRequest,
+  request: Request,
   context: { params: Promise<{ gameId: string }> }
 ) {
   try {
@@ -28,11 +28,10 @@ export async function POST(
     const body = await request.json();
     const { target_player_id } = body;
 
-    // Get player ID from header (this is the database ID passed from frontend)
-    const playerDbId = request.headers.get('x-player-id');
-    if (!playerDbId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json(
-        { error: 'Player ID required' },
+        { error: 'Authentication required' },
         { status: 401 }
       );
     }
@@ -44,7 +43,7 @@ export async function POST(
       );
     }
 
-    const supabase = await createServerClient();
+    const supabase = createServiceClient();
 
     // Get game state
     const game = await getGameById(supabase, gameId);
@@ -61,7 +60,7 @@ export async function POST(
     }
 
     // Verify the player exists in the game
-    if (!game.seating_order.includes(playerDbId)) {
+    if (!game.seating_order.includes(user.id)) {
       return NextResponse.json(
         { error: 'Player not in this game' },
         { status: 403 }
@@ -69,7 +68,7 @@ export async function POST(
     }
 
     // Verify player is the Lady holder
-    if (game.lady_holder_id !== playerDbId) {
+    if (game.lady_holder_id !== user.id) {
       return NextResponse.json(
         { error: 'You are not the Lady of the Lake holder', code: 'NOT_LADY_HOLDER' },
         { status: 403 }
@@ -82,22 +81,22 @@ export async function POST(
       getPreviousLadyHolderIds(supabase, gameId),
     ]);
 
-    // Validate target (excludes self, investigated targets, and previous Lady holders)
+    // Validate target
     const validationError = validateInvestigationTarget(
       target_player_id,
-      playerDbId,
+      user.id,
       investigatedIds,
       previousHolderIds,
       game.seating_order
     );
 
     if (validationError) {
-      const code = validationError.includes('yourself') 
-        ? 'CANNOT_INVESTIGATE_SELF' 
+      const code = validationError.includes('yourself')
+        ? 'CANNOT_INVESTIGATE_SELF'
         : validationError.includes('held the Lady')
           ? 'PREVIOUS_LADY_HOLDER'
-          : validationError.includes('already') 
-            ? 'ALREADY_INVESTIGATED' 
+          : validationError.includes('already')
+            ? 'ALREADY_INVESTIGATED'
             : 'INVALID_TARGET';
       return NextResponse.json(
         { error: validationError, code },
@@ -121,18 +120,16 @@ export async function POST(
     await createInvestigation(supabase, {
       game_id: gameId,
       quest_number: game.current_quest,
-      investigator_id: playerDbId,
+      investigator_id: user.id,
       target_id: target_player_id,
       result,
     });
 
-    // CRITICAL FIX: Use optimistic locking to prevent race condition
-    // Calculate new leader index and quest number
+    // Atomic update with optimistic lock
     const nextLeaderIndex = (game.leader_index + 1) % game.seating_order.length;
     const nextLeaderId = game.seating_order[nextLeaderIndex];
     const nextQuest = game.current_quest + 1;
 
-    // Single atomic update with optimistic lock
     const { data: updateResult, error: updateError } = await supabase
       .from('games')
       .update({
@@ -140,22 +137,19 @@ export async function POST(
         current_quest: nextQuest,
         leader_index: nextLeaderIndex,
         current_leader_id: nextLeaderId,
-        lady_holder_id: target_player_id, // Transfer Lady to target
+        lady_holder_id: target_player_id,
       })
       .eq('id', gameId)
-      .eq('phase', 'lady_of_lake') // Optimistic lock - only update if phase unchanged
+      .eq('phase', 'lady_of_lake')
       .select()
       .single();
-    
+
     if (updateError || !updateResult) {
-      // Another request already processed this - still return investigation result
-      // but with current game state
       const currentGame = await getGameById(supabase, gameId);
-      
-      // Get target player's nickname for response
+
       const { data: targetData } = await supabase
         .from('players')
-        .select('nickname')
+        .select('display_name')
         .eq('id', target_player_id)
         .single();
 
@@ -163,17 +157,17 @@ export async function POST(
         success: true,
         result,
         new_holder_id: target_player_id,
-        new_holder_nickname: targetData?.nickname || 'Unknown',
+        new_holder_display_name: targetData?.display_name || 'Unknown',
         next_quest: currentGame?.current_quest || nextQuest,
       };
 
       return NextResponse.json({ data: response });
     }
 
-    // Get target player's nickname for response
+    // Get target player's display name for response
     const { data: targetData } = await supabase
       .from('players')
-      .select('nickname')
+      .select('display_name')
       .eq('id', target_player_id)
       .single();
 
@@ -181,7 +175,7 @@ export async function POST(
       success: true,
       result,
       new_holder_id: target_player_id,
-      new_holder_nickname: targetData?.nickname || 'Unknown',
+      new_holder_display_name: targetData?.display_name || 'Unknown',
       next_quest: nextQuest,
     };
 
@@ -194,4 +188,3 @@ export async function POST(
     );
   }
 }
-

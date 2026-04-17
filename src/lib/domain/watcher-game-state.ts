@@ -1,15 +1,6 @@
 /**
  * Watcher Game State Builder
  * Feature 015: Build neutral observer view of game state
- *
- * CRITICAL: This module builds a SUBSET of GameState
- * - NO player roles (until game_over)
- * - NO individual vote choices (until reveal)
- * - NO individual quest actions (until reveal)
- * - NO Lady of the Lake investigation results
- * - NO player-specific fields (my_vote, am_team_member, etc.)
- *
- * Per FR-006/FR-007, watchers see only publicly visible information.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -24,14 +15,6 @@ import { getConnectionStatus } from './connection-status';
 
 /**
  * Build game state for a watcher (neutral observer view)
- * This is called from GET /api/watch/[gameId]
- *
- * @param supabase - Supabase client for database reads
- * @param game - The game record
- * @param currentProposal - Current team proposal (if any)
- * @param votedPlayerIds - IDs of players who have voted (for has_voted indicator)
- * @param lastVoteResult - Last vote result (for reveal animation)
- * @param playersData - Player records with nicknames and activity
  */
 export async function buildWatcherGameState(
   supabase: SupabaseClient,
@@ -39,38 +22,32 @@ export async function buildWatcherGameState(
   currentProposal: TeamProposal | null,
   votedPlayerIds: string[],
   lastVoteResult: WatcherGameState['last_vote_result'],
-  playersData: Array<{ id: string; nickname: string; last_activity_at?: string }>
+  playersData: Array<{ id: string; display_name: string; last_activity_at?: string }>
 ): Promise<WatcherGameState> {
-  // Build nickname and activity maps
-  const nicknameMap = new Map(
-    playersData.map((p) => [p.id, p.nickname])
+  const displayNameMap = new Map(
+    playersData.map((p) => [p.id, p.display_name])
   );
   const activityMap = new Map(
     playersData.map((p) => [p.id, p.last_activity_at])
   );
 
-  // Get quest requirement for current quest
   const questRequirements = getQuestRequirementsMap(game.player_count);
   const questRequirement: QuestRequirement = questRequirements[game.current_quest];
 
-  // Build watcher-safe player list
   const players: WatcherPlayerInfo[] = await buildWatcherPlayerList(
     supabase,
     game,
     currentProposal,
     votedPlayerIds,
-    nicknameMap,
+    displayNameMap,
     activityMap
   );
 
-  // Build Lady of the Lake state (public info only)
-  const ladyOfLake = await buildWatcherLadyState(supabase, game, nicknameMap);
+  const ladyOfLake = await buildWatcherLadyState(supabase, game, displayNameMap);
 
-  // Calculate aggregate vote/action counts
   const votesSubmitted = votedPlayerIds.length;
   const totalPlayers = game.player_count;
 
-  // Get action counts if in quest phase
   let actionsSubmitted = 0;
   let totalTeamMembers = 0;
 
@@ -101,19 +78,14 @@ export async function buildWatcherGameState(
   };
 }
 
-/**
- * Build watcher-safe player list
- * Excludes role information except at game_over
- */
 async function buildWatcherPlayerList(
   supabase: SupabaseClient,
   game: Game,
   currentProposal: TeamProposal | null,
   votedPlayerIds: string[],
-  nicknameMap: Map<string, string>,
+  displayNameMap: Map<string, string>,
   activityMap: Map<string, string | undefined>
 ): Promise<WatcherPlayerInfo[]> {
-  // Only get roles at game_over (FR-010: show same game over screen as players)
   let playerRolesMap = new Map<string, { role: string; special_role: string | null }>();
 
   if (game.phase === 'game_over') {
@@ -142,39 +114,31 @@ async function buildWatcherPlayerList(
 
     return {
       id: pid,
-      nickname: nicknameMap.get(pid) || 'Unknown',
+      display_name: displayNameMap.get(pid) || 'Unknown',
       seat_position: index,
       is_leader: pid === game.current_leader_id,
       is_on_team: currentProposal?.team_member_ids.includes(pid) || false,
       has_voted: votedPlayerIds.includes(pid),
       is_connected: connectionStatus.is_connected,
-      // Roles only at game_over (FR-010)
       revealed_role:
         game.phase === 'game_over'
           ? (roleInfo?.role as 'good' | 'evil')
           : undefined,
       revealed_special_role:
         game.phase === 'game_over' ? roleInfo?.special_role ?? undefined : undefined,
-      // NOTE: was_decoy and was_mixed_group are NOT included for watchers
-      // These are player-specific reveal details that watchers don't need
     };
   });
 }
 
-/**
- * Build Lady of the Lake state for watchers
- * Shows WHO was investigated but NOT the result (FR-007)
- */
 async function buildWatcherLadyState(
   supabase: SupabaseClient,
   game: Game,
-  nicknameMap: Map<string, string>
+  displayNameMap: Map<string, string>
 ): Promise<WatcherLadyState | null> {
   if (!game.lady_enabled) {
     return null;
   }
 
-  // Get last investigation (public info only - no result)
   const { data: lastInvestigation } = await supabase
     .from('lady_investigations')
     .select('investigator_id, target_id')
@@ -186,21 +150,20 @@ async function buildWatcherLadyState(
   let lastInvestigationInfo = null;
   if (lastInvestigation) {
     lastInvestigationInfo = {
-      investigator_nickname:
-        nicknameMap.get(lastInvestigation.investigator_id) || 'Unknown',
-      target_nickname:
-        nicknameMap.get(lastInvestigation.target_id) || 'Unknown',
-      // NO result field - watchers don't see this (FR-007)
+      investigator_display_name:
+        displayNameMap.get(lastInvestigation.investigator_id) || 'Unknown',
+      target_display_name:
+        displayNameMap.get(lastInvestigation.target_id) || 'Unknown',
     };
   }
 
-  const holderNickname = game.lady_holder_id
-    ? nicknameMap.get(game.lady_holder_id) || 'Unknown'
+  const holderDisplayName = game.lady_holder_id
+    ? displayNameMap.get(game.lady_holder_id) || 'Unknown'
     : null;
 
   return {
     enabled: true,
-    holder_nickname: holderNickname,
+    holder_display_name: holderDisplayName,
     last_investigation: lastInvestigationInfo,
   };
 }

@@ -18,7 +18,6 @@ import { PlayerSeats } from './PlayerSeats';
 import { InvestigationResult } from './InvestigationResult';
 import { AssassinPhase } from './AssassinPhase';
 import { GameOver } from './GameOver';
-import { SessionTakeoverAlert } from '@/components/SessionTakeoverAlert';
 import { RulebookModal } from '@/components/rulebook/RulebookModal';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -32,7 +31,7 @@ interface GameBoardProps {
 
 export function GameBoard({ gameId }: GameBoardProps) {
   const router = useRouter();
-  const { gameState, currentPlayerId, playerRole, specialRole, roomCode, loading, error, sessionTakenOver, refetch } = useGameState(gameId);
+  const { gameState, currentUserId: currentPlayerId, playerRole, specialRole, roomCode, loading, error, refetch } = useGameState(gameId);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showRulebook, setShowRulebook] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -118,7 +117,7 @@ export function GameBoard({ gameId }: GameBoardProps) {
       p.id !== gameState.lady_of_lake?.holder_id
     );
     // For now, we'll get it from the last investigation
-    const targetNickname = gameState?.lady_of_lake?.last_investigation?.target_nickname || 'Unknown';
+    const targetNickname = gameState?.lady_of_lake?.last_investigation?.target_display_name || 'Unknown';
 
     setInvestigationResult({
       targetNickname: newHolderNickname, // The new holder IS the target
@@ -176,7 +175,6 @@ export function GameBoard({ gameId }: GameBoardProps) {
           playerRole={playerRole}
           players={players}
           currentPlayerId={currentPlayerId ?? undefined}
-          currentPlayerDbId={currentPlayerId ?? undefined}
           hasMerlin={hasMerlin}
         />
       </div>
@@ -313,12 +311,12 @@ export function GameBoard({ gameId }: GameBoardProps) {
           <span className="text-2xl">🌊</span>
           <div className="flex-1">
             <p className="text-blue-200 text-sm">
-              <span className="font-medium">{lady_of_lake.last_investigation.investigator_nickname}</span>
+              <span className="font-medium">{lady_of_lake.last_investigation.investigator_display_name}</span>
               {' '}investigated{' '}
-              <span className="font-medium">{lady_of_lake.last_investigation.target_nickname}</span>
+              <span className="font-medium">{lady_of_lake.last_investigation.target_display_name}</span>
             </p>
             <p className="text-blue-300/60 text-xs">
-              🌊 {lady_of_lake.holder_nickname} now holds the Lady of the Lake
+              🌊 {lady_of_lake.holder_display_name} now holds the Lady of the Lake
             </p>
           </div>
         </div>
@@ -464,9 +462,6 @@ export function GameBoard({ gameId }: GameBoardProps) {
           onContinue={handleInvestigationContinue}
         />
       )}
-
-      {/* T073: Session Takeover Alert */}
-      <SessionTakeoverAlert isOpen={sessionTakenOver} />
 
       {/* Feature 014: Rulebook Modal */}
       <RulebookModal isOpen={showRulebook} onClose={() => setShowRulebook(false)} />

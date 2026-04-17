@@ -6,7 +6,7 @@
  * All broadcasts happen AFTER successful database writes (FR-011).
  */
 
-import { createServerClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import {
   getChannelName,
   type BroadcastEventType,
@@ -61,7 +61,7 @@ async function sendBroadcast<T>(
   payload: T
 ): Promise<void> {
   try {
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
     const channelName = getChannelName(gameId);
 
     // Create or get channel and send broadcast

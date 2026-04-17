@@ -33,7 +33,7 @@ export function PlayerCard({ player, isCurrentPlayer = false }: PlayerCardProps)
           }
         `}
       >
-        {player.nickname.charAt(0).toUpperCase()}
+        {player.display_name.charAt(0).toUpperCase()}
       </div>
 
       {/* Player info */}
@@ -45,7 +45,7 @@ export function PlayerCard({ player, isCurrentPlayer = false }: PlayerCardProps)
               ${isCurrentPlayer ? 'text-avalon-gold' : 'text-avalon-parchment'}
             `}
           >
-            {player.nickname}
+            {player.display_name}
           </span>
 
           {isCurrentPlayer && (

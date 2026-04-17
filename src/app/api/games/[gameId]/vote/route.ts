@@ -4,8 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById, endGame } from '@/lib/supabase/games';
 import { getCurrentProposal, resolveProposal } from '@/lib/supabase/proposals';
 import { submitVote, getVoteCount, calculateVoteTotals } from '@/lib/supabase/votes';
@@ -32,9 +31,8 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -49,13 +47,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Get game
     const game = await getGameById(supabase, gameId);
@@ -67,7 +59,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Verify player is in this game
-    if (!game.seating_order.includes(player.id)) {
+    if (!game.seating_order.includes(user.id)) {
       return NextResponse.json(
         { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
         { status: 403 }
@@ -95,7 +87,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     try {
       await submitVote(supabase, {
         proposal_id: proposal.id,
-        player_id: player.id,
+        player_id: user.id,
         vote,
       });
     } catch (err) {
@@ -113,8 +105,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const totalPlayers = game.player_count;
 
     // Feature 016: Broadcast vote submission (FR-002)
-    // Note: Does NOT include vote value - only that player voted
-    await broadcastVoteSubmitted(gameId, player.id, votesSubmitted, totalPlayers);
+    await broadcastVoteSubmitted(gameId, user.id, votesSubmitted, totalPlayers);
 
     // Check if all votes are in
     if (votesSubmitted === totalPlayers) {
@@ -128,18 +119,18 @@ export async function POST(request: Request, { params }: RouteParams) {
         .select(`
           player_id,
           vote,
-          players!inner (nickname)
+          players!inner (display_name)
         `)
         .eq('proposal_id', proposal.id);
 
       const voteInfos: VoteInfo[] = (votesData || []).map((v) => {
-        const players = v.players as { nickname: string } | { nickname: string }[] | null;
-        const nickname = Array.isArray(players)
-          ? players[0]?.nickname || 'Unknown'
-          : players?.nickname || 'Unknown';
+        const players = v.players as { display_name: string } | { display_name: string }[] | null;
+        const displayName = Array.isArray(players)
+          ? players[0]?.display_name || 'Unknown'
+          : players?.display_name || 'Unknown';
         return {
           player_id: v.player_id,
-          nickname,
+          display_name: displayName,
           vote: v.vote as 'approve' | 'reject',
         };
       });
@@ -164,7 +155,6 @@ export async function POST(request: Request, { params }: RouteParams) {
 
       if (result.isApproved) {
         // Team approved - reset vote track and move to quest phase
-        // CRITICAL FIX: Use optimistic locking to prevent race condition
         const { error: updateError } = await supabase
           .from('games')
           .update({
@@ -172,13 +162,11 @@ export async function POST(request: Request, { params }: RouteParams) {
             vote_track: 0,
           })
           .eq('id', gameId)
-          .eq('phase', 'voting'); // Only update if still in voting phase
+          .eq('phase', 'voting');
 
-        // If update failed, another request already processed this - that's OK
         if (updateError) {
           console.log('Vote result already processed by another request');
         } else {
-          // Feature 016: Broadcast phase transition (FR-013)
           await broadcastPhaseTransition(
             gameId,
             'quest',
@@ -192,13 +180,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         const newVoteTrack = game.vote_track + 1;
 
         if (wouldBeFifthRejection(game.vote_track)) {
-          // 5th rejection - Evil wins!
           await endGame(supabase, gameId, 'evil', '5_rejections');
-          // Feature 016: Broadcast game over (FR-014)
           await broadcastGameOver(gameId, 'evil', '5_rejections');
         } else {
-          // CRITICAL FIX: Use optimistic locking to prevent race condition
-          // Calculate new leader index and update atomically
           const nextLeaderIndex = (game.leader_index + 1) % game.seating_order.length;
           const nextLeaderId = game.seating_order[nextLeaderIndex];
 
@@ -211,13 +195,11 @@ export async function POST(request: Request, { params }: RouteParams) {
               current_leader_id: nextLeaderId,
             })
             .eq('id', gameId)
-            .eq('phase', 'voting'); // Only update if still in voting phase
+            .eq('phase', 'voting');
 
-          // If update failed, another request already processed this - that's OK
           if (updateError) {
             console.log('Vote result already processed by another request');
           } else {
-            // Feature 016: Broadcast phase transition (FR-013)
             await broadcastPhaseTransition(
               gameId,
               'team_building',

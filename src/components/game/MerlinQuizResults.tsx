@@ -14,13 +14,11 @@ import type { MerlinQuizResults as QuizResults, MerlinQuizResultEntry } from '@/
 
 interface MerlinQuizResultsProps {
   gameId: string;
-  currentPlayerId: string;
   onShowRoles: () => void;
 }
 
 export function MerlinQuizResults({
   gameId,
-  currentPlayerId,
   onShowRoles,
 }: MerlinQuizResultsProps) {
   const [results, setResults] = useState<QuizResults | null>(null);
@@ -31,11 +29,7 @@ export function MerlinQuizResults({
   // Fetch quiz results
   const fetchResults = useCallback(async () => {
     try {
-      const response = await fetch(`/api/games/${gameId}/merlin-quiz/results`, {
-        headers: {
-          'x-player-id': currentPlayerId,
-        },
-      });
+      const response = await fetch(`/api/games/${gameId}/merlin-quiz/results`);
 
       if (!response.ok) {
         const data = await response.json();
@@ -49,7 +43,7 @@ export function MerlinQuizResults({
     } finally {
       setIsLoading(false);
     }
-  }, [gameId, currentPlayerId]);
+  }, [gameId]);
 
   useEffect(() => {
     fetchResults();
@@ -171,7 +165,7 @@ export function MerlinQuizResults({
           <div className="text-3xl mb-2">🧙</div>
           <p className="text-slate-300 text-sm mb-1">The real Merlin was...</p>
           <p className="text-2xl font-bold text-blue-300">
-            {results.actual_merlin_nickname}
+            {results.actual_merlin_display_name}
           </p>
           {sortedResults.length > 0 && sortedResults[0].is_actual_merlin && (
             <p className="text-emerald-400 text-sm mt-2">
@@ -233,7 +227,7 @@ function ResultRow({
 
           {/* Player name */}
           <span className={`font-medium ${isMerlin ? 'text-blue-300' : 'text-slate-200'}`}>
-            {entry.nickname}
+            {entry.display_name}
           </span>
 
           {/* Merlin indicator */}

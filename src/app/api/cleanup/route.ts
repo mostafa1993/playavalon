@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { getRoomsToArchive, getArchiveReason, type RoomForArchive } from '@/lib/domain/room-cleanup';
 import { logger } from '@/lib/utils/logger';
 
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
 
     // Fetch all active rooms (not already closed)
     const { data: rooms, error: fetchError } = await supabase

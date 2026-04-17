@@ -5,8 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { findRoomByCode, isPlayerInRoom, updateRoomActivity } from '@/lib/supabase/rooms';
 import { getPlayerRole, confirmPlayerRole, getRoomConfirmations } from '@/lib/supabase/roles';
 import { validateRoomCode } from '@/lib/domain/validation';
@@ -25,9 +24,8 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { code } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -40,13 +38,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Find the room
     const room = await findRoomByCode(supabase, code);
@@ -55,7 +47,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Check if player is in this room
-    const isMember = await isPlayerInRoom(supabase, room.id, player.id);
+    const isMember = await isPlayerInRoom(supabase, room.id, user.id);
     if (!isMember) {
       return errors.notRoomMember();
     }
@@ -66,7 +58,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Get player's role
-    const playerRole = await getPlayerRole(supabase, room.id, player.id);
+    const playerRole = await getPlayerRole(supabase, room.id, user.id);
     if (!playerRole) {
       return errors.rolesNotDistributed();
     }
@@ -77,7 +69,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Confirm the role
-    await confirmPlayerRole(supabase, room.id, player.id);
+    await confirmPlayerRole(supabase, room.id, user.id);
 
     // Update room activity
     await updateRoomActivity(supabase, room.id);
@@ -89,7 +81,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Phase 3: Auto-start game when all players confirm
     let gameStarted = false;
     let gameData = null;
-    
+
     if (allConfirmed) {
       const gameResult = await tryAutoStartGame(
         supabase,
@@ -97,7 +89,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         confirmations.total,
         confirmations.confirmed
       );
-      
+
       if (gameResult) {
         gameStarted = true;
         gameData = {

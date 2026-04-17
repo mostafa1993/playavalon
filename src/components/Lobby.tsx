@@ -135,7 +135,7 @@ export function Lobby({
       <div className="card">
         <PlayerList
           players={room.players}
-          currentPlayerId={room.current_player.id}
+          currentUserId={room.current_player.id}
           expectedPlayers={room.room.expected_players}
         />
       </div>
@@ -151,7 +151,7 @@ export function Lobby({
       {/* Lady of the Lake indicator (after distribution) */}
       {room.lady_of_lake_holder && room.room.status !== 'waiting' && (
         <LadyOfLakeBadge
-          holderName={room.lady_of_lake_holder.nickname}
+          holderName={room.lady_of_lake_holder.display_name}
           isCurrentPlayer={room.lady_of_lake_holder.id === room.current_player.id}
         />
       )}

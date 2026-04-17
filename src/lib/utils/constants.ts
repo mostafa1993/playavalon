@@ -13,12 +13,6 @@ export const MIN_PLAYERS = 5;
 export const MAX_PLAYERS = 10;
 
 /**
- * Nickname constraints
- */
-export const MIN_NICKNAME_LENGTH = 3;
-export const MAX_NICKNAME_LENGTH = 20;
-
-/**
  * Room code configuration
  */
 export const ROOM_CODE_LENGTH = 6;
@@ -249,11 +243,6 @@ export function getRoleRatio(playerCount: number) {
 }
 
 /**
- * API Headers
- */
-export const PLAYER_ID_HEADER = 'X-Player-ID';
-
-/**
  * API Error codes
  */
 export const ERROR_CODES = {
@@ -265,7 +254,6 @@ export const ERROR_CODES = {
   RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
 
   // Player errors
-  INVALID_NICKNAME: 'INVALID_NICKNAME',
   INVALID_PLAYER_ID: 'INVALID_PLAYER_ID',
   PLAYER_NOT_FOUND: 'PLAYER_NOT_FOUND',
   PLAYER_ALREADY_IN_ROOM: 'PLAYER_ALREADY_IN_ROOM',
@@ -275,7 +263,6 @@ export const ERROR_CODES = {
   ROOM_NOT_FOUND: 'ROOM_NOT_FOUND',
   ROOM_FULL: 'ROOM_FULL',
   ROOM_NOT_WAITING: 'ROOM_NOT_WAITING',
-  NICKNAME_TAKEN: 'NICKNAME_TAKEN',
   NOT_ROOM_MEMBER: 'NOT_ROOM_MEMBER',
   NOT_ROOM_MANAGER: 'NOT_ROOM_MANAGER',
 

@@ -163,7 +163,7 @@ export function TeamProposal({
                     key={id}
                     className="px-3 py-1 bg-cyan-500/20 border border-cyan-500/40 rounded-full text-cyan-400 text-sm"
                   >
-                    {player?.nickname || 'Unknown'}
+                    {player?.display_name || 'Unknown'}
                   </span>
                 );
               })}
@@ -194,7 +194,7 @@ export function TeamProposal({
       {/* Waiting message for non-leaders */}
       {!isLeader && (
         <div className="text-center text-avalon-silver/60 animate-pulse">
-          Waiting for {leader?.nickname} to propose a team...
+          Waiting for {leader?.display_name} to propose a team...
         </div>
       )}
     </div>

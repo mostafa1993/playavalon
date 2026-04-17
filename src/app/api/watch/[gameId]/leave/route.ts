@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { getPlayerIdFromRequest } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/supabase/server';
 import { removeWatcher, getWatcherCount } from '@/lib/domain/watcher-session';
 import type { LeaveWatchResponse } from '@/types/watcher';
 
@@ -24,17 +24,16 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json(
-        { error: { code: 'UNAUTHORIZED', message: 'Missing player ID' } },
+        { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },
         { status: 401 }
       );
     }
 
     // Remove watcher from in-memory session (no database writes!)
-    removeWatcher(gameId, playerId);
+    removeWatcher(gameId, user.id);
 
     const response: LeaveWatchResponse = {
       success: true,

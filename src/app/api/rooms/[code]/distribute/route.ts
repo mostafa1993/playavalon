@@ -1,12 +1,10 @@
 /**
  * API Route: POST /api/rooms/[code]/distribute
  * Distribute roles to all players (manager only)
- * T038, T039: Updated for Phase 2 to use role_config and Lady of Lake
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { findRoomByCode, getRoomPlayerCount, updateRoomStatus, updateLadyOfLakeHolder } from '@/lib/supabase/rooms';
 import { insertRoleAssignments, rolesDistributed, setLadyOfLakeForPlayer, getRoleAssignments } from '@/lib/supabase/roles';
 import { distributeRoles, getRoleRatio } from '@/lib/domain/roles';
@@ -32,9 +30,8 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { code } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -47,13 +44,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Find the room
     const room = await findRoomByCode(supabase, code);
@@ -62,7 +53,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Check if player is manager
-    if (room.manager_id !== player.id) {
+    if (room.manager_id !== user.id) {
       return errors.notRoomManager();
     }
 
@@ -95,7 +86,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const playerIds = (roomPlayers || []).map((rp: { player_id: string }) => rp.player_id);
 
-    // T038: Get role configuration from room
+    // Get role configuration from room
     const roleConfig: RoleConfig = room.role_config || {};
 
     // Distribute roles using role configuration
@@ -104,7 +95,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Insert role assignments
     await insertRoleAssignments(supabase, room.id, assignments);
 
-    // T039: Handle Lady of the Lake designation
+    // Handle Lady of the Lake designation
     let ladyOfLakeHolderId: string | null = null;
     if (roleConfig.ladyOfLake || room.lady_of_lake_enabled) {
       // Designate holder (player to the left of manager)
@@ -118,26 +109,24 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Feature 009: Handle Merlin Decoy selection during distribution
-    // We store the decoy player ID in role_config so the /role API can use it
-    // (since the game doesn't exist yet until all players confirm)
     if (roleConfig.merlin_decoy_enabled) {
       // Get role assignments for decoy selection
       const roleAssignmentsData = await getRoleAssignments(supabase, room.id);
 
-      // Get player nicknames for the role assignments
+      // Get player display names for the role assignments
       const { data: playerData } = await supabase
         .from('players')
-        .select('id, nickname')
+        .select('id, display_name')
         .in('id', roleAssignmentsData.map(a => a.player_id));
 
-      const nicknameMap = new Map(
-        (playerData || []).map((p: { id: string; nickname: string }) => [p.id, p.nickname])
+      const displayNameMap = new Map(
+        (playerData || []).map((p: { id: string; display_name: string }) => [p.id, p.display_name])
       );
 
       // Convert to RoleAssignment format for decoy selection
       const visibilityAssignments: RoleAssignment[] = roleAssignmentsData.map(a => ({
         playerId: a.player_id,
-        playerName: nicknameMap.get(a.player_id) || 'Unknown',
+        playerName: displayNameMap.get(a.player_id) || 'Unknown',
         role: a.role as 'good' | 'evil',
         specialRole: a.special_role,
       }));
@@ -146,7 +135,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       const decoyResult = selectDecoyPlayer(visibilityAssignments);
 
       // Store decoy player ID in role_config for the /role API to use
-      // (we'll also copy it to the game when game starts)
       const updatedRoleConfig = {
         ...roleConfig,
         _merlin_decoy_player_id: decoyResult.playerId,
@@ -159,34 +147,28 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Feature 011: Handle Merlin Split Intel selection during distribution
-    // Store split intel group data in role_config for the /role API to use
     if (roleConfig.merlin_split_intel_enabled) {
-      // Get role assignments for split intel
       const roleAssignmentsData = await getRoleAssignments(supabase, room.id);
 
-      // Get player nicknames for the role assignments
       const { data: playerData } = await supabase
         .from('players')
-        .select('id, nickname')
+        .select('id, display_name')
         .in('id', roleAssignmentsData.map(a => a.player_id));
 
-      const nicknameMap = new Map(
-        (playerData || []).map((p: { id: string; nickname: string }) => [p.id, p.nickname])
+      const displayNameMap = new Map(
+        (playerData || []).map((p: { id: string; display_name: string }) => [p.id, p.display_name])
       );
 
-      // Convert to RoleAssignment format for split intel
       const visibilityAssignments: RoleAssignment[] = roleAssignmentsData.map(a => ({
         playerId: a.player_id,
-        playerName: nicknameMap.get(a.player_id) || 'Unknown',
+        playerName: displayNameMap.get(a.player_id) || 'Unknown',
         role: a.role as 'good' | 'evil',
         specialRole: a.special_role,
       }));
 
-      // Check if split intel can be used
       const viability = canUseSplitIntelMode(visibilityAssignments, roleConfig);
 
       if (!viability.viable) {
-        // Block game start - return error
         return NextResponse.json(
           {
             error: {
@@ -198,11 +180,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         );
       }
 
-      // Distribute split intel groups
       const splitIntelGroups = distributeSplitIntelGroups(visibilityAssignments, roleConfig);
 
       if (splitIntelGroups) {
-        // Store split intel data in role_config for the /role API to use
         const updatedRoleConfig = {
           ...room.role_config,
           _split_intel_certain_evil_ids: splitIntelGroups.certainEvilIds,
@@ -218,9 +198,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Feature 018: Handle Oberon Split Intel selection during distribution
-    // Oberon is ALWAYS in the mixed group
     if (roleConfig.oberon_split_intel_enabled) {
-      // Check prerequisites
       const prerequisite = canUseOberonSplitIntelMode(roleConfig);
       if (!prerequisite.canUse) {
         return NextResponse.json(
@@ -234,31 +212,26 @@ export async function POST(request: Request, { params }: RouteParams) {
         );
       }
 
-      // Get role assignments for oberon split intel
       const roleAssignmentsData = await getRoleAssignments(supabase, room.id);
 
-      // Get player nicknames for the role assignments
       const { data: playerData } = await supabase
         .from('players')
-        .select('id, nickname')
+        .select('id, display_name')
         .in('id', roleAssignmentsData.map(a => a.player_id));
 
-      const nicknameMap = new Map(
-        (playerData || []).map((p: { id: string; nickname: string }) => [p.id, p.nickname])
+      const displayNameMap = new Map(
+        (playerData || []).map((p: { id: string; display_name: string }) => [p.id, p.display_name])
       );
 
-      // Convert to RoleAssignment format for oberon split intel
       const visibilityAssignments: RoleAssignment[] = roleAssignmentsData.map(a => ({
         playerId: a.player_id,
-        playerName: nicknameMap.get(a.player_id) || 'Unknown',
+        playerName: displayNameMap.get(a.player_id) || 'Unknown',
         role: a.role as 'good' | 'evil',
         specialRole: a.special_role,
       }));
 
-      // Distribute oberon split intel groups (Oberon always in mixed)
       const oberonSplitIntelGroups = distributeOberonSplitIntelGroups(visibilityAssignments, roleConfig);
 
-      // Store oberon split intel data in role_config for the /role API to use
       const updatedRoleConfig = {
         ...room.role_config,
         _oberon_split_intel_certain_evil_ids: oberonSplitIntelGroups.certainEvilIds,
@@ -274,7 +247,6 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Feature 019: Handle Evil Ring Visibility during distribution
     if (roleConfig.evil_ring_visibility_enabled) {
-      // Check prerequisites
       const ringPrereq = canEnableEvilRingVisibility(playerCount, roleConfig.oberon);
       if (!ringPrereq.canEnable) {
         return NextResponse.json(
@@ -288,28 +260,21 @@ export async function POST(request: Request, { params }: RouteParams) {
         );
       }
 
-      // Get role assignments for ring formation
       const roleAssignmentsData = await getRoleAssignments(supabase, room.id);
 
-      // Find all evil player IDs
       const evilPlayerIds = roleAssignmentsData
         .filter(a => a.role === 'evil')
         .map(a => a.player_id);
 
-      // Find Oberon's player ID if present
       const oberonAssignment = roleAssignmentsData.find(
         a => a.special_role === 'oberon_standard' || a.special_role === 'oberon_chaos'
       );
       const oberonId = oberonAssignment?.player_id || null;
 
-      // Get non-Oberon evil IDs for the ring
       const nonOberonEvilIds = getNonOberonEvilIds(evilPlayerIds, oberonId);
 
-      // Form the evil ring
       const ringAssignments = formEvilRing(nonOberonEvilIds);
 
-      // Store ring assignments in role_config for the /role API to use
-      // (will be copied to game.evil_ring_assignments when game starts)
       const currentRoleConfig = (
         await supabase
           .from('rooms')

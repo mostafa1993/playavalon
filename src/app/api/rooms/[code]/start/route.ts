@@ -4,8 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { findRoomByCode, updateRoomStatus } from '@/lib/supabase/rooms';
 import { allPlayersConfirmed } from '@/lib/supabase/roles';
 import { validateRoomCode } from '@/lib/domain/validation';
@@ -23,9 +22,8 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { code } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -38,13 +36,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Find the room
     const room = await findRoomByCode(supabase, code);
@@ -53,7 +45,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Check if player is manager
-    if (room.manager_id !== player.id) {
+    if (room.manager_id !== user.id) {
       return errors.notRoomManager();
     }
 

@@ -6,9 +6,8 @@
  * GET - Get current quiz state
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { NextResponse } from 'next/server';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById } from '@/lib/supabase/games';
 import {
   submitQuizVote,
@@ -35,26 +34,16 @@ interface RouteParams {
  * POST /api/games/[gameId]/merlin-quiz
  * Submit a quiz vote for who the player thinks is Merlin
  */
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID from header
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHORIZED', message: 'Player ID required' } },
-        { status: 401 }
-      );
+    const user = await getCurrentUser();
+    if (!user) {
+      return errors.unauthorized();
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Get game
     const game = await getGameById(supabase, gameId);
@@ -74,7 +63,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Verify player is in this game
-    if (!game.seating_order.includes(player.id)) {
+    if (!game.seating_order.includes(user.id)) {
       return NextResponse.json(
         { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
         { status: 403 }
@@ -97,7 +86,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check if player already voted
-    const existingVote = await getPlayerQuizVote(supabase, gameId, player.id);
+    const existingVote = await getPlayerQuizVote(supabase, gameId, user.id);
     if (existingVote) {
       return NextResponse.json(
         { error: { code: 'ALREADY_VOTED', message: 'You have already submitted your guess' } },
@@ -110,7 +99,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const suspectedPlayerId = body.suspected_player_id ?? null;
 
     // Validate vote
-    const validation = validateQuizVote(player.id, suspectedPlayerId, game.seating_order);
+    const validation = validateQuizVote(user.id, suspectedPlayerId, game.seating_order);
     if (!validation.valid) {
       const errorMessages: Record<string, string> = {
         CANNOT_VOTE_SELF: 'You cannot vote for yourself',
@@ -126,7 +115,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Submit vote
     await submitQuizVote(supabase, {
       game_id: gameId,
-      voter_player_id: player.id,
+      voter_player_id: user.id,
       suspected_player_id: suspectedPlayerId,
     });
 
@@ -146,7 +135,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const lastActivity = (rp.players as { last_activity_at?: string })?.last_activity_at;
       if (!lastActivity) return true;
       const timeSince = Date.now() - new Date(lastActivity).getTime();
-      return timeSince < 60000; // 60 seconds threshold
+      return timeSince < 60000;
     }).length;
 
     const quizComplete = isQuizComplete(voteCount, connectedCount, quizStartTime);
@@ -168,26 +157,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
  * GET /api/games/[gameId]/merlin-quiz
  * Get current quiz state
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID from header
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHORIZED', message: 'Player ID required' } },
-        { status: 401 }
-      );
+    const user = await getCurrentUser();
+    if (!user) {
+      return errors.unauthorized();
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Get game
     const game = await getGameById(supabase, gameId);
@@ -199,7 +178,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Verify player is in this game
-    if (!game.seating_order.includes(player.id)) {
+    if (!game.seating_order.includes(user.id)) {
       return NextResponse.json(
         { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
         { status: 403 }
@@ -234,13 +213,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ data: state });
     }
 
-    // Get votes and check state
     const [votes, quizStartTime] = await Promise.all([
       getQuizVotes(supabase, gameId),
       getQuizStartTime(supabase, gameId),
     ]);
 
-    // Get connected players count
     const { data: roomPlayers } = await supabase
       .from('room_players')
       .select('player_id, players!inner(last_activity_at)')
@@ -250,13 +227,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const lastActivity = (rp.players as { last_activity_at?: string })?.last_activity_at;
       if (!lastActivity) return true;
       const timeSince = Date.now() - new Date(lastActivity).getTime();
-      return timeSince < 60000; // 60 seconds threshold
+      return timeSince < 60000;
     }).length;
 
-    // Check player's vote status
-    const voteStatus = getPlayerVoteStatus(votes, player.id);
+    const voteStatus = getPlayerVoteStatus(votes, user.id);
 
-    // Determine quiz completion
     const quizComplete = isQuizComplete(votes.length, connectedCount, quizStartTime);
     const quizActive = quizEnabled && !quizComplete;
 

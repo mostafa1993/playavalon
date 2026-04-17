@@ -9,7 +9,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getWatcherCount, isWatcherLimitReached } from '@/lib/domain/watcher-session';
 import { MAX_WATCHERS_PER_GAME } from '@/types/watcher';
 import type { WatchStatusResponse } from '@/types/watcher';
@@ -26,26 +26,23 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { code } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json(
-        { error: { code: 'UNAUTHORIZED', message: 'Missing player ID' } },
+        { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },
         { status: 401 }
       );
     }
 
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
 
     // Get room by code (READ ONLY)
-    // Use maybeSingle() to avoid errors when room doesn't exist
     const { data: room, error: roomError } = await supabase
       .from('rooms')
       .select('id, status, current_game_id')
       .eq('code', code.toUpperCase())
       .maybeSingle();
 
-    // Only treat as "not found" if room is null (not if there's a query error)
     if (roomError) {
       console.error('[Watch Status] Room query error:', roomError);
       return NextResponse.json(
@@ -64,7 +61,6 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     // Check if game has started
     if (!room.current_game_id) {
-      // Room exists but no game yet (still in waiting room)
       const response: WatchStatusResponse = {
         watchable: false,
         reason: 'GAME_NOT_STARTED',
@@ -72,7 +68,6 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ data: response });
     }
 
-    // Check if room status indicates game ended
     if (room.status === 'completed') {
       const response: WatchStatusResponse = {
         watchable: false,
@@ -81,7 +76,6 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ data: response });
     }
 
-    // Get game to verify it's in progress
     const { data: game } = await supabase
       .from('games')
       .select('id, phase')
@@ -96,10 +90,6 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ data: response });
     }
 
-    // Allow watching games that have ended (to see final state)
-    // Only block if game hasn't started yet (which shouldn't happen if current_game_id exists)
-
-    // Check watcher count
     const watcherCount = getWatcherCount(room.current_game_id);
     const limitReached = isWatcherLimitReached(room.current_game_id);
 

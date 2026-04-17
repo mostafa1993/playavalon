@@ -162,15 +162,15 @@ export async function getWaitingRooms(
     throw error;
   }
 
-  // Get manager nicknames
+  // Get manager display names
   const managerIds = (data || []).map((r: { manager_id: string }) => r.manager_id);
   const { data: managers } = await client
     .from('players')
-    .select('id, nickname')
+    .select('id, display_name')
     .in('id', managerIds);
 
   const managerMap = new Map(
-    (managers || []).map((m: { id: string; nickname: string }) => [m.id, m.nickname])
+    (managers || []).map((m: { id: string; display_name: string }) => [m.id, m.display_name])
   );
 
   // Feature 015: Get active games for started rooms
@@ -205,7 +205,7 @@ export async function getWaitingRooms(
     return {
       id: room.id,
       code: room.code,
-      manager_nickname: managerMap.get(room.manager_id) || 'Unknown',
+      manager_display_name: managerMap.get(room.manager_id) || 'Unknown',
       expected_players: room.expected_players,
       current_players: currentPlayers,
       is_full: currentPlayers >= room.expected_players,
@@ -225,7 +225,7 @@ export async function getWaitingRooms(
 export async function getRoomDetails(
   client: SupabaseClient,
   roomId: string,
-  currentPlayerId: string
+  currentUserId: string
 ): Promise<RoomDetails | null> {
   // Get room
   const room = await findRoomById(client, roomId);
@@ -240,7 +240,7 @@ export async function getRoomDetails(
       is_connected,
       players!inner (
         id,
-        nickname,
+        display_name,
         last_activity_at
       )
     `)
@@ -274,7 +274,7 @@ export async function getRoomDetails(
     player_id: string;
     joined_at: string;
     is_connected: boolean;
-    players: { id: string; nickname: string; last_activity_at?: string } | { id: string; nickname: string; last_activity_at?: string }[];
+    players: { id: string; display_name: string; last_activity_at?: string } | { id: string; display_name: string; last_activity_at?: string }[];
   }) => {
     // Handle both single object (correct) and array (defensive) cases
     const playerData = Array.isArray(rp.players) ? rp.players[0] : rp.players;
@@ -289,7 +289,7 @@ export async function getRoomDetails(
 
     return {
       id: rp.player_id,
-      nickname: playerData?.nickname || 'Unknown',
+      display_name: playerData?.display_name || 'Unknown',
       is_manager: rp.player_id === room.manager_id,
       is_connected: connectionStatus.is_connected,
       joined_at: rp.joined_at,
@@ -299,18 +299,18 @@ export async function getRoomDetails(
   });
 
   // Find current player
-  const currentPlayer = players.find(p => p.id === currentPlayerId);
+  const currentPlayer = players.find(p => p.id === currentUserId);
 
   return {
     room,
     players,
     current_player: currentPlayer ? {
       id: currentPlayer.id,
-      nickname: currentPlayer.nickname,
+      display_name: currentPlayer.display_name,
       is_manager: currentPlayer.is_manager,
     } : {
-      id: currentPlayerId,
-      nickname: 'Unknown',
+      id: currentUserId,
+      display_name: 'Unknown',
       is_manager: false,
     },
     confirmations,

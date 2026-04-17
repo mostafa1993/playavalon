@@ -45,10 +45,8 @@ export function AssassinPhase({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-player-id': currentPlayerId,
         },
         body: JSON.stringify({
-          player_id: currentPlayerId,
           guessed_player_id: selectedPlayerId,
         }),
       });
@@ -94,7 +92,7 @@ export function AssassinPhase({
         ) : (
           <div className="text-center">
             <p className="text-slate-200 font-semibold mb-2">
-              {assassinPhase.assassin_nickname} is choosing their target...
+              {assassinPhase.assassin_display_name} is choosing their target...
             </p>
             <p className="text-slate-400 text-sm">
               Hold your breath. If the Assassin finds Merlin, Evil wins!
@@ -126,7 +124,7 @@ export function AssassinPhase({
                     {selectedPlayerId === player.id ? '🎯' : '👤'}
                   </div>
                   <div className="font-medium text-sm truncate">
-                    {player.nickname}
+                    {player.display_name}
                   </div>
                 </button>
               ))}

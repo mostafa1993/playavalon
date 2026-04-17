@@ -1,12 +1,10 @@
 /**
  * API Route: GET /api/rooms/[code]
  * Get room details including players
- * T031, T032: Updated for Phase 2 to include roles_in_play and role_config
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { findRoomByCode, getRoomDetails, isPlayerInRoom } from '@/lib/supabase/rooms';
 import { validateRoomCode } from '@/lib/domain/validation';
 import { computeRolesInPlay } from '@/lib/domain/role-config';
@@ -24,9 +22,8 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { code } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -39,13 +36,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Find the room
     const room = await findRoomByCode(supabase, code);
@@ -54,18 +45,18 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Check if player is in this room
-    const isMember = await isPlayerInRoom(supabase, room.id, player.id);
+    const isMember = await isPlayerInRoom(supabase, room.id, user.id);
     if (!isMember) {
       return errors.notRoomMember();
     }
 
     // Get room details with players
-    const details = await getRoomDetails(supabase, room.id, player.id);
+    const details = await getRoomDetails(supabase, room.id, user.id);
     if (!details) {
       return errors.roomNotFound();
     }
 
-    // T031, T032: Compute roles in play from room configuration
+    // Compute roles in play from room configuration
     const roleConfig = room.role_config || {};
     const rolesInPlay = computeRolesInPlay(roleConfig);
 
@@ -74,7 +65,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (room.lady_of_lake_holder_id) {
       const holder = details.players.find(p => p.id === room.lady_of_lake_holder_id);
       if (holder) {
-        ladyOfLakeHolder = { id: holder.id, nickname: holder.nickname };
+        ladyOfLakeHolder = { id: holder.id, display_name: holder.display_name };
       }
     }
 

@@ -37,7 +37,7 @@ export interface RoleInfo {
   has_lady_of_lake?: boolean;
   // Visibility data (character-specific)
   evil_teammates?: string[];
-  known_players?: Array<{ id: string; nickname: string }>;
+  known_players?: Array<{ id: string; display_name: string }>;
   known_players_label?: string;
   hidden_evil_count?: number;
   ability_note?: string;

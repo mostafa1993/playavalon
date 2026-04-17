@@ -4,8 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById } from '@/lib/supabase/games';
 import { getActiveProposalForQuest } from '@/lib/supabase/proposals';
 import { getPlayerRole } from '@/lib/supabase/roles';
@@ -36,9 +35,8 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -53,13 +51,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Get game
     const game = await getGameById(supabase, gameId);
@@ -71,7 +63,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Verify player is in this game
-    if (!game.seating_order.includes(player.id)) {
+    if (!game.seating_order.includes(user.id)) {
       return NextResponse.json(
         { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
         { status: 403 }
@@ -96,7 +88,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Verify player is on quest team
-    if (!isOnQuestTeam(proposal.team_member_ids, player.id)) {
+    if (!isOnQuestTeam(proposal.team_member_ids, user.id)) {
       return NextResponse.json(
         { error: { code: 'NOT_TEAM_MEMBER', message: 'You are not on this quest team' } },
         { status: 403 }
@@ -104,7 +96,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Get player's role to validate action
-    const playerRole = await getPlayerRole(supabase, game.room_id, player.id);
+    const playerRole = await getPlayerRole(supabase, game.room_id, user.id);
     if (!playerRole) {
       return NextResponse.json(
         { error: { code: 'NO_ROLE', message: 'Player role not found' } },
@@ -112,7 +104,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Validate action (Good players can only submit success, Lunatic/Brute constraints)
+    // Validate action
     const actionValidation = validateQuestAction(
       playerRole.role,
       action,
@@ -131,7 +123,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       await submitQuestAction(supabase, {
         game_id: gameId,
         quest_number: game.current_quest,
-        player_id: player.id,
+        player_id: user.id,
         action,
       });
     } catch (err) {
@@ -149,12 +141,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const totalTeamMembers = proposal.team_member_ids.length;
 
     // Feature 016: Broadcast action submission (FR-003)
-    // Note: Does NOT include action type - only the count
     await broadcastActionSubmitted(gameId, actionsSubmitted, totalTeamMembers);
 
     // Check if all actions are in
     if (actionsSubmitted === totalTeamMembers) {
-      // Calculate quest result
       const actionCounts = await calculateQuestResult(supabase, gameId, game.current_quest);
       const questReq = getQuestRequirement(game.player_count, game.current_quest);
 
@@ -163,7 +153,6 @@ export async function POST(request: Request, { params }: RouteParams) {
         questReq.fails
       );
 
-      // Create quest result
       const questResult: QuestResult = {
         quest: game.current_quest,
         result: outcome.outcome,
@@ -173,7 +162,6 @@ export async function POST(request: Request, { params }: RouteParams) {
         completed_at: new Date().toISOString(),
       };
 
-      // Log quest completed
       await logQuestCompleted(supabase, gameId, {
         quest_number: game.current_quest,
         result: outcome.outcome,
@@ -182,10 +170,8 @@ export async function POST(request: Request, { params }: RouteParams) {
         team_size: totalTeamMembers,
       });
 
-      // Add quest result and check win conditions
       const updatedResults = [...game.quest_results, questResult];
 
-      // Check if Merlin is in the game (for assassin phase)
       const { data: merlinCheck } = await supabase
         .from('player_roles')
         .select('id')
@@ -196,10 +182,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       const hasMerlin = !!merlinCheck;
       const winCheck = checkWinConditions(updatedResults, 0, hasMerlin);
 
-      // CRITICAL FIX: Use optimistic locking to prevent race condition
-      // Multiple quest actions could arrive simultaneously
       if (winCheck.assassinPhase) {
-        // Good won 3 quests but Assassin gets a chance to find Merlin
         const { error: updateError } = await supabase
           .from('games')
           .update({
@@ -207,12 +190,11 @@ export async function POST(request: Request, { params }: RouteParams) {
             phase: 'assassin',
           })
           .eq('id', gameId)
-          .eq('phase', 'quest'); // Only update if still in quest phase
+          .eq('phase', 'quest');
 
         if (updateError) {
           console.log('Quest result already processed by another request');
         } else {
-          // Feature 016: Broadcast phase transition (FR-013)
           await broadcastPhaseTransition(
             gameId,
             'assassin',
@@ -222,7 +204,6 @@ export async function POST(request: Request, { params }: RouteParams) {
           );
         }
       } else if (winCheck.gameOver) {
-        // Game over!
         const { error: updateError } = await supabase
           .from('games')
           .update({
@@ -233,16 +214,13 @@ export async function POST(request: Request, { params }: RouteParams) {
             ended_at: new Date().toISOString(),
           })
           .eq('id', gameId)
-          .eq('phase', 'quest'); // Only update if still in quest phase
+          .eq('phase', 'quest');
 
         if (updateError) {
           console.log('Quest result already processed by another request');
         } else {
-          // Feature 017: Close room when game ends (FR-001)
-          // Remove room from active rooms list
           await updateRoomStatus(supabase, game.room_id, 'closed');
 
-          // Feature 016: Broadcast game over (FR-014)
           await broadcastGameOver(
             gameId,
             winCheck.winner!,
@@ -250,7 +228,6 @@ export async function POST(request: Request, { params }: RouteParams) {
           );
         }
       } else {
-        // Move to quest_result phase for display, then continue
         const { error: updateError } = await supabase
           .from('games')
           .update({
@@ -258,12 +235,11 @@ export async function POST(request: Request, { params }: RouteParams) {
             phase: 'quest_result',
           })
           .eq('id', gameId)
-          .eq('phase', 'quest'); // Only update if still in quest phase
+          .eq('phase', 'quest');
 
         if (updateError) {
           console.log('Quest result already processed by another request');
         } else {
-          // Feature 016: Broadcast phase transition (FR-013)
           await broadcastPhaseTransition(
             gameId,
             'quest_result',

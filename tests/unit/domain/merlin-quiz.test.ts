@@ -129,10 +129,10 @@ describe('merlin-quiz', () => {
 
   describe('calculateQuizResults', () => {
     const players: GamePlayer[] = [
-      { id: 'player-1', nickname: 'Alice', seat_position: 0, is_leader: false, is_on_team: false, has_voted: false, is_connected: true },
-      { id: 'player-2', nickname: 'Bob', seat_position: 1, is_leader: false, is_on_team: false, has_voted: false, is_connected: true },
-      { id: 'player-3', nickname: 'Charlie', seat_position: 2, is_leader: false, is_on_team: false, has_voted: false, is_connected: true },
-      { id: 'player-4', nickname: 'Diana', seat_position: 3, is_leader: false, is_on_team: false, has_voted: false, is_connected: true },
+      { id: 'player-1', display_name: 'Alice', seat_position: 0, is_leader: false, is_on_team: false, has_voted: false, is_connected: true },
+      { id: 'player-2', display_name: 'Bob', seat_position: 1, is_leader: false, is_on_team: false, has_voted: false, is_connected: true },
+      { id: 'player-3', display_name: 'Charlie', seat_position: 2, is_leader: false, is_on_team: false, has_voted: false, is_connected: true },
+      { id: 'player-4', display_name: 'Diana', seat_position: 3, is_leader: false, is_on_team: false, has_voted: false, is_connected: true },
     ];
 
     it('should calculate vote counts correctly', () => {
@@ -160,7 +160,7 @@ describe('merlin-quiz', () => {
       expect(charlieResult?.is_actual_merlin).toBe(true);
 
       expect(result.actual_merlin_id).toBe('player-3');
-      expect(result.actual_merlin_nickname).toBe('Charlie');
+      expect(result.actual_merlin_display_name).toBe('Charlie');
     });
 
     it('should handle ties for most voted', () => {

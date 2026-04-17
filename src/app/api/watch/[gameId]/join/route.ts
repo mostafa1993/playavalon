@@ -10,8 +10,8 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
+import { findPlayerById } from '@/lib/supabase/players';
 import { getGameById } from '@/lib/supabase/games';
 import {
   addWatcher,
@@ -33,24 +33,23 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       const error: WatcherError = {
-        code: 'NICKNAME_REQUIRED',
-        message: 'Please register a nickname before watching',
+        code: 'UNAUTHORIZED',
+        message: 'You must be logged in to watch games',
       };
       return NextResponse.json({ error }, { status: 401 });
     }
 
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
 
-    // Get player record (watchers use same registration as players per clarification)
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player || !player.nickname) {
+    // Get player profile for display name
+    const player = await findPlayerById(supabase, user.id);
+    if (!player) {
       const error: WatcherError = {
-        code: 'NICKNAME_REQUIRED',
-        message: 'Please register a nickname before watching',
+        code: 'UNAUTHORIZED',
+        message: 'Player profile not found',
       };
       return NextResponse.json({ error }, { status: 401 });
     }
@@ -65,20 +64,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error }, { status: 404 });
     }
 
-    // Check if game has started (FR-003: only allow watching after game starts)
-    if (game.phase === 'team_building' && game.current_quest === 1 && game.vote_track === 0) {
-      // This is a fresh game that just started - allow watching
-    }
-    // Actually, if a game record exists, it has started (games are created when room starts)
-    // The waiting room state is in rooms table, not games table
-    // So if we have a game, it's in progress
-
-    // Check if game has ended
-    if (game.phase === 'game_over') {
-      // Allow watching ended games to see the final state
-      // Watchers can see the game over screen per FR-010
-    }
-
     // Check watcher limit (FR-004: max 10 watchers)
     if (isWatcherLimitReached(gameId)) {
       const error: WatcherError = {
@@ -88,11 +73,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error }, { status: 403 });
     }
 
-    // Add watcher to in-memory session (no database writes per SC-010)
-    const added = addWatcher(gameId, playerId, player.nickname);
+    // Add watcher to in-memory session
+    const added = addWatcher(gameId, user.id, player.display_name);
 
     if (!added) {
-      // Race condition - limit reached between check and add
       const error: WatcherError = {
         code: 'WATCHER_LIMIT_REACHED',
         message: `This game has reached the maximum number of spectators (${MAX_WATCHERS_PER_GAME})`,

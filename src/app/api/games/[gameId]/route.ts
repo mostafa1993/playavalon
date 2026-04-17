@@ -4,8 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById } from '@/lib/supabase/games';
 import { getCurrentProposal, getActiveProposalForQuest } from '@/lib/supabase/proposals';
 import { getPlayerVote, getVotedPlayerIds, getVotesForProposal } from '@/lib/supabase/votes';
@@ -30,19 +29,12 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Get game
     const game = await getGameById(supabase, gameId);
@@ -60,10 +52,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       .eq('id', game.room_id)
       .single();
     const roomCode = room?.code || null;
-    const isManager = room?.manager_id === player.id;
+    const isManager = room?.manager_id === user.id;
 
     // Verify player is in this game
-    if (!game.seating_order.includes(player.id)) {
+    if (!game.seating_order.includes(user.id)) {
       return NextResponse.json(
         { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
         { status: 403 }
@@ -78,17 +70,16 @@ export async function GET(request: Request, { params }: RouteParams) {
       currentProposal = await getCurrentProposal(supabase, gameId);
     }
 
-    // T039, T040: Get player nicknames and activity for seating display (Phase 6)
+    // Get player display names and activity for seating display
     const { data: playersData } = await supabase
       .from('players')
-      .select('id, nickname, last_activity_at')
+      .select('id, display_name, last_activity_at')
       .in('id', game.seating_order);
 
-    const nicknameMap = new Map(
-      (playersData || []).map((p: { id: string; nickname: string }) => [p.id, p.nickname])
+    const displayNameMap = new Map(
+      (playersData || []).map((p: { id: string; display_name: string }) => [p.id, p.display_name])
     );
 
-    // Phase 6: Map last_activity_at for connection status
     const activityMap = new Map(
       (playersData || []).map((p: { id: string; last_activity_at?: string }) => [p.id, p.last_activity_at])
     );
@@ -102,15 +93,13 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Get player's vote on current proposal
     let myVote = null;
     if (currentProposal) {
-      const vote = await getPlayerVote(supabase, currentProposal.id, player.id);
+      const vote = await getPlayerVote(supabase, currentProposal.id, user.id);
       myVote = vote?.vote || null;
     }
 
     // Get last vote result (for reveal animation after voting)
-    // This needs to work for both approved (quest phase) and rejected (team_building phase) teams
     let lastVoteResult = null;
     if (game.phase === 'quest' || game.phase === 'team_building') {
-      // Get the most recently resolved proposal for this game
       const { data: recentProposal } = await supabase
         .from('team_proposals')
         .select('*')
@@ -133,7 +122,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Check if player is on quest team
-    const amTeamMember = currentProposal?.team_member_ids.includes(player.id) || false;
+    const amTeamMember = currentProposal?.team_member_ids.includes(user.id) || false;
 
     // Get action submission state if in quest phase
     let canSubmitAction = false;
@@ -150,7 +139,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           supabase,
           gameId,
           game.current_quest,
-          player.id
+          user.id
         );
         canSubmitAction = !hasSubmittedAction;
       }
@@ -173,40 +162,33 @@ export async function GET(request: Request, { params }: RouteParams) {
       }
     }
 
-    // Build game players list (T040: with connection status)
+    // Build game players list
     const players: GamePlayer[] = game.seating_order.map((pid, index) => {
       const roleInfo = playerRolesMap.get(pid);
-      // T040: Compute connection status from last_activity_at
       const lastActivity = activityMap.get(pid);
       const connectionStatus = lastActivity
         ? getConnectionStatus(lastActivity)
         : { is_connected: true, seconds_since_activity: 0 };
 
-      // Feature 011: Check if player was in split intel mixed group
       const wasMixedGroup = game.phase === 'game_over' && (
         game.split_intel_mixed_evil_id === pid || game.split_intel_mixed_good_id === pid
       ) ? true : undefined;
 
-      // Feature 018: Check if player was the good player in oberon split intel mixed group
       const wasMixedGroupWithOberon = game.phase === 'game_over' &&
         game.oberon_split_intel_mixed_good_id === pid ? true : undefined;
 
       return {
         id: pid,
-        nickname: nicknameMap.get(pid) || 'Unknown',
+        display_name: displayNameMap.get(pid) || 'Unknown',
         seat_position: index,
         is_leader: pid === game.current_leader_id,
         is_on_team: currentProposal?.team_member_ids.includes(pid) || false,
         has_voted: votedPlayerIds.includes(pid),
-        is_connected: connectionStatus.is_connected, // Phase 6: Real connection status
-        // Reveal roles only at game_over
+        is_connected: connectionStatus.is_connected,
         revealed_role: game.phase === 'game_over' ? (roleInfo?.role as 'good' | 'evil') : undefined,
         revealed_special_role: game.phase === 'game_over' ? roleInfo?.special_role ?? undefined : undefined,
-        // Feature 009: Merlin Decoy indicator (only at game_over)
         was_decoy: game.phase === 'game_over' && game.merlin_decoy_player_id === pid ? true : undefined,
-        // Feature 011: Split Intel mixed group indicator (only at game_over)
         was_mixed_group: wasMixedGroup,
-        // Feature 018: Oberon Split Intel mixed group indicator (only at game_over)
         was_mixed_group_with_oberon: wasMixedGroupWithOberon,
       };
     });
@@ -216,7 +198,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const questRequirement = questRequirements[game.current_quest];
 
     // Get current player's role (for UI like fail button)
-    const playerRoleData = await getPlayerRole(supabase, game.room_id, player.id);
+    const playerRoleData = await getPlayerRole(supabase, game.room_id, user.id);
     const playerRole = playerRoleData?.role || 'good';
     const specialRole = playerRoleData?.special_role || null;
 
@@ -224,7 +206,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     let assassinPhase = null;
     let isAssassin = false;
     if (game.phase === 'assassin') {
-      // Find assassin and merlin
       const { data: assassinData } = await supabase
         .from('player_roles')
         .select('player_id')
@@ -240,18 +221,18 @@ export async function GET(request: Request, { params }: RouteParams) {
         .single();
 
       if (assassinData && merlinData) {
-        const assassinNickname = nicknameMap.get(assassinData.player_id) || 'Unknown';
+        const assassinDisplayName = displayNameMap.get(assassinData.player_id) || 'Unknown';
         assassinPhase = {
           assassin_id: assassinData.player_id,
-          assassin_nickname: assassinNickname,
-          merlin_id: merlinData.player_id, // Only used server-side
-          can_guess: player.id === assassinData.player_id,
+          assassin_display_name: assassinDisplayName,
+          merlin_id: merlinData.player_id,
+          can_guess: user.id === assassinData.player_id,
         };
-        isAssassin = player.id === assassinData.player_id;
+        isAssassin = user.id === assassinData.player_id;
       }
     }
 
-    // Build Lady of the Lake state (only if migration 009 applied)
+    // Build Lady of the Lake state
     let ladyOfLake: LadyOfLakeState | null = null;
     if (game.lady_enabled === true) {
       const [investigatedIds, previousHolderIds, lastInvestigation] = await Promise.all([
@@ -262,26 +243,26 @@ export async function GET(request: Request, { params }: RouteParams) {
 
       let lastInvestigationInfo = null;
       if (lastInvestigation) {
-        const investigatorNickname = nicknameMap.get(lastInvestigation.investigator_id) || 'Unknown';
-        const targetNickname = nicknameMap.get(lastInvestigation.target_id) || 'Unknown';
+        const investigatorDisplayName = displayNameMap.get(lastInvestigation.investigator_id) || 'Unknown';
+        const targetDisplayName = displayNameMap.get(lastInvestigation.target_id) || 'Unknown';
         lastInvestigationInfo = {
-          investigator_nickname: investigatorNickname,
-          target_nickname: targetNickname,
+          investigator_display_name: investigatorDisplayName,
+          target_display_name: targetDisplayName,
         };
       }
 
-      const holderNickname = game.lady_holder_id
-        ? nicknameMap.get(game.lady_holder_id) || 'Unknown'
+      const holderDisplayName = game.lady_holder_id
+        ? displayNameMap.get(game.lady_holder_id) || 'Unknown'
         : null;
 
       ladyOfLake = {
         enabled: true,
         holder_id: game.lady_holder_id,
-        holder_nickname: holderNickname,
+        holder_display_name: holderDisplayName,
         investigated_player_ids: investigatedIds,
         previous_lady_holder_ids: previousHolderIds,
-        is_holder: player.id === game.lady_holder_id,
-        can_investigate: isLadyPhase(game.phase) && player.id === game.lady_holder_id,
+        is_holder: user.id === game.lady_holder_id,
+        can_investigate: isLadyPhase(game.phase) && user.id === game.lady_holder_id,
         last_investigation: lastInvestigationInfo,
       };
     }
@@ -306,15 +287,13 @@ export async function GET(request: Request, { params }: RouteParams) {
       assassin_phase: assassinPhase,
       is_assassin: isAssassin,
       lady_of_lake: ladyOfLake,
-      // Feature 007: Draft team selection
-      draft_team: game.draft_team ?? null,  // Backward compatibility: treat undefined as null
+      draft_team: game.draft_team ?? null,
       is_draft_in_progress: isDraftInProgress,
     };
 
-    // Include current player's database ID and role for proper identification
     return NextResponse.json({
       data: gameState,
-      current_player_id: player.id,
+      current_user_id: user.id,
       player_role: playerRole,
       special_role: specialRole,
       room_code: roomCode,

@@ -3,30 +3,38 @@
  * Submit assassin's guess for Merlin
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { NextResponse } from 'next/server';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById, updateGame } from '@/lib/supabase/games';
 import { updateRoomStatus } from '@/lib/supabase/rooms';
 import { checkAssassinGuess } from '@/lib/domain/win-conditions';
 import { logGameOver } from '@/lib/supabase/game-events';
 
 export async function POST(
-  request: NextRequest,
+  request: Request,
   context: { params: Promise<{ gameId: string }> }
 ) {
   try {
     const { gameId } = await context.params;
     const body = await request.json();
-    const { player_id, guessed_player_id } = body;
+    const { guessed_player_id } = body;
 
-    if (!player_id || !guessed_player_id) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json(
-        { error: 'player_id and guessed_player_id are required' },
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    if (!guessed_player_id) {
+      return NextResponse.json(
+        { error: 'guessed_player_id is required' },
         { status: 400 }
       );
     }
 
-    const supabase = await createServerClient();
+    const supabase = createServiceClient();
 
     // Get game state
     const game = await getGameById(supabase, gameId);
@@ -65,7 +73,7 @@ export async function POST(
     }
 
     // Verify submitter is the Assassin
-    if (player_id !== assassin.player_id) {
+    if (user.id !== assassin.player_id) {
       return NextResponse.json(
         { error: 'Only the Assassin can submit a guess' },
         { status: 403 }
@@ -93,7 +101,6 @@ export async function POST(
     });
 
     // Feature 017: Close room when game ends (FR-001)
-    // Remove room from active rooms list
     await updateRoomStatus(supabase, game.room_id, 'closed');
 
     // Log game over event
@@ -110,7 +117,7 @@ export async function POST(
       winner: result.winner,
       win_reason: result.reason,
       assassin_found_merlin: guessed_player_id === merlin.player_id,
-      merlin_id: merlin.player_id, // Reveal Merlin after game ends
+      merlin_id: merlin.player_id,
     });
   } catch (error) {
     console.error('Assassin guess error:', error);

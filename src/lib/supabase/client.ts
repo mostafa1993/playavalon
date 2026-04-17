@@ -1,81 +1,38 @@
 /**
  * Browser-side Supabase client
- * Uses anon key - safe for client-side code
+ *
+ * Cookie-backed session via @supabase/ssr. The session JWT is stored in
+ * httpOnly cookies set by the server — the browser client reads them to
+ * authenticate requests automatically.
  */
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient as createSSRBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 let supabaseInstance: SupabaseClient | null = null;
 
-/**
- * Create a browser-side Supabase client
- * Lazy initialization to avoid errors during build
- */
-export function createBrowserClient(): SupabaseClient {
-  if (supabaseInstance) {
-    return supabaseInstance;
-  }
+export function getSupabaseClient(): SupabaseClient {
+  if (supabaseInstance) return supabaseInstance;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // During SSR/build without env vars, create a placeholder client
   if (!supabaseUrl || !supabaseAnonKey) {
     if (typeof window === 'undefined') {
-      // Return a non-functional placeholder during build
-      return createClient('https://placeholder.supabase.co', 'placeholder-key', {
-        auth: { persistSession: false },
-      });
+      // SSR/build fallback — return a dummy that won't be used
+      return createSSRBrowserClient(
+        'https://placeholder.supabase.co',
+        'placeholder-key'
+      );
     }
     // eslint-disable-next-line no-console
     console.error('Missing Supabase environment variables. Check .env.local');
   }
 
-  supabaseInstance = createClient(
+  supabaseInstance = createSSRBrowserClient(
     supabaseUrl || 'https://placeholder.supabase.co',
-    supabaseAnonKey || 'placeholder-key',
-    {
-      auth: {
-        persistSession: false, // MVP: No auth session, using localStorage player ID
-      },
-    }
+    supabaseAnonKey || 'placeholder-key'
   );
 
   return supabaseInstance;
-}
-
-/**
- * Supabase client for browser use (lazy singleton)
- * Uses anon key with RLS policies
- */
-export function getSupabaseClient(): SupabaseClient {
-  return createBrowserClient();
-}
-
-/**
- * Create a client with player context for RLS policies
- * @param playerId - The player's localStorage UUID
- */
-export function createClientWithPlayer(playerId: string): SupabaseClient {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return createBrowserClient();
-  }
-
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-    },
-    global: {
-      headers: {
-        // Set app.player_id for RLS policies
-        'x-player-id': playerId,
-      },
-    },
-    db: {
-      schema: 'public',
-    },
-  });
 }

@@ -138,13 +138,13 @@ export function PlayerSeats({
 
     // T020: Safely get leader name
     const leader = players.find((p) => p.is_leader);
-    let leaderName = leader?.nickname || 'Leader';
+    let leaderName = leader?.display_name || 'Leader';
 
     // T020: Safely get Lady holder name
     const ladyHolder = players.find((p) => p.id === ladyHolderId);
-    let ladyName = ladyHolder?.nickname || 'Player';
+    let ladyName = ladyHolder?.display_name || 'Player';
 
-    // T012: Truncate long nicknames to 15 chars + "..."
+    // T012: Truncate long display names to 15 chars + "..."
     if (leaderName.length > 15) {
       leaderName = leaderName.slice(0, 15) + '...';
     }
@@ -396,7 +396,7 @@ export function PlayerSeats({
                         </span>
                       )
                     ) : (
-                      player.nickname.charAt(0).toUpperCase()
+                      player.display_name.charAt(0).toUpperCase()
                     )}
                   </div>
                 );
@@ -433,7 +433,7 @@ export function PlayerSeats({
                   ${isDisconnected ? 'text-red-400' : isMe ? 'text-amber-300 font-bold' : 'text-slate-100'}
                 `}
               >
-                {isMe ? 'You' : player.nickname}
+                {isMe ? 'You' : player.display_name}
               </span>
             </button>
           </div>

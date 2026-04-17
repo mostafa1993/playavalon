@@ -141,7 +141,7 @@ export async function getEvilTeammates(
       player_id,
       special_role,
       players!inner (
-        nickname
+        display_name
       )
     `)
     .eq('room_id', roomId)
@@ -153,14 +153,14 @@ export async function getEvilTeammates(
     throw error;
   }
 
-  // Extract nicknames from joined data
+  // Extract display names from joined data
   return (data || []).map((r) => {
     // Handle both array and object return types from Supabase
-    const players = r.players as { nickname: string } | { nickname: string }[] | null;
+    const players = r.players as { display_name: string } | { display_name: string }[] | null;
     if (Array.isArray(players)) {
-      return players[0]?.nickname || 'Unknown';
+      return players[0]?.display_name || 'Unknown';
     }
-    return players?.nickname || 'Unknown';
+    return players?.display_name || 'Unknown';
   });
 }
 
@@ -198,7 +198,7 @@ export async function getPlayersVisibleToMerlin(
       player_id,
       special_role,
       players!inner (
-        nickname
+        display_name
       )
     `)
     .eq('room_id', roomId)
@@ -209,13 +209,13 @@ export async function getPlayersVisibleToMerlin(
     throw error;
   }
 
-  // Extract nicknames from joined data
+  // Extract display names from joined data
   return (data || []).map((r) => {
-    const players = r.players as { nickname: string } | { nickname: string }[] | null;
+    const players = r.players as { display_name: string } | { display_name: string }[] | null;
     if (Array.isArray(players)) {
-      return players[0]?.nickname || 'Unknown';
+      return players[0]?.display_name || 'Unknown';
     }
-    return players?.nickname || 'Unknown';
+    return players?.display_name || 'Unknown';
   });
 }
 
@@ -232,7 +232,7 @@ export async function getPlayersVisibleToPercival(
       player_id,
       special_role,
       players!inner (
-        nickname
+        display_name
       )
     `)
     .eq('room_id', roomId)
@@ -242,13 +242,13 @@ export async function getPlayersVisibleToPercival(
     throw error;
   }
 
-  // Extract nicknames from joined data
+  // Extract display names from joined data
   return (data || []).map((r) => {
-    const players = r.players as { nickname: string } | { nickname: string }[] | null;
+    const players = r.players as { display_name: string } | { display_name: string }[] | null;
     if (Array.isArray(players)) {
-      return players[0]?.nickname || 'Unknown';
+      return players[0]?.display_name || 'Unknown';
     }
-    return players?.nickname || 'Unknown';
+    return players?.display_name || 'Unknown';
   });
 }
 

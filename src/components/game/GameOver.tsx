@@ -6,7 +6,7 @@
  * Feature 010: Now includes Merlin Quiz before role reveal
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -14,7 +14,6 @@ import { MerlinQuiz } from './MerlinQuiz';
 import { MerlinQuizResults } from './MerlinQuizResults';
 import type { GameWinner, QuestResult, GamePlayer, MerlinQuizState } from '@/types/game';
 import { getWinnerAnnouncement, getWinReasonText, countQuestResults } from '@/lib/domain/win-conditions';
-import { getPlayerId } from '@/lib/utils/player-id';
 
 // Quiz display states
 type QuizDisplayState = 'quiz' | 'results' | 'roles';
@@ -40,7 +39,6 @@ interface GameOverProps {
   playerRole?: 'good' | 'evil';
   players: GamePlayer[];
   currentPlayerId?: string;
-  currentPlayerDbId?: string;
   hasMerlin?: boolean;
 }
 
@@ -52,47 +50,36 @@ export function GameOver({
   playerRole,
   players,
   currentPlayerId,
-  currentPlayerDbId,
   hasMerlin = false,
 }: GameOverProps) {
   const router = useRouter();
-
-  // Feature 010: Get localStorage playerId for API calls
-  const localStoragePlayerId = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    return getPlayerId();
-  }, []);
 
   // Feature 010: Quiz state management
   const [quizDisplayState, setQuizDisplayState] = useState<QuizDisplayState>(
     hasMerlin ? 'quiz' : 'roles'
   );
-  const [quizState, setQuizState] = useState<MerlinQuizState | null>(null);
+  const [, setQuizState] = useState<MerlinQuizState | null>(null);
 
   // Fetch initial quiz state to check if quiz is already complete
   const checkQuizState = useCallback(async () => {
-    if (!hasMerlin || !gameId || !localStoragePlayerId) return;
+    if (!hasMerlin || !gameId) return;
 
     try {
-      const response = await fetch(`/api/games/${gameId}/merlin-quiz`, {
-        headers: { 'x-player-id': localStoragePlayerId },
-      });
+      const response = await fetch(`/api/games/${gameId}/merlin-quiz`);
 
       if (response.ok) {
         const data = await response.json();
         setQuizState(data.data);
 
-        // If quiz is already complete, skip to results
         if (data.data.quiz_complete) {
           setQuizDisplayState('results');
         }
       }
     } catch (error) {
       console.error('Failed to check quiz state:', error);
-      // On error, skip to roles
       setQuizDisplayState('roles');
     }
-  }, [gameId, localStoragePlayerId, hasMerlin]);
+  }, [gameId, hasMerlin]);
 
   useEffect(() => {
     checkQuizState();
@@ -132,7 +119,7 @@ export function GameOver({
   });
 
   // Feature 010: Show quiz before role reveal
-  if (quizDisplayState === 'quiz' && hasMerlin && localStoragePlayerId && currentPlayerId) {
+  if (quizDisplayState === 'quiz' && hasMerlin && currentPlayerId) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-8">
         {/* Winner Banner (compact) */}
@@ -159,8 +146,7 @@ export function GameOver({
           <MerlinQuiz
             gameId={gameId}
             players={players}
-            currentPlayerId={localStoragePlayerId}
-            currentPlayerDbId={currentPlayerId}
+            currentPlayerId={currentPlayerId}
             onQuizComplete={handleQuizComplete}
             onSkip={handleShowRoles}
           />
@@ -178,7 +164,7 @@ export function GameOver({
   }
 
   // Feature 010: Show quiz results before role reveal
-  if (quizDisplayState === 'results' && hasMerlin && localStoragePlayerId) {
+  if (quizDisplayState === 'results' && hasMerlin) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-8">
         {/* Winner Banner (compact) */}
@@ -204,7 +190,6 @@ export function GameOver({
         <div className="w-full max-w-lg">
           <MerlinQuizResults
             gameId={gameId}
-            currentPlayerId={localStoragePlayerId}
             onShowRoles={handleShowRoles}
           />
         </div>
@@ -323,7 +308,7 @@ export function GameOver({
                       <span className="text-xl">{roleDisplay.emoji}</span>
                       <div className="flex-1 min-w-0">
                         <div className={`font-medium truncate ${isCurrentPlayer ? 'text-avalon-gold' : 'text-slate-200'}`}>
-                          {player.nickname}
+                          {player.display_name}
                           {isCurrentPlayer && ' (You)'}
                           {/* Feature 009: Decoy indicator */}
                           {player.was_decoy && (
@@ -387,7 +372,7 @@ export function GameOver({
                       <span className="text-xl">{roleDisplay.emoji}</span>
                       <div className="flex-1 min-w-0">
                         <div className={`font-medium truncate ${isCurrentPlayer ? 'text-avalon-gold' : 'text-slate-200'}`}>
-                          {player.nickname}
+                          {player.display_name}
                           {isCurrentPlayer && ' (You)'}
                           {/* Feature 011: Mixed Group indicator */}
                           {player.was_mixed_group && (

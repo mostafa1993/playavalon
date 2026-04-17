@@ -10,7 +10,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById } from '@/lib/supabase/games';
 import { getCurrentProposal, getActiveProposalForQuest } from '@/lib/supabase/proposals';
 import { getVotedPlayerIds, getVotesForProposal } from '@/lib/supabase/votes';
@@ -31,26 +31,19 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       const error: WatcherError = {
-        code: 'NICKNAME_REQUIRED',
-        message: 'Please register a nickname before watching',
+        code: 'UNAUTHORIZED',
+        message: 'You must be logged in to watch games',
       };
       return NextResponse.json({ error }, { status: 401 });
     }
 
     // Try to update lastSeen FIRST to prevent race condition with cleanup
-    // This keeps the session alive before we check validity
-    const sessionUpdated = updateWatcherLastSeen(gameId, playerId);
+    const sessionUpdated = updateWatcherLastSeen(gameId, user.id);
 
-    // If session wasn't updated (watcher timed out or never joined),
-    // check if they were a valid watcher that got cleaned up
-    // In that case, we should be lenient - browser tabs can be throttled
-    if (!sessionUpdated && !isWatcher(gameId, playerId)) {
-      // Watcher session expired or never existed
-      // Return a specific error that the client can handle for auto-rejoin
+    if (!sessionUpdated && !isWatcher(gameId, user.id)) {
       const error: WatcherError = {
         code: 'SESSION_EXPIRED',
         message: 'Watcher session expired. Please rejoin.',
@@ -58,7 +51,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error }, { status: 401 });
     }
 
-    const supabase = createServerClient();
+    const supabase = createServiceClient();
 
     // Get game (READ ONLY)
     const game = await getGameById(supabase, gameId);
@@ -78,10 +71,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       currentProposal = await getCurrentProposal(supabase, gameId);
     }
 
-    // Get player data for nicknames and activity status
+    // Get player data for display names and activity status
     const { data: playersData } = await supabase
       .from('players')
-      .select('id, nickname, last_activity_at')
+      .select('id, display_name, last_activity_at')
       .in('id', game.seating_order);
 
     // Get voted player IDs if in voting phase
@@ -91,7 +84,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Get last vote result (for reveal animation)
-    // Watchers see same reveal timing as players (FR-007)
     let lastVoteResult: LastVoteResult | null = null;
     if (game.phase === 'quest' || game.phase === 'team_building') {
       const { data: recentProposal } = await supabase

@@ -35,11 +35,11 @@ export const WATCHER_POLL_INTERVAL_MS = 3000;
  * Stored in memory only - NOT persisted to database
  */
 export interface WatcherInfo {
-  /** Watcher's display nickname (required per FR-002) */
-  nickname: string;
+  /** Watcher's display name */
+  display_name: string;
 
-  /** Player ID from existing player registration */
-  playerId: string;
+  /** Auth user ID */
+  userId: string;
 
   /** Unix timestamp when watcher joined */
   joinedAt: number;
@@ -64,7 +64,7 @@ export type WatcherSessionStore = Map<string, Map<string, WatcherInfo>>;
  */
 export interface WatcherPlayerInfo {
   id: string;
-  nickname: string;
+  display_name: string;
   seat_position: number;
   is_leader: boolean;
   is_on_team: boolean;
@@ -83,11 +83,11 @@ export interface WatcherPlayerInfo {
  */
 export interface WatcherLadyState {
   enabled: boolean;
-  holder_nickname: string | null;
+  holder_display_name: string | null;
   /** Public announcement of investigation (no result) */
   last_investigation: {
-    investigator_nickname: string;
-    target_nickname: string;
+    investigator_display_name: string;
+    target_display_name: string;
     // NO result field - watchers don't see this
   } | null;
 }
@@ -138,7 +138,7 @@ export type WatcherErrorCode =
   | 'GAME_NOT_STARTED'
   | 'WATCHER_LIMIT_REACHED'
   | 'GAME_NOT_FOUND'
-  | 'NICKNAME_REQUIRED'
+  | 'UNAUTHORIZED'
   | 'NOT_WATCHER'
   | 'SESSION_EXPIRED'
   | 'GAME_ENDED'

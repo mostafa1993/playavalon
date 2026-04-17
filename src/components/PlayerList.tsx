@@ -5,7 +5,7 @@ import type { RoomPlayerInfo } from '@/types/room';
 
 interface PlayerListProps {
   players: RoomPlayerInfo[];
-  currentPlayerId: string;
+  currentUserId: string;
   expectedPlayers: number;
 }
 
@@ -14,7 +14,7 @@ interface PlayerListProps {
  */
 export function PlayerList({
   players,
-  currentPlayerId,
+  currentUserId,
   expectedPlayers,
 }: PlayerListProps) {
   // Sort players: manager first, then by join time
@@ -28,7 +28,6 @@ export function PlayerList({
 
   return (
     <div className="space-y-2">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="font-display text-avalon-gold text-sm font-bold uppercase tracking-wider">
           Knights at the Table
@@ -38,17 +37,15 @@ export function PlayerList({
         </span>
       </div>
 
-      {/* Player list */}
       <div className="space-y-1.5">
         {sortedPlayers.map((player) => (
           <PlayerCard
             key={player.id}
             player={player}
-            isCurrentPlayer={player.id === currentPlayerId}
+            isCurrentPlayer={player.id === currentUserId}
           />
         ))}
 
-        {/* Empty slots */}
         {emptySlots > 0 && (
           <>
             {Array.from({ length: emptySlots }).map((_, i) => (

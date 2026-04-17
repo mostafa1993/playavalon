@@ -4,8 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById } from '@/lib/supabase/games';
 import { getInvestigatedPlayerIds, getPreviousLadyHolderIds } from '@/lib/supabase/lady-investigations';
 import { isShowingResults, isTerminalPhase } from '@/lib/domain/game-state-machine';
@@ -26,19 +25,12 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Get game
     const game = await getGameById(supabase, gameId);
@@ -50,7 +42,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Verify player is in this game
-    if (!game.seating_order.includes(player.id)) {
+    if (!game.seating_order.includes(user.id)) {
       return NextResponse.json(
         { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
         { status: 403 }
@@ -77,12 +69,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // CRITICAL FIX: Use optimistic locking to prevent race condition
-    // If multiple players press "Continue" simultaneously, only the first one should succeed
-    // We do this by atomically updating the phase only if it's still 'quest_result'
-
     // Check if Lady phase should trigger (after Quest 2, 3, 4)
-    // Only if migration 009 applied (lady_enabled exists and is true)
     let shouldGoToLadyPhase = false;
     if (game.lady_enabled === true) {
       try {
@@ -99,23 +86,20 @@ export async function POST(request: Request, { params }: RouteParams) {
           game.lady_holder_id
         );
       } catch {
-        // Migration 009 not applied - skip Lady phase
         shouldGoToLadyPhase = false;
       }
     }
 
     if (shouldGoToLadyPhase) {
-      // ATOMIC UPDATE: Only update if phase is still 'quest_result'
       const { data: updateResult, error: updateError } = await supabase
         .from('games')
         .update({ phase: 'lady_of_lake' })
         .eq('id', gameId)
-        .eq('phase', 'quest_result') // Optimistic lock - only update if phase unchanged
+        .eq('phase', 'quest_result')
         .select()
         .single();
 
       if (updateError || !updateResult) {
-        // Another request already processed this - return current state
         const currentGame = await getGameById(supabase, gameId);
         const response: ContinueGameResponse = {
           phase: currentGame?.phase || 'team_building',
@@ -125,7 +109,6 @@ export async function POST(request: Request, { params }: RouteParams) {
         return NextResponse.json({ data: response });
       }
 
-      // Feature 016: Broadcast phase transition (FR-013)
       await broadcastPhaseTransition(
         gameId,
         'lady_of_lake',
@@ -143,13 +126,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ data: response });
     }
 
-    // ATOMIC UPDATE: Only update if phase is still 'quest_result' (prevents double rotation)
-    // Calculate new leader index first (before any state changes)
     const nextLeaderIndex = (game.leader_index + 1) % game.seating_order.length;
     const nextLeaderId = game.seating_order[nextLeaderIndex];
     const nextQuest = game.current_quest + 1;
 
-    // Single atomic update with optimistic lock
     const { data: updateResult, error: updateError } = await supabase
       .from('games')
       .update({
@@ -159,12 +139,11 @@ export async function POST(request: Request, { params }: RouteParams) {
         current_leader_id: nextLeaderId,
       })
       .eq('id', gameId)
-      .eq('phase', 'quest_result') // Optimistic lock - only update if phase unchanged
+      .eq('phase', 'quest_result')
       .select()
       .single();
 
     if (updateError || !updateResult) {
-      // Another request already processed this - return current state
       const currentGame = await getGameById(supabase, gameId);
       const response: ContinueGameResponse = {
         phase: currentGame?.phase || 'team_building',
@@ -174,7 +153,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ data: response });
     }
 
-    // Feature 016: Broadcast phase transition (FR-013)
     await broadcastPhaseTransition(
       gameId,
       'team_building',
@@ -183,7 +161,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       nextQuest
     );
 
-    // Successfully updated - return new state
     const response: ContinueGameResponse = {
       phase: 'team_building',
       current_quest: nextQuest,

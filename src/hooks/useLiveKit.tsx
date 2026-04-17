@@ -22,7 +22,6 @@ import {
   ConnectionState,
   type RemoteParticipant,
 } from 'livekit-client';
-import { getPlayerId } from '@/lib/utils/player-id';
 
 export type ViewMode = 'video' | 'split' | 'game';
 
@@ -147,18 +146,11 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const playerId = getPlayerId();
-      if (!playerId) {
-        setError('Not registered');
-        return;
-      }
-
-      // Fetch token from our API
+      // Fetch token from our API (auth via cookies)
       const res = await fetch('/api/livekit/token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Player-ID': playerId,
         },
         body: JSON.stringify({ roomCode: roomCode.toUpperCase() }),
       });

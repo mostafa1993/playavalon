@@ -276,7 +276,7 @@ export interface LastVoteResult {
  */
 export interface GamePlayer {
   id: string;
-  nickname: string;
+  display_name: string;
   seat_position: number;    // Index in seating order (0-based)
   is_leader: boolean;
   is_on_team: boolean;      // On current proposal's team
@@ -298,7 +298,7 @@ export interface GamePlayer {
  */
 export interface AssassinPhaseState {
   assassin_id: string;
-  assassin_nickname: string;
+  assassin_display_name: string;
   merlin_id: string; // Only known to server
   can_guess: boolean; // True if current player is assassin
 }
@@ -309,14 +309,14 @@ export interface AssassinPhaseState {
 export interface LadyOfLakeState {
   enabled: boolean;
   holder_id: string | null;
-  holder_nickname: string | null;
+  holder_display_name: string | null;
   investigated_player_ids: string[];
   previous_lady_holder_ids: string[]; // Previous holders cannot be investigated
   is_holder: boolean;           // Current player is Lady holder
   can_investigate: boolean;     // In lady_of_lake phase and is holder
   last_investigation: {         // For public announcement
-    investigator_nickname: string;
-    target_nickname: string;
+    investigator_display_name: string;
+    target_display_name: string;
   } | null;
 }
 
@@ -347,7 +347,7 @@ export interface LadyInvestigateResponse {
   success: boolean;
   result: 'good' | 'evil';      // Only for Lady holder
   new_holder_id: string;
-  new_holder_nickname: string;
+  new_holder_display_name: string;
   next_quest?: number;          // The next quest number after Lady phase
 }
 
@@ -356,7 +356,7 @@ export interface LadyInvestigateResponse {
  */
 export interface VoteInfo {
   player_id: string;
-  nickname: string;
+  display_name: string;
   vote: VoteChoice;
 }
 
@@ -554,7 +554,7 @@ export interface MerlinQuizResults {
   quiz_complete: boolean;
   results: MerlinQuizResultEntry[] | null;
   actual_merlin_id: string;
-  actual_merlin_nickname: string;
+  actual_merlin_display_name: string;
   total_votes: number;
   skipped_count: number;
 }
@@ -564,7 +564,7 @@ export interface MerlinQuizResults {
  */
 export interface MerlinQuizResultEntry {
   player_id: string;
-  nickname: string;
+  display_name: string;
   vote_count: number;
   is_most_voted: boolean;
   is_actual_merlin: boolean;

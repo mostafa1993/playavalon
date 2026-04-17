@@ -1,33 +1,27 @@
 /**
  * POST /api/players/heartbeat
- * Update player's last_activity_at timestamp
- * Phase 6: Player Recovery & Reconnection
+ * Update the authenticated player's last_activity_at timestamp
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { updatePlayerActivity } from '@/lib/supabase/players';
 import type { HeartbeatResponse } from '@/types/player';
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const playerId = request.headers.get('x-player-id');
-
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       const response: HeartbeatResponse = {
         success: false,
-        error: 'PLAYER_NOT_FOUND',
+        error: 'UNAUTHORIZED',
       };
       return NextResponse.json(response, { status: 401 });
     }
 
-    // Create Supabase client with service role for database operations
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabase = createServiceClient();
 
-    const updated = await updatePlayerActivity(supabase, playerId);
+    const updated = await updatePlayerActivity(supabase, user.id);
 
     if (!updated) {
       const response: HeartbeatResponse = {
@@ -43,7 +37,6 @@ export async function POST(request: NextRequest) {
     };
 
     return NextResponse.json(response);
-
   } catch (error) {
     console.error('Error updating player heartbeat:', error);
     const response: HeartbeatResponse = {

@@ -1,7 +1,12 @@
 'use client';
 
+import { AuthProvider } from '@/hooks/useAuth';
 import { LiveKitProvider } from '@/hooks/useLiveKit';
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  return <LiveKitProvider>{children}</LiveKitProvider>;
+  return (
+    <AuthProvider>
+      <LiveKitProvider>{children}</LiveKitProvider>
+    </AuthProvider>
+  );
 }

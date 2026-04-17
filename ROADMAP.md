@@ -5,7 +5,12 @@
 - **Hosting**: Single VM on Azure or GCP (4 vCPU, 16GB RAM)
 - **Deployment**: Docker Compose — LiveKit server + Next.js app + Redis (session/state cache) + AI agent service
 - **Domain**: Custom domain with SSL (managed via cloud provider or Cloudflare)
-- **Current stack stays**: Next.js 15, Supabase (hosted), Tailwind, TypeScript
+- **Current stack stays**: Next.js 15, Supabase (hosted + Auth), Tailwind, TypeScript
+
+## Completed milestones
+
+- ✅ **Phase 1 — Video Calling (LiveKit)** (Dec 2025 – Apr 2026)
+- ✅ **Auth migration** — Supabase Auth accounts replace localStorage identity (`specs/021-auth-migration/`, Apr 2026). Required for stable per-user identity used by the upcoming AI agent.
 
 ---
 

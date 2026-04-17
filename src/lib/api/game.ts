@@ -1,8 +1,9 @@
 /**
  * Game API client functions
+ *
+ * Auth is handled via Supabase session cookies — no custom headers needed.
  */
 
-import { getPlayerId } from '@/lib/utils/player-id';
 import type {
   ProposeTeamRequest,
   ProposeTeamResponse,
@@ -17,6 +18,8 @@ import type {
   UpdateDraftTeamResponse,
 } from '@/types/game';
 
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
 /**
  * Propose a team for the current quest (leader only)
  */
@@ -24,19 +27,13 @@ export async function proposeTeam(
   gameId: string,
   teamMemberIds: string[]
 ): Promise<ProposeTeamResponse> {
-  const playerId = getPlayerId();
-  const headers = {
-    'X-Player-ID': playerId,
-    'Content-Type': 'application/json',
-  };
-
   const body: ProposeTeamRequest = {
     team_member_ids: teamMemberIds,
   };
 
   const response = await fetch(`/api/games/${gameId}/propose`, {
     method: 'POST',
-    headers,
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
 
@@ -56,17 +53,11 @@ export async function submitVote(
   gameId: string,
   vote: VoteChoice
 ): Promise<VoteResponse> {
-  const playerId = getPlayerId();
-  const headers = {
-    'X-Player-ID': playerId,
-    'Content-Type': 'application/json',
-  };
-
   const body: VoteRequest = { vote };
 
   const response = await fetch(`/api/games/${gameId}/vote`, {
     method: 'POST',
-    headers,
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
 
@@ -86,17 +77,11 @@ export async function submitQuestAction(
   gameId: string,
   action: QuestActionType
 ): Promise<QuestActionResponse> {
-  const playerId = getPlayerId();
-  const headers = {
-    'X-Player-ID': playerId,
-    'Content-Type': 'application/json',
-  };
-
   const body: QuestActionRequest = { action };
 
   const response = await fetch(`/api/games/${gameId}/quest/action`, {
     method: 'POST',
-    headers,
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
 
@@ -113,15 +98,9 @@ export async function submitQuestAction(
  * Continue to next quest (after viewing results)
  */
 export async function continueGame(gameId: string): Promise<ContinueGameResponse> {
-  const playerId = getPlayerId();
-  const headers = {
-    'X-Player-ID': playerId,
-    'Content-Type': 'application/json',
-  };
-
   const response = await fetch(`/api/games/${gameId}/continue`, {
     method: 'POST',
-    headers,
+    headers: JSON_HEADERS,
   });
 
   if (!response.ok) {
@@ -139,10 +118,7 @@ export async function continueGame(gameId: string): Promise<ContinueGameResponse
 export async function getGameForRoom(
   roomCode: string
 ): Promise<{ has_game: boolean; game_id: string | null; phase: string | null }> {
-  const playerId = getPlayerId();
-  const headers = { 'X-Player-ID': playerId };
-
-  const response = await fetch(`/api/rooms/${roomCode}/game`, { headers });
+  const response = await fetch(`/api/rooms/${roomCode}/game`);
 
   if (!response.ok) {
     const data = await response.json();
@@ -159,30 +135,18 @@ export async function getGameForRoom(
 
 /**
  * Update the leader's draft team selection
- * Feature 007: Real-Time Team Selection Visibility
- * 
- * @param gameId - Game identifier
- * @param teamMemberIds - Array of player database IDs (0 to quest_size)
- * @returns Promise<UpdateDraftTeamResponse>
- * @throws Error if not leader, invalid phase, or validation fails
  */
 export async function updateDraftTeam(
   gameId: string,
   teamMemberIds: string[]
 ): Promise<UpdateDraftTeamResponse> {
-  const playerId = getPlayerId();
-  const headers = {
-    'X-Player-ID': playerId,
-    'Content-Type': 'application/json',
-  };
-
   const body: UpdateDraftTeamRequest = {
     team_member_ids: teamMemberIds,
   };
 
   const response = await fetch(`/api/games/${gameId}/draft-team`, {
     method: 'PUT',
-    headers,
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
 
@@ -191,7 +155,6 @@ export async function updateDraftTeam(
     const errorCode = data.error?.code;
     const errorMessage = data.error?.message;
 
-    // Feature 007: Handle new error codes
     if (errorCode === 'NOT_LEADER') {
       throw new Error('Only the current leader can update team selection');
     }
@@ -207,4 +170,3 @@ export async function updateDraftTeam(
 
   return response.json();
 }
-

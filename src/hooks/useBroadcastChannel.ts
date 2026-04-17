@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
-import { createBrowserClient } from '@/lib/supabase/client';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import {
   getChannelName,
   type BroadcastHandlers,
@@ -147,7 +147,7 @@ export function useBroadcastChannel(
       return;
     }
 
-    const supabase = createBrowserClient();
+    const supabase = getSupabaseClient();
     const channelName = getChannelName(gameId);
 
     // Create channel and subscribe to all events

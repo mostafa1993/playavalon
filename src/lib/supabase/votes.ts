@@ -84,7 +84,7 @@ export async function getVoteCount(
 
 /**
  * Get all votes for a proposal (only after voting complete)
- * Returns with player nicknames for display
+ * Returns with player display names for display
  */
 export async function getVotesForProposal(
   client: SupabaseClient,
@@ -96,7 +96,7 @@ export async function getVotesForProposal(
       player_id,
       vote,
       players!inner (
-        nickname
+        display_name
       )
     `)
     .eq('proposal_id', proposalId);
@@ -107,14 +107,14 @@ export async function getVotesForProposal(
 
   return (data || []).map((v) => {
     // Handle Supabase join return type
-    const players = v.players as { nickname: string } | { nickname: string }[] | null;
-    const nickname = Array.isArray(players) 
-      ? players[0]?.nickname || 'Unknown'
-      : players?.nickname || 'Unknown';
-    
+    const players = v.players as { display_name: string } | { display_name: string }[] | null;
+    const displayName = Array.isArray(players)
+      ? players[0]?.display_name || 'Unknown'
+      : players?.display_name || 'Unknown';
+
     return {
       player_id: v.player_id,
-      nickname,
+      display_name: displayName,
       vote: v.vote as VoteChoice,
     };
   });

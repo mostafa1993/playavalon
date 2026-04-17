@@ -151,7 +151,7 @@ export function calculateQuizResults(
   // Build results
   const results: MerlinQuizResultEntry[] = players.map(player => ({
     player_id: player.id,
-    nickname: player.nickname,
+    display_name: player.display_name,
     vote_count: voteCounts.get(player.id) ?? 0,
     is_most_voted: maxVotes > 0 && (voteCounts.get(player.id) ?? 0) === maxVotes,
     is_actual_merlin: player.id === merlinId,
@@ -167,7 +167,7 @@ export function calculateQuizResults(
     quiz_complete: true,
     results,
     actual_merlin_id: merlinId,
-    actual_merlin_nickname: merlin?.nickname ?? 'Unknown',
+    actual_merlin_display_name: merlin?.display_name ?? 'Unknown',
     total_votes: votes.length - skippedCount,
     skipped_count: skippedCount,
   };

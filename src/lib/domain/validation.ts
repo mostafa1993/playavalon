@@ -6,8 +6,6 @@
 import {
   MIN_PLAYERS,
   MAX_PLAYERS,
-  MIN_NICKNAME_LENGTH,
-  MAX_NICKNAME_LENGTH,
   ROOM_CODE_LENGTH,
 } from '@/lib/utils/constants';
 
@@ -17,36 +15,6 @@ import {
 export interface ValidationResult {
   valid: boolean;
   error?: string;
-}
-
-/**
- * Validate nickname
- * - Must be 3-20 characters
- * - Only alphanumeric and spaces allowed
- * - Cannot be only whitespace
- */
-export function validateNickname(nickname: string): ValidationResult {
-  if (!nickname || typeof nickname !== 'string') {
-    return { valid: false, error: 'Nickname is required' };
-  }
-
-  const trimmed = nickname.trim();
-
-  if (trimmed.length < MIN_NICKNAME_LENGTH) {
-    return { valid: false, error: `Nickname must be at least ${MIN_NICKNAME_LENGTH} characters` };
-  }
-
-  if (trimmed.length > MAX_NICKNAME_LENGTH) {
-    return { valid: false, error: `Nickname must be at most ${MAX_NICKNAME_LENGTH} characters` };
-  }
-
-  // Allow letters, numbers, spaces, and common characters
-  const validPattern = /^[a-zA-Z0-9\s\-_]+$/;
-  if (!validPattern.test(trimmed)) {
-    return { valid: false, error: 'Nickname can only contain letters, numbers, spaces, hyphens, and underscores' };
-  }
-
-  return { valid: true };
 }
 
 /**

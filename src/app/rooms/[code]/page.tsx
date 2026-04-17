@@ -6,7 +6,6 @@ import { useParams } from 'next/navigation';
 import { AlertTriangle, Search } from 'lucide-react';
 import { Lobby } from '@/components/Lobby';
 import { RoleRevealModal } from '@/components/RoleRevealModal';
-import { SessionTakeoverAlert } from '@/components/SessionTakeoverAlert';
 import { VideoRoom } from '@/components/video';
 import { ViewModeToggle } from '@/components/video/ViewModeToggle';
 import { VideoControls } from '@/components/video/VideoControls';
@@ -14,21 +13,20 @@ import { ChatPanel } from '@/components/video/ChatPanel';
 import { ResizableSplit } from '@/components/video/ResizableSplit';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { useRoom } from '@/hooks/useRoom';
-import { usePlayer } from '@/hooks/usePlayer';
+import { useAuth } from '@/hooks/useAuth';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
-import { getPlayerId } from '@/lib/utils/player-id';
 import type { SplitIntelVisibility, OberonSplitIntelVisibility } from '@/types/game';
 
 export default function RoomPage() {
   const params = useParams();
   const code = params.code as string;
   const router = useRouter();
-  const { isRegistered, isLoading: playerLoading } = usePlayer();
-  const { room, isLoading: roomLoading, error, isConnected, rolesInPlay, sessionTakenOver, leave, refresh } = useRoom(code);
+  const { user, loading: authLoading } = useAuth();
+  const { room, isLoading: roomLoading, error, isConnected, rolesInPlay, leave, refresh } = useRoom(code);
   const { disconnect: disconnectVideo, isConnected: videoConnected, viewMode } = useLiveKit();
 
-  // T035: Activity heartbeat for disconnect detection
-  useHeartbeat({ enabled: isRegistered && !roomLoading && !sessionTakenOver });
+  // Activity heartbeat for disconnect detection
+  useHeartbeat({ enabled: !!user && !roomLoading });
 
   const [isDistributing, setIsDistributing] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -44,38 +42,29 @@ export default function RoomPage() {
     known_players_label?: string;
     hidden_evil_count?: number;
     ability_note?: string;
-    // Feature 009: Merlin Decoy Mode
     has_decoy?: boolean;
     decoy_warning?: string;
-    // Feature 011: Merlin Split Intel Mode
     split_intel?: SplitIntelVisibility;
-    // Feature 018: Oberon Split Intel Mode
     oberon_split_intel?: OberonSplitIntelVisibility;
   } | null>(null);
   const [roleError, setRoleError] = useState<string | null>(null);
 
-  // Redirect to home if not registered
+  // Redirect to login if not authenticated
   useEffect(() => {
-    if (!playerLoading && !isRegistered) {
-      router.push('/');
+    if (!authLoading && !user) {
+      router.push(`/login?returnTo=/rooms/${code}`);
     }
-  }, [playerLoading, isRegistered, router]);
+  }, [authLoading, user, router, code]);
 
   // Fetch role when roles are distributed
   useEffect(() => {
     const loadRole = async () => {
       try {
-        const playerId = getPlayerId();
-        const response = await fetch(`/api/rooms/${code}/role`, {
-          headers: {
-            'X-Player-ID': playerId,
-          },
-        });
+        const response = await fetch(`/api/rooms/${code}/role`);
 
         if (response.ok) {
           const { data } = await response.json();
           setRoleData(data);
-          // Show modal if not confirmed yet
           if (!data.is_confirmed) {
             setShowRoleModal(true);
           }
@@ -95,10 +84,7 @@ export default function RoomPage() {
     const redirectToGame = async () => {
       if (room?.room.status === 'started') {
         try {
-          const playerId = getPlayerId();
-          const response = await fetch(`/api/rooms/${code}/game`, {
-            headers: { 'X-Player-ID': playerId },
-          });
+          const response = await fetch(`/api/rooms/${code}/game`);
 
           if (response.ok) {
             const { data } = await response.json();
@@ -115,20 +101,13 @@ export default function RoomPage() {
     redirectToGame();
   }, [room?.room.status, code, router]);
 
-  /**
-   * Handle role distribution (manager only)
-   */
   const handleDistributeRoles = async () => {
     setIsDistributing(true);
     setRoleError(null);
 
     try {
-      const playerId = getPlayerId();
       const response = await fetch(`/api/rooms/${code}/distribute`, {
         method: 'POST',
-        headers: {
-          'X-Player-ID': playerId,
-        },
       });
 
       if (!response.ok) {
@@ -136,7 +115,6 @@ export default function RoomPage() {
         throw new Error(data.error?.message || 'Failed to distribute roles');
       }
 
-      // Refresh room data
       await refresh();
     } catch (err) {
       setRoleError(err instanceof Error ? err.message : 'Failed to distribute roles');
@@ -145,17 +123,10 @@ export default function RoomPage() {
     }
   };
 
-  /**
-   * Handle role confirmation
-   */
   const handleConfirmRole = async () => {
     try {
-      const playerId = getPlayerId();
       const response = await fetch(`/api/rooms/${code}/confirm`, {
         method: 'POST',
-        headers: {
-          'X-Player-ID': playerId,
-        },
       });
 
       if (!response.ok) {
@@ -163,41 +134,30 @@ export default function RoomPage() {
         throw new Error(data.error?.message || 'Failed to confirm role');
       }
 
-      // Update local state
       if (roleData) {
         setRoleData({ ...roleData, is_confirmed: true });
       }
       setShowRoleModal(false);
 
-      // Refresh room data
       await refresh();
     } catch (err) {
       setRoleError(err instanceof Error ? err.message : 'Failed to confirm role');
     }
   };
 
-  /**
-   * Handle starting the game (manager only)
-   */
   const handleStartGame = async () => {
     setIsStarting(true);
     setRoleError(null);
 
     try {
-      const playerId = getPlayerId();
       const response = await fetch(`/api/rooms/${code}/start`, {
         method: 'POST',
-        headers: {
-          'X-Player-ID': playerId,
-        },
       });
 
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error?.message || 'Failed to start game');
       }
-
-      // Redirect will happen via useEffect when room status changes
     } catch (err) {
       setRoleError(err instanceof Error ? err.message : 'Failed to start game');
     } finally {
@@ -205,9 +165,6 @@ export default function RoomPage() {
     }
   };
 
-  /**
-   * Handle leaving the room
-   */
   const handleLeave = async () => {
     disconnectVideo();
     const success = await leave();
@@ -217,7 +174,7 @@ export default function RoomPage() {
   };
 
   // Loading state
-  if (playerLoading || roomLoading) {
+  if (authLoading || roomLoading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-avalon-midnight min-h-screen">
         <div className="text-center space-y-4">
@@ -247,7 +204,6 @@ export default function RoomPage() {
     );
   }
 
-  // No room data
   if (!room) {
     return (
       <div className="flex-1 flex items-center justify-center p-6 bg-avalon-midnight min-h-screen">
@@ -268,17 +224,14 @@ export default function RoomPage() {
     );
   }
 
-  // Lobby content — used in all modes
   const lobbyContent = (
     <>
-      {/* Error Display */}
       {roleError && (
         <div className="p-4 bg-evil/20 border border-evil/50 rounded-lg animate-slide-up">
           <p className="text-evil-light text-sm text-center">{roleError}</p>
         </div>
       )}
 
-      {/* Main Lobby */}
       <Lobby
         room={room}
         rolesInPlay={rolesInPlay}
@@ -290,7 +243,6 @@ export default function RoomPage() {
         isConnected={isConnected}
       />
 
-      {/* Role Reveal Modal */}
       {roleData && (
         <RoleRevealModal
           isOpen={showRoleModal}
@@ -312,7 +264,6 @@ export default function RoomPage() {
         />
       )}
 
-      {/* Show Role Button (if already confirmed) */}
       {roleData?.is_confirmed && (
         <div className="mt-4">
           <button
@@ -328,7 +279,6 @@ export default function RoomPage() {
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
-      {/* Floating top-right bar — only when connected */}
       {videoConnected && (
         <div className="fixed top-6 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
           <ViewModeToggle />
@@ -339,15 +289,12 @@ export default function RoomPage() {
         </div>
       )}
 
-      {/* Content area — full height */}
       <div className="flex-1 min-h-0">
         {videoConnected && viewMode === 'video' ? (
-          /* Video-only mode */
           <div className="h-full">
             <VideoRoom roomCode={code} fullscreen hideControls />
           </div>
         ) : videoConnected && viewMode === 'split' ? (
-          /* Split mode — lobby on left, video on right */
           <ResizableSplit
             defaultLeftPercent={35}
             minLeftPercent={30}
@@ -362,11 +309,9 @@ export default function RoomPage() {
             }
           />
         ) : (
-          /* Game-only mode or not connected — full lobby */
           <div className="h-full overflow-y-auto">
             <div className="flex flex-col items-center p-6 md:p-8">
               <div className="w-full max-w-lg animate-fade-in space-y-4 pb-8">
-                {/* Join video bar — top center when not connected */}
                 {!videoConnected && (
                   <div className="flex items-center justify-center py-2 px-4 bg-avalon-navy/50 rounded-lg border border-avalon-dark-border">
                     <VideoRoom roomCode={code} inline />
@@ -378,9 +323,6 @@ export default function RoomPage() {
           </div>
         )}
       </div>
-
-      {/* T072: Session Takeover Alert */}
-      <SessionTakeoverAlert isOpen={sessionTakenOver} />
     </main>
   );
 }

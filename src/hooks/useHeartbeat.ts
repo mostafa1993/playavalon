@@ -2,14 +2,14 @@
 
 /**
  * Heartbeat hook for player activity tracking
- * Phase 6: Player Recovery & Reconnection
  *
- * Sends periodic heartbeat requests to update player's last_activity_at.
- * Pauses when tab is hidden, resumes immediately on tab focus.
+ * Sends periodic heartbeat requests to update the authenticated user's
+ * last_activity_at. Pauses when tab is hidden, resumes on focus.
+ * Only runs when a user is signed in.
  */
 
 import { useEffect, useRef, useCallback } from 'react';
-import { getPlayerId, hasPlayerId } from '@/lib/utils/player-id';
+import { useAuth } from '@/hooks/useAuth';
 import { HEARTBEAT_INTERVAL_SECONDS } from '@/lib/domain/connection-status';
 
 interface UseHeartbeatOptions {
@@ -22,40 +22,23 @@ interface UseHeartbeatOptions {
 }
 
 /**
- * Hook that sends heartbeat to server every 30 seconds
- *
- * @param options Configuration options
- *
- * @example
- * // In a room or game page
- * useHeartbeat({
- *   enabled: true,
- *   onError: (err) => console.error('Heartbeat failed:', err),
- * });
+ * Hook that sends heartbeat to server every 30 seconds.
+ * Auth is handled via cookies — no custom headers needed.
  */
 export function useHeartbeat(options: UseHeartbeatOptions = {}) {
   const { enabled = true, onError, onSuccess } = options;
+  const { user } = useAuth();
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isVisibleRef = useRef(true);
   const lastHeartbeatRef = useRef<number>(0);
 
-  /**
-   * Send a heartbeat request to the server
-   */
   const sendHeartbeat = useCallback(async () => {
-    if (!hasPlayerId()) {
-      return;
-    }
-
     try {
-      const playerId = getPlayerId();
-
       const response = await fetch('/api/players/heartbeat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-player-id': playerId,
         },
       });
 
@@ -71,19 +54,13 @@ export function useHeartbeat(options: UseHeartbeatOptions = {}) {
     }
   }, [onError, onSuccess]);
 
-  /**
-   * Start the heartbeat interval
-   */
   const startHeartbeat = useCallback(() => {
-    // Clear any existing interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
 
-    // Send immediate heartbeat
     sendHeartbeat();
 
-    // Set up interval
     intervalRef.current = setInterval(() => {
       if (isVisibleRef.current) {
         sendHeartbeat();
@@ -91,9 +68,6 @@ export function useHeartbeat(options: UseHeartbeatOptions = {}) {
     }, HEARTBEAT_INTERVAL_SECONDS * 1000);
   }, [sendHeartbeat]);
 
-  /**
-   * Stop the heartbeat interval
-   */
   const stopHeartbeat = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -101,17 +75,13 @@ export function useHeartbeat(options: UseHeartbeatOptions = {}) {
     }
   }, []);
 
-  /**
-   * Handle tab visibility changes
-   */
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !user) return;
 
     const handleVisibilityChange = () => {
       isVisibleRef.current = !document.hidden;
 
       if (!document.hidden) {
-        // Tab became visible - send immediate heartbeat
         sendHeartbeat();
       }
     };
@@ -121,13 +91,10 @@ export function useHeartbeat(options: UseHeartbeatOptions = {}) {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled, sendHeartbeat]);
+  }, [enabled, user, sendHeartbeat]);
 
-  /**
-   * Start/stop heartbeat based on enabled state
-   */
   useEffect(() => {
-    if (enabled) {
+    if (enabled && user) {
       startHeartbeat();
     } else {
       stopHeartbeat();
@@ -136,12 +103,10 @@ export function useHeartbeat(options: UseHeartbeatOptions = {}) {
     return () => {
       stopHeartbeat();
     };
-  }, [enabled, startHeartbeat, stopHeartbeat]);
+  }, [enabled, user, startHeartbeat, stopHeartbeat]);
 
   return {
-    /** Send a heartbeat immediately */
     sendHeartbeat,
-    /** Last successful heartbeat timestamp */
     lastHeartbeat: lastHeartbeatRef.current,
   };
 }

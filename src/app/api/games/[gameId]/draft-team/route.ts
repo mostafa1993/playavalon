@@ -4,8 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById, updateDraftTeam } from '@/lib/supabase/games';
 import { getQuestRequirement } from '@/lib/domain/quest-config';
 import { validateDraftSelection, normalizeDraftTeam } from '@/lib/domain/team-selection';
@@ -25,9 +24,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -42,13 +40,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Get game
     const game = await getGameById(supabase, gameId);
@@ -60,7 +52,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     // Verify player is in this game
-    if (!game.seating_order.includes(player.id)) {
+    if (!game.seating_order.includes(user.id)) {
       return NextResponse.json(
         { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
         { status: 403 }
@@ -76,7 +68,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     // Verify player is current leader
-    if (player.id !== game.current_leader_id) {
+    if (user.id !== game.current_leader_id) {
       return NextResponse.json(
         { error: { code: 'NOT_LEADER', message: 'Only the current leader can update team selection' } },
         { status: 403 }
@@ -112,10 +104,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const updatedGame = await updateDraftTeam(supabase, gameId, normalizedTeam);
 
     // Feature 016: Broadcast draft update to all connected clients (FR-001)
-    // Broadcast AFTER successful DB write per FR-011
     await broadcastDraftUpdate(gameId, updatedGame.draft_team || []);
 
-    // Return success response
     const response: UpdateDraftTeamResponse = {
       draft_team: updatedGame.draft_team || [],
       quest_number: updatedGame.current_quest,

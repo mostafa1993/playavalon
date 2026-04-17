@@ -13,7 +13,7 @@ export type { RoleConfig } from './role-config';
  * Room with computed properties for display
  */
 export interface RoomWithDetails extends Room {
-  manager_nickname: string;
+  manager_display_name: string;
   current_players: number;
   is_full: boolean;
 }
@@ -25,7 +25,7 @@ export interface RoomWithDetails extends Room {
 export interface RoomListItem {
   id: string;
   code: string;
-  manager_nickname: string;
+  manager_display_name: string;
   expected_players: number;
   current_players: number;
   is_full: boolean;
@@ -44,7 +44,7 @@ export interface RoomDetails {
   players: RoomPlayerInfo[];
   current_player: {
     id: string;
-    nickname: string;
+    display_name: string;
     is_manager: boolean;
   };
   confirmations?: {
@@ -55,7 +55,7 @@ export interface RoomDetails {
   roles_in_play?: string[];
   lady_of_lake_holder?: {
     id: string;
-    nickname: string;
+    display_name: string;
   } | null;
 }
 
@@ -65,7 +65,7 @@ export interface RoomDetails {
  */
 export interface RoomPlayerInfo {
   id: string;
-  nickname: string;
+  display_name: string;
   is_manager: boolean;
   is_connected: boolean;
   joined_at: string;
@@ -104,7 +104,7 @@ export interface CreateRoomResponse {
  */
 export interface JoinRoomResponse {
   room_id: string;
-  player_id: string;
+  user_id: string;
   joined_at: string;
   is_rejoin: boolean;
 }

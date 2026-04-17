@@ -4,8 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createServerClient, getPlayerIdFromRequest } from '@/lib/supabase/server';
-import { findPlayerByPlayerId } from '@/lib/supabase/players';
+import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById, updateGamePhase, clearDraftTeam } from '@/lib/supabase/games';
 import { createProposal, countProposalsForQuest } from '@/lib/supabase/proposals';
 import { logTeamProposed } from '@/lib/supabase/game-events';
@@ -28,9 +27,8 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { gameId } = await params;
 
-    // Validate player ID
-    const playerId = getPlayerIdFromRequest(request);
-    if (!playerId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return errors.unauthorized();
     }
 
@@ -45,13 +43,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get player record
-    const player = await findPlayerByPlayerId(supabase, playerId);
-    if (!player) {
-      return errors.playerNotFound();
-    }
+    const supabase = createServiceClient();
 
     // Get game
     const game = await getGameById(supabase, gameId);
@@ -63,7 +55,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Verify player is in this game
-    if (!game.seating_order.includes(player.id)) {
+    if (!game.seating_order.includes(user.id)) {
       return NextResponse.json(
         { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
         { status: 403 }
@@ -79,7 +71,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Validate proposer is current leader
-    const proposerValidation = validateProposer(player.id, game.current_leader_id);
+    const proposerValidation = validateProposer(user.id, game.current_leader_id);
     if (!proposerValidation.valid) {
       return NextResponse.json(
         { error: { code: 'NOT_LEADER', message: proposerValidation.error } },
@@ -112,7 +104,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       game_id: gameId,
       quest_number: game.current_quest,
       proposal_number: proposalNumber,
-      leader_id: player.id,
+      leader_id: user.id,
       team_member_ids,
     });
 
@@ -135,7 +127,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     await logTeamProposed(supabase, gameId, {
       quest_number: game.current_quest,
       proposal_number: proposalNumber,
-      leader_id: player.id,
+      leader_id: user.id,
       team_member_ids,
     });
 

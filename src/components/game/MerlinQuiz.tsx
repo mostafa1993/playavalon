@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { createBrowserClient } from '@/lib/supabase/client';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import type { GamePlayer, MerlinQuizState, MerlinQuizVote } from '@/types/game';
 import { QUIZ_TIMEOUT_SECONDS, getRemainingSeconds } from '@/lib/domain/merlin-quiz';
 
@@ -17,7 +17,6 @@ interface MerlinQuizProps {
   gameId: string;
   players: GamePlayer[];
   currentPlayerId: string;
-  currentPlayerDbId: string;
   onQuizComplete: () => void;
   onSkip: () => void;
 }
@@ -26,7 +25,6 @@ export function MerlinQuiz({
   gameId,
   players,
   currentPlayerId,
-  currentPlayerDbId,
   onQuizComplete,
   onSkip,
 }: MerlinQuizProps) {
@@ -40,11 +38,7 @@ export function MerlinQuiz({
   // Fetch quiz state
   const fetchQuizState = useCallback(async () => {
     try {
-      const response = await fetch(`/api/games/${gameId}/merlin-quiz`, {
-        headers: {
-          'x-player-id': currentPlayerId,
-        },
-      });
+      const response = await fetch(`/api/games/${gameId}/merlin-quiz`);
 
       if (response.ok) {
         const data = await response.json();
@@ -68,7 +62,7 @@ export function MerlinQuiz({
       console.error('Failed to fetch quiz state:', err);
       setLoadError('Quiz feature unavailable');
     }
-  }, [gameId, currentPlayerId, onQuizComplete]);
+  }, [gameId, onQuizComplete]);
 
   // Initial fetch and polling
   useEffect(() => {
@@ -99,7 +93,7 @@ export function MerlinQuiz({
 
   // Real-time subscription for quiz votes
   useEffect(() => {
-    const supabase = createBrowserClient();
+    const supabase = getSupabaseClient();
 
     const channel = supabase
       .channel(`quiz-votes-${gameId}`)
@@ -124,7 +118,7 @@ export function MerlinQuiz({
   }, [gameId, fetchQuizState]);
 
   // Get other players (exclude self)
-  const otherPlayers = players.filter((p) => p.id !== currentPlayerDbId);
+  const otherPlayers = players.filter((p) => p.id !== currentPlayerId);
 
   const handleSubmitVote = async (suspectedId: string | null) => {
     setIsSubmitting(true);
@@ -135,7 +129,6 @@ export function MerlinQuiz({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-player-id': currentPlayerId,
         },
         body: JSON.stringify({
           suspected_player_id: suspectedId,
@@ -314,7 +307,7 @@ export function MerlinQuiz({
                 {selectedPlayerId === player.id ? '🧙' : '👤'}
               </div>
               <div className="font-medium text-sm truncate">
-                {player.nickname}
+                {player.display_name}
               </div>
             </button>
           ))}

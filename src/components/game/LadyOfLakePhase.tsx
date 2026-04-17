@@ -14,7 +14,7 @@ interface LadyOfLakePhaseProps {
   players: GamePlayer[];
   ladyState: LadyOfLakeState;
   currentPlayerId: string;
-  onInvestigationComplete: (result: 'good' | 'evil', newHolderNickname: string) => void;
+  onInvestigationComplete: (result: 'good' | 'evil', newHolderDisplayName: string) => void;
 }
 
 export function LadyOfLakePhase({
@@ -49,7 +49,6 @@ export function LadyOfLakePhase({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-player-id': currentPlayerId,
         },
         body: JSON.stringify({
           target_player_id: selectedPlayerId,
@@ -62,7 +61,7 @@ export function LadyOfLakePhase({
         throw new Error(data.error || 'Failed to investigate');
       }
 
-      onInvestigationComplete(data.data.result, data.data.new_holder_nickname);
+      onInvestigationComplete(data.data.result, data.data.new_holder_display_name);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to investigate');
       setIsSubmitting(false);
@@ -82,7 +81,7 @@ export function LadyOfLakePhase({
         <p className="text-slate-300 text-sm">
           {isHolder
             ? 'Select a player to learn their true allegiance'
-            : `${ladyState.holder_nickname} is using the Lady of the Lake...`}
+            : `${ladyState.holder_display_name} is using the Lady of the Lake...`}
         </p>
       </div>
 
@@ -127,7 +126,7 @@ export function LadyOfLakePhase({
                       {isSelf ? '🌊' : isPreviousHolder ? '🚫' : isInvestigated ? '👁️' : isSelected ? '🎯' : '👤'}
                     </div>
                     <div className="font-medium text-sm truncate">
-                      {player.nickname}
+                      {player.display_name}
                       {isSelf && ' (You)'}
                     </div>
                     {isPreviousHolder && !isSelf && (
@@ -162,7 +161,7 @@ export function LadyOfLakePhase({
                 <span className="animate-spin">🌊</span> Investigating...
               </span>
             ) : selectedPlayer ? (
-              <><Search size={16} className="inline" /> Investigate {selectedPlayer.nickname}</>
+              <><Search size={16} className="inline" /> Investigate {selectedPlayer.display_name}</>
             ) : (
               'Select a Player'
             )}
@@ -182,7 +181,7 @@ export function LadyOfLakePhase({
             </div>
           </div>
           <p className="mt-4 text-slate-400 text-sm animate-pulse">
-            {ladyState.holder_nickname} is consulting the Lady...
+            {ladyState.holder_display_name} is consulting the Lady...
           </p>
         </div>
       )}
@@ -201,7 +200,7 @@ export function LadyOfLakePhase({
                   key={id}
                   className="px-2 py-1 bg-slate-700/50 rounded text-xs text-slate-400"
                 >
-                  <Eye size={16} className="inline" /> {player?.nickname || 'Unknown'}
+                  <Eye size={16} className="inline" /> {player?.display_name || 'Unknown'}
                 </span>
               );
             })}
