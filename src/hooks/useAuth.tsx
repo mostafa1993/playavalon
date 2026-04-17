@@ -56,17 +56,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfile]);
 
   useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[useAuth] mount: initializing');
     const supabase = getSupabaseClient();
+    // eslint-disable-next-line no-console
+    console.log('[useAuth] got supabase client');
     let mounted = true;
 
     (async () => {
       try {
+        // eslint-disable-next-line no-console
+        console.log('[useAuth] calling getUser...');
         const { data: { user: currentUser } } = await supabase.auth.getUser();
+        // eslint-disable-next-line no-console
+        console.log('[useAuth] getUser returned:', currentUser?.id ?? 'null');
         if (!mounted) return;
         setUser(currentUser);
         if (currentUser) {
           try {
+            // eslint-disable-next-line no-console
+            console.log('[useAuth] loading profile for', currentUser.id);
             await loadProfile(currentUser.id);
+            // eslint-disable-next-line no-console
+            console.log('[useAuth] profile loaded');
           } catch (err) {
             // eslint-disable-next-line no-console
             console.error('[useAuth] loadProfile failed:', err);
@@ -76,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // eslint-disable-next-line no-console
         console.error('[useAuth] getUser failed:', err);
       } finally {
+        // eslint-disable-next-line no-console
+        console.log('[useAuth] setting loading=false');
         if (mounted) setLoading(false);
       }
     })();
