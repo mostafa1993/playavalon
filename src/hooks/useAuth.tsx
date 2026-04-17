@@ -66,10 +66,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         // eslint-disable-next-line no-console
-        console.log('[useAuth] calling getUser...');
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        console.log('[useAuth] calling getSession...');
+        const withTimeout = <T,>(p: Promise<T>, ms: number, label: string) =>
+          Promise.race([
+            p,
+            new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${label} TIMEOUT ${ms}ms`)), ms)),
+          ]);
+        const { data: { session } } = await withTimeout(
+          supabase.auth.getSession(),
+          5000,
+          'getSession'
+        );
+        const currentUser = session?.user ?? null;
         // eslint-disable-next-line no-console
-        console.log('[useAuth] getUser returned:', currentUser?.id ?? 'null');
+        console.log('[useAuth] getSession returned user:', currentUser?.id ?? 'null');
         if (!mounted) return;
         setUser(currentUser);
         if (currentUser) {
@@ -86,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error('[useAuth] getUser failed:', err);
+        console.error('[useAuth] init failed:', err);
       } finally {
         // eslint-disable-next-line no-console
         console.log('[useAuth] setting loading=false');
