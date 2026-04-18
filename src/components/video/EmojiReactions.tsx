@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import { useState, useRef, useEffect } from 'react';
 import { Smile } from 'lucide-react';
 import { useLiveKit } from '@/hooks/useLiveKit';
@@ -50,7 +49,8 @@ export function EmojiReactions() {
               `}
               title={isReactionCoolingDown ? 'Too fast — wait a moment' : reaction.label}
             >
-              <Image src={reaction.src} alt={reaction.label} width={28} height={28} unoptimized />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={reaction.src} alt={reaction.label} width={28} height={28} />
             </button>
           ))}
         </div>

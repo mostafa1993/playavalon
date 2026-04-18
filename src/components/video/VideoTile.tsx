@@ -11,7 +11,6 @@ import {
   ParticipantEvent,
   Track,
 } from 'livekit-client';
-import Image from 'next/image';
 import { useIsSpeaking } from '@livekit/components-react';
 import { Mic, MicOff, Video, VideoOff } from 'lucide-react';
 import { useLiveKit } from '@/hooks/useLiveKit';
@@ -232,13 +231,12 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
           className="absolute bottom-10 left-1/2 z-30 pointer-events-none animate-reaction-float"
         >
           <div className="animate-reaction-bounce" style={{ filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.5))' }}>
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src={EMOJI_REACTION_BY_KEY.get(reaction.emoji)!.src}
               alt=""
               width={72}
               height={72}
-              unoptimized
-              priority
             />
           </div>
         </div>
