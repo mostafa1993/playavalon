@@ -3,4 +3,6 @@ export { VideoGrid } from './VideoGrid';
 export { VideoTile } from './VideoTile';
 export { VideoControls } from './VideoControls';
 export { ViewModeToggle } from './ViewModeToggle';
+export { LayoutSwapButton } from './LayoutSwapButton';
+export { EmojiReactions } from './EmojiReactions';
 export { ChatPanel } from './ChatPanel';

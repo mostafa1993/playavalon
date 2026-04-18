@@ -10,6 +10,8 @@ import { VideoRoom } from '@/components/video';
 import { ViewModeToggle } from '@/components/video/ViewModeToggle';
 import { VideoControls } from '@/components/video/VideoControls';
 import { ChatPanel } from '@/components/video/ChatPanel';
+import { LayoutSwapButton } from '@/components/video/LayoutSwapButton';
+import { EmojiReactions } from '@/components/video/EmojiReactions';
 import { ResizableSplit } from '@/components/video/ResizableSplit';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { useRoom } from '@/hooks/useRoom';
@@ -23,7 +25,7 @@ export default function RoomPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { room, isLoading: roomLoading, error, isConnected, rolesInPlay, leave, refresh } = useRoom(code);
-  const { disconnect: disconnectVideo, isConnected: videoConnected, viewMode } = useLiveKit();
+  const { disconnect: disconnectVideo, isConnected: videoConnected, viewMode, isLayoutSwapped } = useLiveKit();
 
   // Activity heartbeat for disconnect detection
   useHeartbeat({ enabled: !!user && !roomLoading });
@@ -283,6 +285,8 @@ export default function RoomPage() {
         <div className="fixed top-6 right-4 flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50">
           <ViewModeToggle />
           <div className="flex items-center gap-2">
+            <LayoutSwapButton />
+            <EmojiReactions />
             <ChatPanel />
             <VideoControls />
           </div>
@@ -295,19 +299,23 @@ export default function RoomPage() {
             <VideoRoom roomCode={code} fullscreen hideControls />
           </div>
         ) : videoConnected && viewMode === 'split' ? (
-          <ResizableSplit
-            defaultLeftPercent={35}
-            minLeftPercent={30}
-            maxLeftPercent={60}
-            left={
+          (() => {
+            const lobbyPanel = (
               <div className="h-full overflow-y-auto p-4 space-y-4">
                 {lobbyContent}
               </div>
-            }
-            right={
-              <VideoRoom roomCode={code} fullscreen hideControls />
-            }
-          />
+            );
+            const videoPanel = <VideoRoom roomCode={code} fullscreen hideControls />;
+            return (
+              <ResizableSplit
+                defaultLeftPercent={35}
+                minLeftPercent={30}
+                maxLeftPercent={60}
+                left={isLayoutSwapped ? videoPanel : lobbyPanel}
+                right={isLayoutSwapped ? lobbyPanel : videoPanel}
+              />
+            );
+          })()
         ) : (
           <div className="h-full overflow-y-auto">
             <div className="flex flex-col items-center p-6 md:p-8">

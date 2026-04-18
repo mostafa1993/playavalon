@@ -12,7 +12,8 @@ import {
   Track,
 } from 'livekit-client';
 import { useIsSpeaking } from '@livekit/components-react';
-import { MicOff } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff } from 'lucide-react';
+import { useLiveKit } from '@/hooks/useLiveKit';
 
 interface VideoTileProps {
   participant: Participant;
@@ -31,6 +32,8 @@ interface VideoTileProps {
 export function VideoTile({ participant, seatNumber, timerColor, timerProgress, isCurrentSpeaker = false, timeRemaining }: VideoTileProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const isSpeaking = useIsSpeaking(participant);
+  const { toggleMic, toggleCamera, reactions } = useLiveKit();
+  const reaction = reactions.get(participant.identity);
   // Force re-render when tracks change on this participant
   const [, setTrackUpdate] = useState(0);
 
@@ -220,6 +223,43 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
         </div>
       )}
 
+      {/* Floating emoji reaction overlay — keyed by ts so each new reaction re-triggers the animation */}
+      {reaction && (
+        <div
+          key={reaction.ts}
+          className="absolute bottom-10 left-1/2 text-5xl z-30 pointer-events-none animate-reaction-float"
+          style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}
+        >
+          {reaction.emoji}
+        </div>
+      )}
+
+      {/* Per-tile controls (local only) — bottom-right, above the name bar */}
+      {isLocal && (
+        <div className="absolute bottom-7 right-1.5 flex items-center gap-1 z-20">
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleMic(); }}
+            className={`
+              p-1.5 rounded-full bg-black/60 backdrop-blur-sm transition-colors
+              ${isMicOn ? 'text-white hover:text-avalon-gold' : 'text-red-400 hover:text-red-300'}
+            `}
+            title={isMicOn ? 'Mute mic' : 'Unmute mic'}
+          >
+            {isMicOn ? <Mic size={14} /> : <MicOff size={14} />}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleCamera(); }}
+            className={`
+              p-1.5 rounded-full bg-black/60 backdrop-blur-sm transition-colors
+              ${isCameraOn ? 'text-white hover:text-avalon-gold' : 'text-red-400 hover:text-red-300'}
+            `}
+            title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+          >
+            {isCameraOn ? <Video size={14} /> : <VideoOff size={14} />}
+          </button>
+        </div>
+      )}
+
       {/* Name bar — z-20 to sit above the timer ring */}
       <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 flex items-center gap-1.5 z-20">
         {isSpeaking && (
@@ -229,7 +269,7 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
           {name}
           {isLocal && ' (You)'}
         </span>
-        {!isMicOn && (
+        {!isLocal && !isMicOn && (
           <span className="ml-auto text-red-400 flex-shrink-0" title="Muted">
             <MicOff size={12} />
           </span>

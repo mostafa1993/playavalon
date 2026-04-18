@@ -56,6 +56,10 @@ interface LiveKitContextValue {
   viewMode: ViewMode;
   /** Set view mode */
   setViewMode: (mode: ViewMode) => void;
+  /** If true, in split mode the video goes on the left and game on the right (default: false — game left, video right) */
+  isLayoutSwapped: boolean;
+  /** Toggle the split-mode layout swap */
+  toggleLayoutSwap: () => void;
   /** Chat messages */
   chatMessages: ChatMessage[];
   /** Send a chat message */
@@ -66,6 +70,12 @@ interface LiveKitContextValue {
   markChatRead: () => void;
   /** Set whether chat panel is currently visible (controls unread counting) */
   setChatVisible: (visible: boolean) => void;
+  /** Active emoji reactions keyed by participant identity */
+  reactions: Map<string, { emoji: string; ts: number }>;
+  /** Send an emoji reaction (broadcast to all). Rate-limited per user. */
+  sendReaction: (emoji: string) => void;
+  /** If true, reaction send is in cooldown */
+  isReactionCoolingDown: boolean;
   /** Error message if connection failed */
   error: string | null;
 }
@@ -73,6 +83,9 @@ interface LiveKitContextValue {
 const LiveKitContext = createContext<LiveKitContextValue | null>(null);
 
 const CHAT_TOPIC = 'chat';
+const REACTION_TOPIC = 'reaction';
+const REACTION_COOLDOWN_MS = 2000;
+const REACTION_DURATION_MS = 3000;
 
 export function LiveKitProvider({ children }: { children: ReactNode }) {
   const [room, setRoom] = useState<Room | null>(null);
@@ -87,6 +100,25 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const chatVisibleRef = useRef(false);
+  const [reactions, setReactions] = useState<Map<string, { emoji: string; ts: number }>>(new Map());
+  const [isReactionCoolingDown, setIsReactionCoolingDown] = useState(false);
+  const lastReactionSentRef = useRef(0);
+  const reactionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Schedule clearing of a reaction after REACTION_DURATION_MS
+  const scheduleReactionClear = useCallback((identity: string) => {
+    const existing = reactionTimersRef.current.get(identity);
+    if (existing) clearTimeout(existing);
+    const t = setTimeout(() => {
+      setReactions((prev) => {
+        const next = new Map(prev);
+        next.delete(identity);
+        return next;
+      });
+      reactionTimersRef.current.delete(identity);
+    }, REACTION_DURATION_MS);
+    reactionTimersRef.current.set(identity, t);
+  }, []);
 
   // View mode — persisted in localStorage
   const [viewMode, setViewModeState] = useState<ViewMode>(() => {
@@ -97,6 +129,20 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
   const setViewMode = useCallback((mode: ViewMode) => {
     setViewModeState(mode);
     localStorage.setItem('avalon-view-mode', mode);
+  }, []);
+
+  // Split-mode layout swap — persisted in localStorage
+  const [isLayoutSwapped, setIsLayoutSwapped] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('avalon-layout-swapped') === 'true';
+  });
+
+  const toggleLayoutSwap = useCallback(() => {
+    setIsLayoutSwapped((prev) => {
+      const next = !prev;
+      localStorage.setItem('avalon-layout-swapped', String(next));
+      return next;
+    });
   }, []);
 
   // Keyboard shortcut: V to cycle view modes
@@ -193,6 +239,17 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
             setUnreadCount((prev) => prev + 1);
           }
         }
+
+        if (topic === REACTION_TOPIC && participant) {
+          const emoji = new TextDecoder().decode(payload).slice(0, 8);
+          if (!emoji) return;
+          setReactions((prev) => {
+            const next = new Map(prev);
+            next.set(participant.identity, { emoji, ts: Date.now() });
+            return next;
+          });
+          scheduleReactionClear(participant.identity);
+        }
       });
 
       // Sync local mic/camera state whenever tracks change
@@ -240,6 +297,9 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     setIsMicEnabled(false);
     setChatMessages([]);
     setUnreadCount(0);
+    setReactions(new Map());
+    reactionTimersRef.current.forEach((t) => clearTimeout(t));
+    reactionTimersRef.current.clear();
   }, []);
 
   const toggleCamera = useCallback(async () => {
@@ -296,6 +356,30 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const sendReaction = useCallback((emoji: string) => {
+    const room = roomRef.current;
+    if (!room || !emoji) return;
+    const now = Date.now();
+    if (now - lastReactionSentRef.current < REACTION_COOLDOWN_MS) return;
+    lastReactionSentRef.current = now;
+
+    const payload = new TextEncoder().encode(emoji.slice(0, 8));
+    room.localParticipant.publishData(payload, { topic: REACTION_TOPIC }).catch(() => {});
+
+    // Show on sender's own tile immediately (local echo)
+    const identity = room.localParticipant.identity;
+    setReactions((prev) => {
+      const next = new Map(prev);
+      next.set(identity, { emoji, ts: now });
+      return next;
+    });
+    scheduleReactionClear(identity);
+
+    // Cooldown UI feedback
+    setIsReactionCoolingDown(true);
+    setTimeout(() => setIsReactionCoolingDown(false), REACTION_COOLDOWN_MS);
+  }, [scheduleReactionClear]);
+
   const markChatRead = useCallback(() => {
     setUnreadCount(0);
   }, []);
@@ -313,6 +397,8 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
       if (roomRef.current) {
         roomRef.current.disconnect();
       }
+      reactionTimersRef.current.forEach((t) => clearTimeout(t));
+      reactionTimersRef.current.clear();
     };
   }, []);
 
@@ -328,11 +414,16 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     isMicEnabled,
     viewMode,
     setViewMode,
+    isLayoutSwapped,
+    toggleLayoutSwap,
     chatMessages,
     sendChatMessage,
     unreadCount,
     markChatRead,
     setChatVisible,
+    reactions,
+    sendReaction,
+    isReactionCoolingDown,
     error,
   };
 

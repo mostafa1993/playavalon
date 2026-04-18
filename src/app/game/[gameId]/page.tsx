@@ -12,6 +12,8 @@ import { VideoRoom } from '@/components/video';
 import { ViewModeToggle } from '@/components/video/ViewModeToggle';
 import { VideoControls } from '@/components/video/VideoControls';
 import { ChatPanel } from '@/components/video/ChatPanel';
+import { LayoutSwapButton } from '@/components/video/LayoutSwapButton';
+import { EmojiReactions } from '@/components/video/EmojiReactions';
 import { TimerButton } from '@/components/video/TimerButton';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
@@ -25,7 +27,7 @@ export default function GamePage() {
   const gameId = params.gameId as string;
   const { user, loading: authLoading } = useAuth();
   const [initialLeaderIndex, setInitialLeaderIndex] = useState<number | null>(null);
-  const { isConnected, viewMode, room } = useLiveKit();
+  const { isConnected, viewMode, room, isLayoutSwapped } = useLiveKit();
   const { roomCode, gameState, isManager } = useGameState(gameId);
 
   // Redirect to login if not authenticated
@@ -104,16 +106,19 @@ export default function GamePage() {
           <div className="flex items-center gap-2">
             <TimerButton
               onStart={speakingTimer.startTimer}
+              onReset={speakingTimer.skipToNext}
               isRunning={speakingTimer.timeRemaining !== null && speakingTimer.timeRemaining > 0}
               isManager={isManager}
             />
+            <LayoutSwapButton />
+            <EmojiReactions />
             <ChatPanel />
             <VideoControls />
           </div>
         </div>
       )}
 
-      <div className="flex-1 min-h-0 flex">
+      <div className={`flex-1 min-h-0 flex ${isLayoutSwapped && viewMode === 'split' ? 'flex-row-reverse' : ''}`}>
         <div
           className={`
             overflow-y-auto transition-none

@@ -43,6 +43,7 @@ interface UseSpeakingTimerReturn {
   timerColor: 'green' | 'yellow' | 'red' | null;
   timerProgress: number | null;
   startTimer: () => void;
+  skipToNext: () => void;
   speakingOrder: string[];
   currentIndex: number;
 }
@@ -268,6 +269,7 @@ export function useSpeakingTimer({
     timerColor,
     timerProgress,
     startTimer,
+    skipToNext: advanceToNext,
     speakingOrder: state.speakingOrder,
     currentIndex: state.currentSpeakerIndex,
   };
