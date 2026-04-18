@@ -25,6 +25,9 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+# Next.js standalone output does NOT include public/ automatically — copy it here so
+# files like /emoji/*.png are served in production.
+COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 CMD ["node", "server.js"]
