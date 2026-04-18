@@ -1,10 +1,10 @@
 'use client';
 
+import Image from 'next/image';
 import { useState, useRef, useEffect } from 'react';
 import { Smile } from 'lucide-react';
 import { useLiveKit } from '@/hooks/useLiveKit';
-
-const EMOJIS = ['👍', '👎', '❤️', '😂', '😮', '😢', '🎉', '👏'];
+import { EMOJI_REACTIONS } from './emojiReactionsMap';
 
 export function EmojiReactions() {
   const { isConnected, sendReaction, isReactionCoolingDown } = useLiveKit();
@@ -34,23 +34,23 @@ export function EmojiReactions() {
 
       {open && (
         <div className="absolute top-full right-0 mt-2 flex items-center gap-1 px-2 py-1.5 bg-avalon-midnight/95 backdrop-blur-md rounded-full border border-avalon-dark-border shadow-lg z-50">
-          {EMOJIS.map((emoji) => (
+          {EMOJI_REACTIONS.map((reaction) => (
             <button
-              key={emoji}
+              key={reaction.key}
               disabled={isReactionCoolingDown}
               onClick={() => {
-                sendReaction(emoji);
+                sendReaction(reaction.key);
                 setOpen(false);
               }}
               className={`
-                w-9 h-9 rounded-full flex items-center justify-center text-xl transition-transform
+                w-10 h-10 rounded-full flex items-center justify-center transition-transform
                 ${isReactionCoolingDown
                   ? 'opacity-40 cursor-not-allowed'
                   : 'hover:bg-avalon-navy hover:scale-125'}
               `}
-              title={isReactionCoolingDown ? 'Too fast — wait a moment' : `Send ${emoji}`}
+              title={isReactionCoolingDown ? 'Too fast — wait a moment' : reaction.label}
             >
-              {emoji}
+              <Image src={reaction.src} alt={reaction.label} width={28} height={28} unoptimized />
             </button>
           ))}
         </div>

@@ -11,9 +11,11 @@ import {
   ParticipantEvent,
   Track,
 } from 'livekit-client';
+import Image from 'next/image';
 import { useIsSpeaking } from '@livekit/components-react';
 import { Mic, MicOff, Video, VideoOff } from 'lucide-react';
 import { useLiveKit } from '@/hooks/useLiveKit';
+import { EMOJI_REACTION_BY_KEY } from './emojiReactionsMap';
 
 interface VideoTileProps {
   participant: Participant;
@@ -224,13 +226,21 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
       )}
 
       {/* Floating emoji reaction overlay — keyed by ts so each new reaction re-triggers the animation */}
-      {reaction && (
+      {reaction && EMOJI_REACTION_BY_KEY.has(reaction.emoji) && (
         <div
           key={reaction.ts}
-          className="absolute bottom-10 left-1/2 text-5xl z-30 pointer-events-none animate-reaction-float"
-          style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}
+          className="absolute bottom-10 left-1/2 z-30 pointer-events-none animate-reaction-float"
         >
-          {reaction.emoji}
+          <div className="animate-reaction-bounce" style={{ filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.5))' }}>
+            <Image
+              src={EMOJI_REACTION_BY_KEY.get(reaction.emoji)!.src}
+              alt=""
+              width={72}
+              height={72}
+              unoptimized
+              priority
+            />
+          </div>
         </div>
       )}
 

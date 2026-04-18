@@ -241,7 +241,7 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
         }
 
         if (topic === REACTION_TOPIC && participant) {
-          const emoji = new TextDecoder().decode(payload).slice(0, 8);
+          const emoji = new TextDecoder().decode(payload).slice(0, 32);
           if (!emoji) return;
           setReactions((prev) => {
             const next = new Map(prev);
@@ -363,7 +363,7 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     if (now - lastReactionSentRef.current < REACTION_COOLDOWN_MS) return;
     lastReactionSentRef.current = now;
 
-    const payload = new TextEncoder().encode(emoji.slice(0, 8));
+    const payload = new TextEncoder().encode(emoji.slice(0, 32));
     room.localParticipant.publishData(payload, { topic: REACTION_TOPIC }).catch(() => {});
 
     // Show on sender's own tile immediately (local echo)
