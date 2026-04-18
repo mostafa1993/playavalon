@@ -16,6 +16,8 @@ interface ResizableSplitProps {
   minLeftPercent?: number;
   /** Maximum left panel width as percentage. Default: 70 */
   maxLeftPercent?: number;
+  /** If true, visually reverse the panels (left slot renders on the right). The drag math inverts automatically. */
+  reversed?: boolean;
 }
 
 export function ResizableSplit({
@@ -24,6 +26,7 @@ export function ResizableSplit({
   defaultLeftPercent = 40,
   minLeftPercent = 20,
   maxLeftPercent = 70,
+  reversed = false,
 }: ResizableSplitProps) {
   const [leftPercent, setLeftPercent] = useState(() => {
     if (typeof window === 'undefined') return defaultLeftPercent;
@@ -46,7 +49,11 @@ export function ResizableSplit({
       if (!isDragging.current || !containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      const percent = Math.min(maxLeftPercent, Math.max(minLeftPercent, (x / rect.width) * 100));
+      let raw = (x / rect.width) * 100;
+      // When reversed, the left slot is visually on the right — invert so dragging
+      // always grows/shrinks the slot the user is visually dragging towards.
+      if (reversed) raw = 100 - raw;
+      const percent = Math.min(maxLeftPercent, Math.max(minLeftPercent, raw));
       setLeftPercent(percent);
     };
 
@@ -65,10 +72,10 @@ export function ResizableSplit({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [leftPercent, minLeftPercent, maxLeftPercent]);
+  }, [leftPercent, minLeftPercent, maxLeftPercent, reversed]);
 
   return (
-    <div ref={containerRef} className="flex h-full w-full">
+    <div ref={containerRef} className={`flex h-full w-full ${reversed ? 'flex-row-reverse' : ''}`}>
       {/* Left panel */}
       <div style={{ width: `${leftPercent}%` }} className="flex-shrink-0 min-w-0 overflow-y-auto">
         {left}

@@ -299,23 +299,20 @@ export default function RoomPage() {
             <VideoRoom roomCode={code} fullscreen hideControls />
           </div>
         ) : videoConnected && viewMode === 'split' ? (
-          (() => {
-            const lobbyPanel = (
+          <ResizableSplit
+            defaultLeftPercent={35}
+            minLeftPercent={30}
+            maxLeftPercent={60}
+            reversed={isLayoutSwapped}
+            left={
               <div className="h-full overflow-y-auto p-4 space-y-4">
                 {lobbyContent}
               </div>
-            );
-            const videoPanel = <VideoRoom roomCode={code} fullscreen hideControls />;
-            return (
-              <ResizableSplit
-                defaultLeftPercent={35}
-                minLeftPercent={30}
-                maxLeftPercent={60}
-                left={isLayoutSwapped ? videoPanel : lobbyPanel}
-                right={isLayoutSwapped ? lobbyPanel : videoPanel}
-              />
-            );
-          })()
+            }
+            right={
+              <VideoRoom roomCode={code} fullscreen hideControls />
+            }
+          />
         ) : (
           <div className="h-full overflow-y-auto">
             <div className="flex flex-col items-center p-6 md:p-8">

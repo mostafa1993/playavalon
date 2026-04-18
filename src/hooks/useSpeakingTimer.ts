@@ -102,7 +102,10 @@ export function useSpeakingTimer({
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const autoMutedRef = useRef(false);
   const advancedRef = useRef(false);
-  const generatedForQuestRef = useRef(0);
+  // Track which leader we last generated the speaking order for.
+  // Regenerating on leader change (instead of quest change) correctly handles
+  // ALL rotation triggers: rejected proposal, new quest, Lady investigation.
+  const generatedForLeaderRef = useRef<string | null>(null);
 
   // Broadcast helper
   const broadcast = useCallback(
@@ -114,24 +117,16 @@ export function useSpeakingTimer({
     [room]
   );
 
-  // Generate speaking order when quest changes (manager only)
+  // Generate speaking order whenever the leader changes (manager only).
+  // Leader rotates on: rejected proposal, new quest, Lady investigation — all handled here.
   useEffect(() => {
-    console.log('[SpeakingTimer] Check:', {
-      isManager,
-      hasSeatNumbers: !!seatNumbers,
-      seatNumbersSize: seatNumbers?.size,
-      leaderIdentity,
-      questNumber,
-      generatedFor: generatedForQuestRef.current,
-    });
     if (!isManager || !seatNumbers || !leaderIdentity || seatNumbers.size === 0) return;
     if (questNumber === 0) return;
-    // Re-generate if quest changed OR if we haven't generated yet (late isManager/seatNumbers arrival)
-    if (questNumber === generatedForQuestRef.current && state.speakingOrder.length > 0) return;
-    generatedForQuestRef.current = questNumber;
+    // Skip if we already generated for this leader AND have an order (avoid re-generating on unrelated re-renders)
+    if (leaderIdentity === generatedForLeaderRef.current && state.speakingOrder.length > 0) return;
+    generatedForLeaderRef.current = leaderIdentity;
 
     const order = generateSpeakingOrder(seatNumbers, leaderIdentity);
-    console.log('[SpeakingTimer] Generated order:', order, 'seatNumbers:', [...seatNumbers.entries()]);
     const newState: SpeakingTimerState = {
       speakingOrder: order,
       currentSpeakerIndex: 0,
@@ -175,15 +170,18 @@ export function useSpeakingTimer({
     }
   }, [state, broadcast]);
 
-  // Advance to next speaker
+  // Advance to next speaker.
+  // When past the last speaker, set the index to speakingOrder.length so
+  // `currentSpeaker` resolves to null (done state) instead of sticking on the leader.
   const advanceToNext = useCallback(() => {
     if (!isManager) return;
 
     setState((prev) => {
       const nextIndex = prev.currentSpeakerIndex + 1;
+      const clamped = Math.min(nextIndex, prev.speakingOrder.length);
       const newState: SpeakingTimerState = {
         ...prev,
-        currentSpeakerIndex: nextIndex >= prev.speakingOrder.length ? prev.currentSpeakerIndex : nextIndex,
+        currentSpeakerIndex: clamped,
         timerRunning: false,
         timerStartTime: null,
       };
@@ -228,10 +226,11 @@ export function useSpeakingTimer({
     return () => clearInterval(interval);
   }, [state.timerRunning, state.timerStartTime, state.timerDuration, state.currentSpeakerIndex, room, isManager, advanceToNext, state.speakingOrder]);
 
-  // Start timer (manager only)
+  // Start timer (manager only). No-op when all speakers done.
   const startTimer = useCallback(() => {
     if (!isManager) return;
     setState((prev) => {
+      if (prev.currentSpeakerIndex >= prev.speakingOrder.length) return prev;
       const newState: SpeakingTimerState = {
         ...prev,
         timerRunning: true,
