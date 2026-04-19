@@ -5,7 +5,7 @@
  * Main game play screen with video calling split layout
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { GameBoard } from '@/components/game/GameBoard';
 import { VideoRoom } from '@/components/video';
@@ -97,6 +97,36 @@ export default function GamePage() {
     leaderIdentity,
     questNumber: gameState?.game?.current_quest ?? 0,
   });
+
+  // Manager shortcut: "T" toggles the speaking timer (start / skip-to-next).
+  // timeRemaining is stored in a ref so the effect doesn't re-subscribe every tick.
+  const timeRemainingRef = useRef<number | null>(speakingTimer.timeRemaining);
+  timeRemainingRef.current = speakingTimer.timeRemaining;
+  const { startTimer, skipToNext } = speakingTimer;
+
+  useEffect(() => {
+    if (!isManager) return;
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 't') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
+      ) return;
+
+      e.preventDefault();
+      const remaining = timeRemainingRef.current;
+      const isRunning = remaining !== null && remaining > 0;
+      if (isRunning) {
+        skipToNext();
+      } else {
+        startTimer();
+      }
+    };
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  }, [isManager, startTimer, skipToNext]);
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
