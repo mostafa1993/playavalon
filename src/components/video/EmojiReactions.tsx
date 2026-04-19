@@ -6,7 +6,8 @@ import { useLiveKit } from '@/hooks/useLiveKit';
 import { EMOJI_REACTIONS } from './emojiReactionsMap';
 
 export function EmojiReactions() {
-  const { isConnected, sendReaction, isReactionCoolingDown } = useLiveKit();
+  const { isConnected, sendReaction, isReactionCoolingDown, isLayoutSwapped, viewMode } = useLiveKit();
+  const anchorLeft = isLayoutSwapped && viewMode === 'split';
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -32,7 +33,7 @@ export function EmojiReactions() {
       </button>
 
       {open && (
-        <div className="absolute top-full right-0 mt-2 flex items-center gap-1 px-2 py-1.5 bg-avalon-midnight/95 backdrop-blur-md rounded-full border border-avalon-dark-border shadow-lg z-50">
+        <div className={`absolute top-full ${anchorLeft ? 'left-0' : 'right-0'} mt-2 flex items-center gap-1 px-2 py-1.5 bg-avalon-midnight/95 backdrop-blur-md rounded-full border border-avalon-dark-border shadow-lg z-50`}>
           {EMOJI_REACTIONS.map((reaction) => (
             <button
               key={reaction.key}
