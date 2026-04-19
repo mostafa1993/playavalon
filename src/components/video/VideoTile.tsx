@@ -31,7 +31,6 @@ interface VideoTileProps {
 }
 
 export function VideoTile({ participant, seatNumber, timerColor, timerProgress, isCurrentSpeaker = false, timeRemaining }: VideoTileProps) {
-  const audioRef = useRef<HTMLAudioElement>(null);
   const isSpeaking = useIsSpeaking(participant);
   const { toggleMic, toggleCamera, reactions } = useLiveKit();
   const reaction = reactions.get(participant.identity);
@@ -108,19 +107,6 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
       }
     };
   }, []);
-
-  // Attach audio track (remote participants only)
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el || isLocal) return;
-
-    if (micPublication?.track) {
-      micPublication.track.attach(el);
-      return () => {
-        micPublication.track?.detach(el);
-      };
-    }
-  }, [micPublication?.track, isLocal]);
 
   // Border style
   const borderColorClass = isCurrentSpeaker
@@ -283,9 +269,6 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
           </span>
         )}
       </div>
-
-      {/* Remote audio element (hidden) */}
-      {!isLocal && <audio ref={audioRef} autoPlay />}
     </div>
   );
 }

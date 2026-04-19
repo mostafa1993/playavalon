@@ -6,3 +6,4 @@ export { ViewModeToggle } from './ViewModeToggle';
 export { LayoutSwapButton } from './LayoutSwapButton';
 export { EmojiReactions } from './EmojiReactions';
 export { ChatPanel } from './ChatPanel';
+export { RemoteAudioSink } from './RemoteAudioSink';

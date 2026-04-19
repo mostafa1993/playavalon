@@ -157,8 +157,6 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
     );
   }
 
-  // Video or Split mode (or Game mode with hideControls — parent hides the wrapper via CSS
-  // so audio tracks keep playing while the video UI is visually hidden)
   if (hideControls) {
     // Parent handles header/controls — just render the grid
     return (
