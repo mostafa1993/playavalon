@@ -25,7 +25,7 @@ export default function RoomPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { room, isLoading: roomLoading, error, isConnected, rolesInPlay, leave, refresh } = useRoom(code);
-  const { disconnect: disconnectVideo, isConnected: videoConnected, viewMode, isLayoutSwapped } = useLiveKit();
+  const { disconnect: disconnectVideo, isConnected: videoConnected, viewMode, isLayoutSwapped, setControlsLocked, broadcastControlsLock } = useLiveKit();
 
   // Activity heartbeat for disconnect detection
   useHeartbeat({ enabled: !!user && !roomLoading });
@@ -81,6 +81,12 @@ export default function RoomPage() {
     }
   }, [room?.room.status, code]);
 
+  // Fallback lock sync: polling catches players who missed the LiveKit broadcast,
+  // and re-applies the correct lock state when a player reconnects video mid-window.
+  useEffect(() => {
+    setControlsLocked(room?.room.status === 'roles_distributed');
+  }, [room?.room.status, setControlsLocked, videoConnected]);
+
   // Redirect to game page when game starts
   useEffect(() => {
     const redirectToGame = async () => {
@@ -117,6 +123,7 @@ export default function RoomPage() {
         throw new Error(data.error?.message || 'Failed to distribute roles');
       }
 
+      broadcastControlsLock(true);
       await refresh();
     } catch (err) {
       setRoleError(err instanceof Error ? err.message : 'Failed to distribute roles');

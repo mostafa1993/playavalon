@@ -32,7 +32,7 @@ interface VideoTileProps {
 
 export function VideoTile({ participant, seatNumber, timerColor, timerProgress, isCurrentSpeaker = false, timeRemaining }: VideoTileProps) {
   const isSpeaking = useIsSpeaking(participant);
-  const { toggleMic, toggleCamera, reactions } = useLiveKit();
+  const { toggleMic, toggleCamera, reactions, controlsLocked } = useLiveKit();
   const reaction = reactions.get(participant.identity);
   // Force re-render when tracks change on this participant
   const [, setTrackUpdate] = useState(0);
@@ -233,21 +233,27 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
         <div className="absolute bottom-7 right-1.5 flex items-center gap-1 z-20">
           <button
             onClick={(e) => { e.stopPropagation(); toggleMic(); }}
+            disabled={controlsLocked}
             className={`
               p-1.5 rounded-full bg-black/60 backdrop-blur-sm transition-colors
-              ${isMicOn ? 'text-white hover:text-avalon-gold' : 'text-red-400 hover:text-red-300'}
+              ${controlsLocked
+                ? 'text-white/50 opacity-50 cursor-not-allowed'
+                : isMicOn ? 'text-white hover:text-avalon-gold' : 'text-red-400 hover:text-red-300'}
             `}
-            title={isMicOn ? 'Mute mic' : 'Unmute mic'}
+            title={controlsLocked ? 'Locked while roles are being viewed' : isMicOn ? 'Mute mic' : 'Unmute mic'}
           >
             {isMicOn ? <Mic size={14} /> : <MicOff size={14} />}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); toggleCamera(); }}
+            disabled={controlsLocked}
             className={`
               p-1.5 rounded-full bg-black/60 backdrop-blur-sm transition-colors
-              ${isCameraOn ? 'text-white hover:text-avalon-gold' : 'text-red-400 hover:text-red-300'}
+              ${controlsLocked
+                ? 'text-white/50 opacity-50 cursor-not-allowed'
+                : isCameraOn ? 'text-white hover:text-avalon-gold' : 'text-red-400 hover:text-red-300'}
             `}
-            title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+            title={controlsLocked ? 'Locked while roles are being viewed' : isCameraOn ? 'Turn off camera' : 'Turn on camera'}
           >
             {isCameraOn ? <Video size={14} /> : <VideoOff size={14} />}
           </button>

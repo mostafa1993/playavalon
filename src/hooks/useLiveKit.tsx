@@ -78,12 +78,19 @@ interface LiveKitContextValue {
   isReactionCoolingDown: boolean;
   /** Error message if connection failed */
   error: string | null;
+  /** If true, mic/camera toggles are disabled and tracks are force-off (role-reveal window) */
+  controlsLocked: boolean;
+  /** Update local lock state only */
+  setControlsLocked: (locked: boolean) => void;
+  /** Broadcast a lock/unlock to everyone in the LiveKit room and apply locally */
+  broadcastControlsLock: (locked: boolean) => void;
 }
 
 const LiveKitContext = createContext<LiveKitContextValue | null>(null);
 
 const CHAT_TOPIC = 'chat';
 const REACTION_TOPIC = 'reaction';
+const CONTROLS_LOCK_TOPIC = 'controls-lock';
 const REACTION_COOLDOWN_MS = 2000;
 const REACTION_DURATION_MS = 3000;
 
@@ -104,6 +111,8 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
   const [isReactionCoolingDown, setIsReactionCoolingDown] = useState(false);
   const lastReactionSentRef = useRef(0);
   const reactionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [controlsLocked, setControlsLockedState] = useState(false);
+  const controlsLockedRef = useRef(false);
 
   // Schedule clearing of a reaction after REACTION_DURATION_MS
   const scheduleReactionClear = useCallback((identity: string) => {
@@ -171,6 +180,32 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     window.addEventListener('keydown', handleKeydown);
     return () => window.removeEventListener('keydown', handleKeydown);
   }, []);
+
+  const setControlsLocked = useCallback((locked: boolean) => {
+    if (controlsLockedRef.current === locked) return;
+    controlsLockedRef.current = locked;
+    setControlsLockedState(locked);
+
+    if (locked) {
+      const room = roomRef.current;
+      if (!room) return;
+      room.localParticipant.setMicrophoneEnabled(false).catch(() => {});
+      room.localParticipant.setCameraEnabled(false).catch(() => {});
+      setIsMicEnabled(false);
+      setIsCameraEnabled(false);
+    }
+  }, []);
+
+  const broadcastControlsLock = useCallback(
+    (locked: boolean) => {
+      setControlsLocked(locked);
+      const room = roomRef.current;
+      if (!room) return;
+      const payload = new TextEncoder().encode(locked ? '1' : '0');
+      room.localParticipant.publishData(payload, { topic: CONTROLS_LOCK_TOPIC, reliable: true }).catch(() => {});
+    },
+    [setControlsLocked]
+  );
 
   const connect = useCallback(async (roomCode: string, options?: { enableCamera?: boolean; enableMic?: boolean }) => {
     setError(null);
@@ -250,6 +285,11 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
           });
           scheduleReactionClear(participant.identity);
         }
+
+        if (topic === CONTROLS_LOCK_TOPIC) {
+          const locked = new TextDecoder().decode(payload) === '1';
+          setControlsLocked(locked);
+        }
       });
 
       // Sync local mic/camera state whenever tracks change
@@ -267,12 +307,12 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
 
       await room.connect(data.wsUrl, data.token);
 
-      // Enable camera/mic after connection is established
-      if (options?.enableCamera) {
+      // Enable camera/mic after connection is established (skipped if controls are locked)
+      if (options?.enableCamera && !controlsLockedRef.current) {
         await room.localParticipant.setCameraEnabled(true);
         setIsCameraEnabled(true);
       }
-      if (options?.enableMic) {
+      if (options?.enableMic && !controlsLockedRef.current) {
         await room.localParticipant.setMicrophoneEnabled(true);
         setIsMicEnabled(true);
       }
@@ -284,7 +324,7 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     } finally {
       connectingRef.current = false;
     }
-  }, []);
+  }, [setControlsLocked, scheduleReactionClear]);
 
   const disconnect = useCallback(() => {
     if (roomRef.current) {
@@ -300,11 +340,14 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     setReactions(new Map());
     reactionTimersRef.current.forEach((t) => clearTimeout(t));
     reactionTimersRef.current.clear();
+    controlsLockedRef.current = false;
+    setControlsLockedState(false);
   }, []);
 
   const toggleCamera = useCallback(async () => {
     const room = roomRef.current;
     if (!room) return;
+    if (controlsLockedRef.current) return;
 
     try {
       const enabled = room.localParticipant.isCameraEnabled;
@@ -320,6 +363,7 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
   const toggleMic = useCallback(async () => {
     const room = roomRef.current;
     if (!room) return;
+    if (controlsLockedRef.current) return;
 
     try {
       const enabled = room.localParticipant.isMicrophoneEnabled;
@@ -425,6 +469,9 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     sendReaction,
     isReactionCoolingDown,
     error,
+    controlsLocked,
+    setControlsLocked,
+    broadcastControlsLock,
   };
 
   return (
