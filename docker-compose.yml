@@ -54,6 +54,20 @@ services:
       - redis_data:/data
     restart: unless-stopped
 
+  agent:
+    build:
+      context: ./agent
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - game_reviews_data:/data/games
+      - ./agent/prompts:/app/prompts:ro
+    depends_on:
+      - livekit
+    restart: unless-stopped
+
 volumes:
   letsencrypt:
   redis_data:
+  game_reviews_data:

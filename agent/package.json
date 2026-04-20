@@ -1,0 +1,27 @@
+{
+  "name": "playavalon-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Game Reviewer agent: recorder bot + STT pipeline for playavalon",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@livekit/rtc-node": "^0.13.25",
+    "@supabase/supabase-js": "^2.47.12",
+    "livekit-server-sdk": "^2.15.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
