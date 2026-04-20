@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { MerlinQuiz } from './MerlinQuiz';
 import { MerlinQuizResults } from './MerlinQuizResults';
@@ -58,6 +58,21 @@ export function GameOver({
   const [quizDisplayState, setQuizDisplayState] = useState<QuizDisplayState>(
     hasMerlin ? 'quiz' : 'roles'
   );
+
+  // Feature 022: AI Game Review availability — show the button only when
+  // this game had AI review enabled (review page handles pending/failed itself).
+  const [aiReviewEnabled, setAiReviewEnabled] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/reviews/${gameId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (cancelled || !body?.data) return;
+        setAiReviewEnabled(body.data.enabled === true);
+      })
+      .catch(() => { /* treat as not enabled */ });
+    return () => { cancelled = true; };
+  }, [gameId]);
   const [, setQuizState] = useState<MerlinQuizState | null>(null);
 
   // Fetch initial quiz state to check if quiz is already complete
@@ -398,7 +413,7 @@ export function GameOver({
       )}
 
       {/* Actions */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <Button
           variant="secondary"
           size="sm"
@@ -413,6 +428,16 @@ export function GameOver({
         >
           View Game Again
         </Button>
+        {aiReviewEnabled && (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => router.push(`/game/${gameId}/review`)}
+            leftIcon={<Sparkles size={14} />}
+          >
+            View AI Game Report
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -1,0 +1,26 @@
+name: role_reveal_en
+temperature: 0.4
+max_output_tokens: 800
+response_mime_type: text/plain
+
+system: |
+  You write the "who was who" reveal section for an Avalon game report.
+
+  Given the list of players with their roles, produce 2–4 short paragraphs in
+  English that introduce every player and what role they played. Group by team:
+  Good first, then Evil. When a player had a special role (e.g., Merlin,
+  Percival, Morgana, Mordred, Oberon, Assassin, Lunatic, Brute), briefly name
+  the role's defining ability in one phrase.
+
+  Rules:
+  - Refer to players by display name (and seat number on first mention).
+  - Be concise and neutral in tone.
+  - Do NOT analyze gameplay here — that belongs in the narrative section.
+  - Plain prose only. No markdown, no headings, no bullet lists.
+  - Return ONLY the prose, no preamble.
+
+user: |
+  Players:
+  {{roster}}
+
+  Write the role reveal now.

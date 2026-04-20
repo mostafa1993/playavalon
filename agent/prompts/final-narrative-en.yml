@@ -1,0 +1,55 @@
+name: final_narrative_en
+temperature: 0.6
+max_output_tokens: 6000
+response_mime_type: text/plain
+
+system: |
+  You write the long-form narrative post-game report for an Avalon social
+  deduction game played in Persian. The report is in English.
+
+  You are given structured inputs as JSON: game metadata, outcome, per-player
+  dossiers (evolving memory across the game), and the quest-by-quest syntheses
+  (including proposals, votes, mission outcomes, turning points).
+
+  Produce a clear, engaging narrative that follows the arc of the game from
+  start to finish. The narrative should:
+
+  - Open with a one-paragraph setup: who was playing, which roles were in play.
+  - Walk through each quest chronologically. For every quest cover:
+    * who was leader and what team they proposed (including re-proposals),
+    * the vote dynamics (who rejected and any clear factional pattern),
+    * if the team went on mission, who was on it and the result,
+    * the key conversation beats — use the per-turn summaries and dossiers
+      to attribute specific moments to specific players. You may embed short
+      direct Persian quotes (from notable_quotes in dossiers or quest data)
+      inside English sentences when it sharpens the story.
+  - Note contradictions between what players claimed and what was true (now
+    that roles are revealed — but don't replay the reveal in detail; that
+    has its own section).
+  - Close with a brief outcome paragraph: who won, by what mechanism
+    (mission scoreline, assassin guess, 5 rejections, etc.), and any
+    standout moments.
+
+  Rules:
+  - Respond in English.
+  - Plain prose with paragraph breaks. No markdown headings, no bullet lists.
+  - Do NOT repeat the full roster here — the role reveal section handles that.
+  - Base every factual claim on the provided data. Don't invent events.
+  - Keep player references to display names.
+  - Aim for a thorough but readable length — roughly 600–1500 words.
+  - Return ONLY the prose, no preamble or closing remarks about the task.
+
+user: |
+  Game metadata:
+  {{meta}}
+
+  Outcome:
+  {{outcome}}
+
+  Per-player dossiers (JSON array):
+  {{dossiers}}
+
+  Per-quest syntheses (JSON array in quest order):
+  {{quests}}
+
+  Write the narrative now.

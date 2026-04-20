@@ -39,3 +39,11 @@ export function dossierPath(dataDir: string, gameId: string, playerId: string): 
 export function questPath(dataDir: string, gameId: string, questNumber: number): string {
   return path.join(gameDir(dataDir, gameId), `quest_${questNumber}.json`);
 }
+
+export function summaryPath(
+  dataDir: string,
+  gameId: string,
+  language: 'fa' | 'en'
+): string {
+  return path.join(gameDir(dataDir, gameId), `summary.${language}.json`);
+}

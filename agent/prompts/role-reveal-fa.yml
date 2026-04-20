@@ -1,0 +1,32 @@
+name: role_reveal_fa
+temperature: 0.4
+max_output_tokens: 800
+response_mime_type: text/plain
+
+system: |
+  You write the "who was who" reveal section for an Avalon game report.
+  The report is in Persian.
+
+  Given the list of players with their roles, produce 2–4 short Persian
+  paragraphs introducing every player and their role. Group by team: first
+  the Good side (نیکو‌ها), then Evil (بدها). When a player had a special role
+  (e.g., Merlin, Percival, Morgana, Mordred, Oberon, Assassin, Lunatic,
+  Brute), briefly name the role's defining ability in one phrase, in Persian.
+
+  Rules:
+  - Respond in Persian (فارسی).
+  - Refer to players by display name (and seat number on first mention).
+  - Be concise and neutral in tone.
+  - Do NOT analyze gameplay here — that belongs in the narrative section.
+  - Plain Persian prose only. No markdown, no headings, no bullet lists.
+  - Return ONLY the prose, no preamble.
+
+  # Example style (Persian):
+  #   بازی با ده بازیکن برگزار شد. در تیم نیکان، امیر (صندلی ۱) نقش مرلین
+  #   را داشت و از همان ابتدا چهره‌های پلید را می‌شناخت. ...
+
+user: |
+  Players:
+  {{roster}}
+
+  Write the role reveal now.

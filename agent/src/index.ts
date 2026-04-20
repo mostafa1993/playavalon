@@ -18,7 +18,9 @@ import {
   createDbClient,
   getLatestProposal,
   insertGameReviewRecording,
+  loadGameOutcome,
   loadMetaSnapshot,
+  updateGameReview,
 } from './gamestate/db.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { startWatcher } from './gamestate/watcher.js';
@@ -28,15 +30,22 @@ import { TurnSegmenter } from './bot/turnSegmenter.js';
 import { TimerListener } from './bot/timerListener.js';
 import { transcribe } from './stt/azureSpeech.js';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
-import { metaPath, turnPath } from './storage/layout.js';
+import { metaPath, summaryPath, turnPath } from './storage/layout.js';
 import { createLLMClient, type LLMClient } from './reviewer/llm.js';
 import { summarizeTurn } from './reviewer/turnSummarizer.js';
 import { updateDossier } from './reviewer/playerDossier.js';
 import { synthesizeQuest } from './reviewer/questSynthesizer.js';
+import { renderRoleReveal } from './reviewer/roleRevealRenderer.js';
+import {
+  generateFinalNarrative,
+  loadAllDossiers,
+  loadAllQuestJsons,
+} from './reviewer/finalNarrative.js';
 import type {
   GameMetaSnapshot,
   MetaJson,
   RecordedTurn,
+  SummaryJson,
   TurnJson,
   TurnSummary,
 } from './types.js';
@@ -210,8 +219,84 @@ async function endSession(
     await Promise.allSettled(Array.from(session.pendingQuests));
   }
 
+  // Leave LiveKit as soon as recording is fully wrapped up — no reason to
+  // stay connected during LLM work.
   await session.bot.leave().catch((err) => log.error('bot.leave failed', err));
+
+  // Generate the final report: role reveal + narrative, per language.
+  try {
+    await updateGameReview(db, session.gameId, { status: 'generating' });
+    await generateFinalReport(config, db, llm, session);
+    log.info('final report generated');
+  } catch (err) {
+    log.error('final report generation failed', err);
+    await updateGameReview(db, session.gameId, {
+      status: 'failed',
+      error_message: err instanceof Error ? err.message : String(err),
+    }).catch((updateErr) => log.error('failed to mark review as failed', updateErr));
+  }
+
   log.info('session closed');
+}
+
+async function generateFinalReport(
+  config: AgentConfig,
+  db: SupabaseClient,
+  llm: LLMClient,
+  session: Session
+): Promise<void> {
+  const log = buildSessionLogger(session.gameId);
+  const [outcome, quests, dossiers] = await Promise.all([
+    loadGameOutcome(db, session.gameId),
+    loadAllQuestJsons(config.storage.dataDir, session.gameId),
+    loadAllDossiers(config.storage.dataDir, session.gameId),
+  ]);
+
+  // All four LLM calls in parallel — they're independent.
+  log.info('invoking role-reveal + final-narrative prompts (fa + en)');
+  const [roleRevealFa, roleRevealEn, narrativeFa, narrativeEn] = await Promise.all([
+    renderRoleReveal(llm, session.meta, 'fa'),
+    renderRoleReveal(llm, session.meta, 'en'),
+    generateFinalNarrative(llm, { meta: session.meta, outcome, dossiers, quests }, 'fa'),
+    generateFinalNarrative(llm, { meta: session.meta, outcome, dossiers, quests }, 'en'),
+  ]);
+
+  const build = (
+    language: 'fa' | 'en',
+    roleReveal: string,
+    narrative: string
+  ): SummaryJson => ({
+    language,
+    gameId: session.gameId,
+    roomCode: session.roomCode,
+    generatedAt: new Date().toISOString(),
+    outcome,
+    players: session.meta.players.map((p) => ({
+      id: p.id,
+      display_name: p.display_name,
+      seat_number: p.seat_number,
+      role: p.role,
+      special_role: p.special_role,
+    })),
+    role_reveal: roleReveal,
+    narrative,
+    quests,
+  });
+
+  const faPath = summaryPath(config.storage.dataDir, session.gameId, 'fa');
+  const enPath = summaryPath(config.storage.dataDir, session.gameId, 'en');
+
+  await Promise.all([
+    writeJsonAtomic(faPath, build('fa', roleRevealFa, narrativeFa)),
+    writeJsonAtomic(enPath, build('en', roleRevealEn, narrativeEn)),
+  ]);
+
+  await updateGameReview(db, session.gameId, {
+    status: 'ready',
+    summary_fa_path: faPath,
+    summary_en_path: enPath,
+    error_message: null,
+  });
 }
 
 async function processTurn(

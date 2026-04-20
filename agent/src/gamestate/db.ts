@@ -153,6 +153,50 @@ export async function insertGameReviewRecording(
   if (error) throw error;
 }
 
+export type GameReviewStatus = 'recording' | 'generating' | 'ready' | 'failed';
+
+/** Update the game_reviews row's status (and optionally paths / error). */
+export async function updateGameReview(
+  db: SupabaseClient,
+  gameId: string,
+  patch: {
+    status: GameReviewStatus;
+    summary_fa_path?: string | null;
+    summary_en_path?: string | null;
+    error_message?: string | null;
+  }
+): Promise<void> {
+  const { error } = await db
+    .from('game_reviews')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('game_id', gameId);
+  if (error) throw error;
+}
+
+export interface GameOutcome {
+  winner: 'good' | 'evil' | null;
+  win_reason: string | null;
+  ended_at: string | null;
+}
+
+/** Read the final outcome of a game. */
+export async function loadGameOutcome(
+  db: SupabaseClient,
+  gameId: string
+): Promise<GameOutcome> {
+  const { data, error } = await db
+    .from('games')
+    .select('winner, win_reason, ended_at')
+    .eq('id', gameId)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    winner: (data?.winner as 'good' | 'evil' | null) ?? null,
+    win_reason: (data?.win_reason as string | null) ?? null,
+    ended_at: (data?.ended_at as string | null) ?? null,
+  };
+}
+
 /**
  * Quest-level data loaded from Supabase: all proposals for the quest,
  * votes per proposal, mission picks (if any), and the quest outcome.
@@ -229,9 +273,11 @@ export async function loadQuestStructuredData(
   // Skip proposals that are still 'pending' — they shouldn't exist at
   // quest-synthesis time; if any do, they represent incomplete data and
   // would just confuse the LLM (whose output schema only allows
-  // approved/rejected).
+  // approved/rejected). The type predicate narrows `status` so the later
+  // `proposals.push` doesn't fall afoul of the 'pending' literal.
   const rows = ((proposalRows as PropRow[]) || []).filter(
-    (p) => p.status === 'approved' || p.status === 'rejected'
+    (p): p is PropRow & { status: 'approved' | 'rejected' } =>
+      p.status === 'approved' || p.status === 'rejected'
   );
   const proposals: QuestStructuredData['proposals'] = [];
   let leaderId: string | null = null;

@@ -113,6 +113,36 @@ export interface QuestJson extends QuestSynthesis {
   completedAt: string;
 }
 
+/**
+ * Written to summary.<lang>.json after the game ends and the final narrative
+ * is generated. Each language gets its own file; same structured data.
+ */
+export interface SummaryJson {
+  language: 'fa' | 'en';
+  gameId: string;
+  roomCode: string;
+  generatedAt: string;
+  outcome: {
+    winner: 'good' | 'evil' | null;
+    win_reason: string | null;
+    ended_at: string | null;
+  };
+  /** Language-agnostic roster (for the UI to render a table). */
+  players: Array<{
+    id: string;
+    display_name: string;
+    seat_number: number | null;
+    role: 'good' | 'evil';
+    special_role: string | null;
+  }>;
+  /** Prose "who was who" paragraph(s) in the target language. */
+  role_reveal: string;
+  /** Main narrative prose in the target language. */
+  narrative: string;
+  /** Per-quest structured data from quest_<n>.json files (order preserved). */
+  quests: QuestJson[];
+}
+
 /** One completed turn before STT has been applied. */
 export interface RecordedTurn {
   questNumber: number;
