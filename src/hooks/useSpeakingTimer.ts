@@ -112,7 +112,9 @@ export function useSpeakingTimer({
     (s: SpeakingTimerState) => {
       if (!room) return;
       const payload = new TextEncoder().encode(JSON.stringify(s));
-      room.localParticipant.publishData(payload, { topic: TIMER_TOPIC });
+      room.localParticipant.publishData(payload, { topic: TIMER_TOPIC }).catch((err) => {
+        console.warn('[speaking-timer] broadcast failed:', err);
+      });
     },
     [room]
   );

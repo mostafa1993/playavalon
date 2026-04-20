@@ -91,7 +91,9 @@ export function useDiscussionTimer({
       const payload = new TextEncoder().encode(JSON.stringify(s));
       room.localParticipant
         .publishData(payload, { topic: DISCUSSION_TIMER_TOPIC, reliable: true })
-        .catch(() => {});
+        .catch((err) => {
+          console.warn('[discussion-timer] broadcast failed:', err);
+        });
     },
     [room]
   );
@@ -155,18 +157,18 @@ export function useDiscussionTimer({
     return () => clearInterval(handle);
   }, [state, isManager, broadcast]);
 
-  // Good-player lock: when discussion starts, force-mute + camera-off;
-  // when it ends, unlock (only if WE turned it on — avoids clobbering an
-  // unrelated role-reveal lock that might be active).
+  // Good-player lock: force-mute + camera-off for good players while the
+  // discussion is running; release the lock the moment any input flips —
+  // including `playerRole` arriving late as 'evil' after a default-'good'
+  // initial render (happens on a page refresh during discussion).
+  //
+  // We only own (set/unset) the lock when WE were the ones who turned it on,
+  // so we don't clobber an unrelated role-reveal lock that might be active.
   useEffect(() => {
-    if (state.running && playerRole === 'good') {
-      if (!lockedByUsRef.current) {
-        setControlsLocked(true);
-        lockedByUsRef.current = true;
-      }
-    } else if (!state.running && lockedByUsRef.current) {
-      setControlsLocked(false);
-      lockedByUsRef.current = false;
+    const shouldBeLocked = state.running && playerRole === 'good';
+    if (shouldBeLocked !== lockedByUsRef.current) {
+      setControlsLocked(shouldBeLocked);
+      lockedByUsRef.current = shouldBeLocked;
     }
   }, [state.running, playerRole, setControlsLocked]);
 

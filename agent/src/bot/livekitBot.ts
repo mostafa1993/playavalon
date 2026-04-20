@@ -161,7 +161,9 @@ export class LiveKitBot {
     const token = new AccessToken(this.opts.apiKey, this.opts.apiSecret, {
       identity: this.opts.identity,
       name: this.opts.displayName,
-      ttl: '6h',
+      // 10h covers any realistic Avalon game (typical 30-60 min, worst-case
+      // ~3h with many re-proposals). LiveKit caps at 7d if we ever need more.
+      ttl: '10h',
     });
     token.addGrant({
       room: this.opts.roomName,

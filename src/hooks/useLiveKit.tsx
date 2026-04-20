@@ -202,7 +202,9 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
       const room = roomRef.current;
       if (!room) return;
       const payload = new TextEncoder().encode(locked ? '1' : '0');
-      room.localParticipant.publishData(payload, { topic: CONTROLS_LOCK_TOPIC, reliable: true }).catch(() => {});
+      room.localParticipant.publishData(payload, { topic: CONTROLS_LOCK_TOPIC, reliable: true }).catch((err) => {
+        console.warn('[livekit] controls-lock broadcast failed:', err);
+      });
     },
     [setControlsLocked]
   );

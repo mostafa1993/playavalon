@@ -69,6 +69,9 @@ services:
       - ./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro
     depends_on:
       - livekit
+    # Give endSession time to finish its LLM calls on SIGTERM before
+    # Docker sends SIGKILL (default 10s is too short for Vertex calls).
+    stop_grace_period: 120s
     restart: unless-stopped
 
 volumes:
