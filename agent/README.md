@@ -26,24 +26,33 @@ LiveKit room  →  bot (audio tracks)  →  turnSegmenter  →  STT (Azure)  →
 
 ## Environment
 
-See repo-root `.env.example`. Required for M2:
+See repo-root `.env.example`. Required vars:
 
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — read-only DB access.
+- `SUPABASE_URL` (or `NEXT_PUBLIC_SUPABASE_URL`), `SUPABASE_SERVICE_ROLE_KEY` — read-only DB access.
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` — same values the Next.js app uses.
 - `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` — e.g. `eastus`.
 - `AZURE_SPEECH_LANGUAGE` — defaults to `fa-IR`.
-- `DATA_DIR` — defaults to `/data/games`.
-- `LIVEKIT_BOT_IDENTITY_PREFIX` — defaults to `reviewer-`.
+- `GCP_PROJECT_ID` — GCP project for Vertex AI.
+- `GCP_VERTEX_LOCATION` — defaults to `us-central1`.
+- `GEMINI_MODEL` — defaults to `gemini-2.5-pro`.
+- `GOOGLE_APPLICATION_CREDENTIALS` — path to a service-account JSON file
+  with the `Vertex AI User` role. In Docker, mount the file as a volume:
+  `./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro` and set
+  `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/vertex-sa.json` in `.env`.
+- Optional overrides: `DATA_DIR`, `PROMPTS_DIR`, `LIVEKIT_BOT_IDENTITY_PREFIX`,
+  `GAME_WATCHER_INTERVAL_MS`, `AUDIO_SAMPLE_RATE`.
 
 ## Output layout
 
 ```
 $DATA_DIR/<game_id>/
-  meta.json                     # written at game start
-  turn_<quest>_<idx>.json       # one per speaking turn
+  meta.json                        # players, roles, seating (written at game start)
+  turn_<quest>_<idx>.json          # transcript + summary (written per speaking turn)
+  dossier_<playerId>.json          # evolving per-player memory
+  quest_<n>.json                   # LLM synthesis of one quest
 ```
 
-M3+ will add `dossier_<player>.json`, `quest_<n>.json`, `summary.fa.json`, `summary.en.json`.
+M4 will add `summary.fa.json`, `summary.en.json` + a review UI page.
 
 ## Local development
 

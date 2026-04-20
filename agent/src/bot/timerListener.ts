@@ -19,19 +19,33 @@ export interface ParticipantResolver {
   displayName: (identity: string) => string;
 }
 
+export type QuestChangeHandler = (fromQuest: number, toQuest: number) => void;
+
 export class TimerListener {
   private segmenter: TurnSegmenter;
   private resolver: ParticipantResolver;
   private activeSpeaker: string | null = null;
+  private lastQuestNumber = 0;
+  private onQuestChanged: QuestChangeHandler;
 
-  constructor(segmenter: TurnSegmenter, resolver: ParticipantResolver) {
+  constructor(
+    segmenter: TurnSegmenter,
+    resolver: ParticipantResolver,
+    onQuestChanged: QuestChangeHandler = () => {}
+  ) {
     this.segmenter = segmenter;
     this.resolver = resolver;
+    this.onQuestChanged = onQuestChanged;
   }
 
   /** Swap the display-name resolver (used once the bot is ready). */
   setResolver(resolver: ParticipantResolver): void {
     this.resolver = resolver;
+  }
+
+  /** The highest quest number we've seen in a broadcast so far. */
+  getLastSeenQuest(): number {
+    return this.lastQuestNumber;
   }
 
   /** Called by the bot on every `dataReceived` matching TIMER_TOPIC. */
@@ -41,6 +55,21 @@ export class TimerListener {
       state = JSON.parse(new TextDecoder().decode(payload)) as SpeakingTimerState;
     } catch {
       return;
+    }
+
+    // Detect quest increment BEFORE driving speaker transitions, so the
+    // previous quest's active speaker (if any) is flushed under the old
+    // quest number by the setActiveSpeaker/clearActiveSpeaker call below.
+    if (state.questNumber > this.lastQuestNumber) {
+      const previous = this.lastQuestNumber;
+      this.lastQuestNumber = state.questNumber;
+      if (previous > 0) {
+        try {
+          this.onQuestChanged(previous, state.questNumber);
+        } catch (err) {
+          console.error('[timer] onQuestChanged handler threw:', err);
+        }
+      }
     }
 
     const newSpeaker = this.deriveActiveSpeaker(state);

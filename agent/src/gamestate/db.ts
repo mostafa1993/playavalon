@@ -152,3 +152,144 @@ export async function insertGameReviewRecording(
     );
   if (error) throw error;
 }
+
+/**
+ * Quest-level data loaded from Supabase: all proposals for the quest,
+ * votes per proposal, mission picks (if any), and the quest outcome.
+ * `playerId` values are mapped to display names via the optional `playerNames` map.
+ */
+export interface QuestStructuredData {
+  questNumber: number;
+  leaderDisplayName: string;
+  proposals: Array<{
+    proposalNumber: number;
+    team: string[];             // display names
+    approvals: string[];
+    rejections: string[];
+    status: 'approved' | 'rejected';
+  }>;
+  mission: null | {
+    team: string[];
+    success_count: number;
+    fail_count: number;
+    result: 'success' | 'fail';
+  };
+}
+
+/**
+ * Return the most recent proposal for a quest (by proposal_number), or null
+ * if no proposal exists yet. Used by the per-turn summarizer to ground each
+ * speaker's stance on a concrete proposed team + leader.
+ */
+export async function getLatestProposal(
+  db: SupabaseClient,
+  gameId: string,
+  questNumber: number
+): Promise<{ leaderId: string; teamMemberIds: string[] } | null> {
+  const { data, error } = await db
+    .from('team_proposals')
+    .select('leader_id, team_member_ids, proposal_number')
+    .eq('game_id', gameId)
+    .eq('quest_number', questNumber)
+    .order('proposal_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    leaderId: data.leader_id as string,
+    teamMemberIds: (data.team_member_ids as string[]) ?? [],
+  };
+}
+
+export async function loadQuestStructuredData(
+  db: SupabaseClient,
+  gameId: string,
+  questNumber: number,
+  playerNames: Map<string, string>
+): Promise<QuestStructuredData> {
+  const displayName = (id: string) => playerNames.get(id) ?? id;
+
+  const { data: proposalRows, error: propErr } = await db
+    .from('team_proposals')
+    .select('id, proposal_number, leader_id, team_member_ids, status, approve_count, reject_count')
+    .eq('game_id', gameId)
+    .eq('quest_number', questNumber)
+    .order('proposal_number', { ascending: true });
+  if (propErr) throw propErr;
+
+  type PropRow = {
+    id: string;
+    proposal_number: number;
+    leader_id: string;
+    team_member_ids: string[];
+    status: 'approved' | 'rejected' | 'pending';
+  };
+
+  // Skip proposals that are still 'pending' — they shouldn't exist at
+  // quest-synthesis time; if any do, they represent incomplete data and
+  // would just confuse the LLM (whose output schema only allows
+  // approved/rejected).
+  const rows = ((proposalRows as PropRow[]) || []).filter(
+    (p) => p.status === 'approved' || p.status === 'rejected'
+  );
+  const proposals: QuestStructuredData['proposals'] = [];
+  let leaderId: string | null = null;
+
+  for (const p of rows) {
+    leaderId = p.leader_id;
+    const { data: voteRows, error: voteErr } = await db
+      .from('votes')
+      .select('player_id, vote')
+      .eq('proposal_id', p.id);
+    if (voteErr) throw voteErr;
+
+    const approvals: string[] = [];
+    const rejections: string[] = [];
+    for (const v of (voteRows || []) as Array<{ player_id: string; vote: 'approve' | 'reject' }>) {
+      (v.vote === 'approve' ? approvals : rejections).push(displayName(v.player_id));
+    }
+
+    proposals.push({
+      proposalNumber: p.proposal_number,
+      team: p.team_member_ids.map(displayName),
+      approvals,
+      rejections,
+      status: p.status,
+    });
+  }
+
+  // Mission result lives on games.quest_results[] (JSON column).
+  const { data: gameRow, error: gameErr } = await db
+    .from('games')
+    .select('quest_results')
+    .eq('id', gameId)
+    .maybeSingle();
+  if (gameErr) throw gameErr;
+
+  type QR = {
+    quest: number;
+    result: 'success' | 'fail';
+    success_count: number;
+    fail_count: number;
+    team_member_ids: string[];
+  };
+  const results = (gameRow?.quest_results as QR[] | null) || [];
+  const thisQuest = results.find((r) => r.quest === questNumber) || null;
+
+  const mission = thisQuest
+    ? {
+        team: thisQuest.team_member_ids.map(displayName),
+        success_count: thisQuest.success_count,
+        fail_count: thisQuest.fail_count,
+        result: thisQuest.result,
+      }
+    : null;
+
+  return {
+    questNumber,
+    leaderDisplayName: leaderId ? displayName(leaderId) : 'Unknown',
+    proposals,
+    mission,
+  };
+}

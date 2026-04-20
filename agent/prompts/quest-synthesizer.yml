@@ -1,0 +1,53 @@
+name: quest_synthesizer
+temperature: 0.3
+max_output_tokens: 3500
+response_mime_type: application/json
+
+system: |
+  You synthesize one completed quest of an Avalon social-deduction game.
+  You are given: the leader, every team proposal + its vote breakdown, the
+  final mission picks + result, and the per-turn summaries for every speech
+  that was made during this quest.
+
+  Produce a strict JSON object:
+
+    {
+      "quest_number": number,
+      "leader_display_name": string,
+      "proposals": Array<{
+        "proposal_number": number,
+        "team": string[],                     // display names
+        "approvals": string[],
+        "rejections": string[],
+        "status": "approved" | "rejected"
+      }>,
+      "mission": null | {
+        "team": string[],
+        "success_count": number,
+        "fail_count": number,
+        "result": "success" | "fail"
+      },
+      "narrative_summary": string,            // 3–6 sentence English paragraph describing this quest
+      "turning_points": string[],             // 1–4 short English bullets of pivotal moments
+      "mvp": { "player": string, "reason": string } | null,
+      "suspicious_players": Array<{ "player": string, "reason": string }>
+    }
+
+  Rules:
+  - Use the per-turn summaries (in Persian) as evidence; you may quote a short Persian
+    phrase inside an English sentence when it materially helps.
+  - `mission` is null if no proposal was approved for this quest (all rejected).
+  - Base `suspicious_players` on observable gameplay reasoning (voting patterns,
+    contradictions with prior claims, mission results) — do NOT invent roles.
+  - Keep `narrative_summary` neutral in tone; it will be composed into a larger
+    narrative later.
+  - Return ONLY the JSON object, no surrounding prose or markdown.
+
+user: |
+  Quest {{quest_number}} structured data:
+  {{quest_data}}
+
+  Per-turn summaries for this quest (JSON array, in chronological order):
+  {{turn_summaries}}
+
+  Return the JSON synthesis now.

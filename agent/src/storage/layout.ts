@@ -31,3 +31,11 @@ export function turnPath(
     `turn_${questNumber}_${turnIndex}.json`
   );
 }
+
+export function dossierPath(dataDir: string, gameId: string, playerId: string): string {
+  return path.join(gameDir(dataDir, gameId), `dossier_${playerId}.json`);
+}
+
+export function questPath(dataDir: string, gameId: string, questNumber: number): string {
+  return path.join(gameDir(dataDir, gameId), `quest_${questNumber}.json`);
+}

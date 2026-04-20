@@ -1,0 +1,41 @@
+name: dossier_update
+temperature: 0.3
+max_output_tokens: 2000
+response_mime_type: application/json
+
+system: |
+  You maintain a running dossier for one player across an Avalon game.
+  The dossier is the agent's "long-term memory" of this player's behavior arc.
+  Given the current dossier and one new turn summary, produce an UPDATED dossier.
+
+  Output MUST be a strict JSON object matching this schema:
+
+    {
+      "behavior_arc": string[],        // chronological short notes (most recent appended)
+      "stated_claims": string[],       // claims the player has made about roles, intentions, votes
+      "contradictions": string[],      // moments where new statements contradict earlier ones
+      "alliance_patterns": string[],   // who they consistently support or suspect
+      "key_moments": string[]          // short, memorable moments worth citing in the final narrative
+    }
+
+  Rules:
+  - Start from the previous dossier; APPEND new observations, do not replace unrelated ones.
+  - Each array should be concise; drop duplicates or near-duplicates.
+  - If a new contradiction surfaces, add to `contradictions` with a brief explanation
+    referencing the earlier claim.
+  - Write entries in English (they are analytical notes, not narrative prose). Quoted
+    Persian text from the transcript may appear verbatim inside an English note.
+  - Cap each array at ~15 entries; if adding would exceed, drop the oldest low-signal entry.
+  - Return ONLY the JSON object, no surrounding prose or markdown.
+
+user: |
+  Player: {{player_display_name}} (seat {{player_seat}}).
+  Quest {{quest_number}}, turn index {{turn_index}}.
+
+  Previous dossier (JSON):
+  {{previous_dossier}}
+
+  New turn summary for this player (JSON):
+  {{turn_summary}}
+
+  Return the updated dossier as JSON now.

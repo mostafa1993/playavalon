@@ -6,13 +6,21 @@
  *   2. On start: agent upserts `game_reviews` row (status='recording'),
  *      writes meta.json, joins the LiveKit room as a hidden bot,
  *      and begins buffering + transcribing turns.
- *   3. On end: agent leaves the room and disposes the session.
+ *   3. Per turn: STT → summarizer → dossier update → write turn JSON (with summary).
+ *   4. On quest boundary: synthesize the completed quest → write quest_<n>.json.
+ *   5. On end: flush in-flight turns, synthesize the final quest, disconnect.
  *
  * Single concurrent game is assumed by product decision.
  */
 
 import { loadConfig, type AgentConfig } from './config.js';
-import { createDbClient, insertGameReviewRecording, loadMetaSnapshot } from './gamestate/db.js';
+import {
+  createDbClient,
+  getLatestProposal,
+  insertGameReviewRecording,
+  loadMetaSnapshot,
+} from './gamestate/db.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { startWatcher } from './gamestate/watcher.js';
 import type { ActiveGameRow } from './gamestate/db.js';
 import { LiveKitBot } from './bot/livekitBot.js';
@@ -21,15 +29,29 @@ import { TimerListener } from './bot/timerListener.js';
 import { transcribe } from './stt/azureSpeech.js';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
 import { metaPath, turnPath } from './storage/layout.js';
-import type { MetaJson, RecordedTurn, TurnJson } from './types.js';
+import { createLLMClient, type LLMClient } from './reviewer/llm.js';
+import { summarizeTurn } from './reviewer/turnSummarizer.js';
+import { updateDossier } from './reviewer/playerDossier.js';
+import { synthesizeQuest } from './reviewer/questSynthesizer.js';
+import type {
+  GameMetaSnapshot,
+  MetaJson,
+  RecordedTurn,
+  TurnJson,
+  TurnSummary,
+} from './types.js';
 
 interface Session {
   gameId: string;
   roomCode: string;
+  meta: GameMetaSnapshot;
   bot: LiveKitBot;
   segmenter: TurnSegmenter;
   timerListener: TimerListener;
+  /** Tracks in-flight per-turn pipelines so we can await them on session end. */
   pendingTurns: Set<Promise<void>>;
+  /** Tracks in-flight quest synthesis calls. */
+  pendingQuests: Set<Promise<void>>;
 }
 
 function buildSessionLogger(gameId: string) {
@@ -46,9 +68,18 @@ function buildSessionLogger(gameId: string) {
   };
 }
 
+function buildSeatTable(meta: GameMetaSnapshot): string {
+  return meta.players
+    .filter((p) => p.seat_number !== null)
+    .sort((a, b) => (a.seat_number ?? 0) - (b.seat_number ?? 0))
+    .map((p) => `seat ${p.seat_number}: ${p.display_name}`)
+    .join('\n');
+}
+
 async function startSession(
   config: AgentConfig,
-  db: ReturnType<typeof createDbClient>,
+  db: SupabaseClient,
+  llm: LLMClient,
   game: ActiveGameRow
 ): Promise<Session> {
   const log = buildSessionLogger(game.id);
@@ -65,11 +96,12 @@ async function startSession(
   };
   await writeJsonAtomic(metaPath(config.storage.dataDir, game.id), metaJson);
 
-  // 3. Set up segmenter, timer listener, then bot (note the order:
-  // the bot constructor captures the timerListener/segmenter references).
+  // 3. Set up segmenter, timer listener, then bot.
   const pendingTurns = new Set<Promise<void>>();
+  const pendingQuests = new Set<Promise<void>>();
+
   const onTurnFinished = (turn: RecordedTurn) => {
-    const task = processTurn(config, game.id, turn).catch((err) => {
+    const task = processTurn(config, db, llm, game.id, meta, turn).catch((err) => {
       log.error(`turn Q${turn.questNumber}/${turn.turnIndex} failed`, err);
     });
     pendingTurns.add(task);
@@ -78,12 +110,26 @@ async function startSession(
   const segmenter = new TurnSegmenter(onTurnFinished);
 
   const metaByIdentity = new Map(meta.players.map((p) => [p.id, p.display_name]));
-  // Temporary resolver used until bot is constructed; replaced via `setResolver`
-  // after the bot exists so both the timer listener and the bot can see each
-  // other without a temporal-dead-zone closure.
-  const timerListener = new TimerListener(segmenter, {
-    displayName: (identity) => metaByIdentity.get(identity) ?? identity,
-  });
+
+  const onQuestChanged = (fromQuest: number, _toQuest: number) => {
+    const task = runQuestSynthesisWhenReady(
+      config,
+      db,
+      llm,
+      game.id,
+      fromQuest,
+      pendingTurns,
+      metaByIdentity
+    ).catch((err) => log.error(`quest ${fromQuest} synthesis failed`, err));
+    pendingQuests.add(task);
+    void task.finally(() => pendingQuests.delete(task));
+  };
+
+  const timerListener = new TimerListener(
+    segmenter,
+    { displayName: (identity) => metaByIdentity.get(identity) ?? identity },
+    onQuestChanged
+  );
 
   const bot = new LiveKitBot(
     {
@@ -102,7 +148,6 @@ async function startSession(
     }
   );
 
-  // Upgrade the resolver now that the bot (and its identity→name map) exists.
   timerListener.setResolver({
     displayName: (identity) =>
       bot.displayNameFor(identity) || metaByIdentity.get(identity) || identity,
@@ -114,24 +159,55 @@ async function startSession(
   return {
     gameId: game.id,
     roomCode: game.room_code,
+    meta,
     bot,
     segmenter,
     timerListener,
     pendingTurns,
+    pendingQuests,
   };
 }
 
-async function endSession(_config: AgentConfig, session: Session): Promise<void> {
+async function endSession(
+  config: AgentConfig,
+  db: SupabaseClient,
+  llm: LLMClient,
+  session: Session
+): Promise<void> {
   const log = buildSessionLogger(session.gameId);
   log.info('ending session');
 
-  // Flush any in-flight turn (if a speaker was still active when the game
-  // ended). finalize() calls clearActiveSpeaker() which triggers onTurnFinished.
+  // Flush any in-flight turn — finalize() clears the active speaker which
+  // triggers onTurnFinished → pipeline adds to pendingTurns.
   session.timerListener.finalize();
 
   if (session.pendingTurns.size > 0) {
-    log.info(`waiting for ${session.pendingTurns.size} pending transcript(s)`);
+    log.info(`waiting for ${session.pendingTurns.size} pending turn pipeline(s)`);
     await Promise.allSettled(Array.from(session.pendingTurns));
+  }
+
+  // Synthesize the final quest (the one in-progress at end-of-game that never
+  // triggered an onQuestChanged increment).
+  const finalQuest = session.timerListener.getLastSeenQuest();
+  if (finalQuest > 0) {
+    const metaByIdentity = new Map(session.meta.players.map((p) => [p.id, p.display_name]));
+    try {
+      await synthesizeQuest(llm, db, {
+        dataDir: config.storage.dataDir,
+        gameId: session.gameId,
+        questNumber: finalQuest,
+        playerNames: metaByIdentity,
+      });
+      log.info(`synthesized final quest ${finalQuest}`);
+    } catch (err) {
+      log.error(`final quest ${finalQuest} synthesis failed`, err);
+    }
+  }
+
+  // Wait for any quest syntheses triggered earlier that are still running.
+  if (session.pendingQuests.size > 0) {
+    log.info(`waiting for ${session.pendingQuests.size} pending quest synthesis call(s)`);
+    await Promise.allSettled(Array.from(session.pendingQuests));
   }
 
   await session.bot.leave().catch((err) => log.error('bot.leave failed', err));
@@ -140,7 +216,10 @@ async function endSession(_config: AgentConfig, session: Session): Promise<void>
 
 async function processTurn(
   config: AgentConfig,
+  db: SupabaseClient,
+  llm: LLMClient,
   gameId: string,
+  meta: GameMetaSnapshot,
   turn: RecordedTurn
 ): Promise<void> {
   const log = buildSessionLogger(gameId);
@@ -148,16 +227,51 @@ async function processTurn(
     `turn Q${turn.questNumber}/${turn.turnIndex} speaker=${turn.speakerDisplayName} (${turn.durationSec.toFixed(1)}s)`
   );
 
-  const { transcript, confidence } = await transcribe(
-    {
-      key: config.azureSpeech.key,
-      region: config.azureSpeech.region,
-      language: config.azureSpeech.language,
-    },
-    turn.pcm,
-    turn.sampleRate
-  );
+  // 1. STT + proposal context fetch in parallel (both hit external services;
+  //    pipeline them to avoid adding latency to the per-turn flow).
+  const [{ transcript, confidence }, proposalCtx] = await Promise.all([
+    transcribe(
+      {
+        key: config.azureSpeech.key,
+        region: config.azureSpeech.region,
+        language: config.azureSpeech.language,
+      },
+      turn.pcm,
+      turn.sampleRate
+    ),
+    getLatestProposal(db, gameId, turn.questNumber).catch((err) => {
+      log.error(`latest proposal fetch failed for Q${turn.questNumber}`, err);
+      return null;
+    }),
+  ]);
 
+  // 2. Summarize (skip on empty transcript).
+  let summary: TurnSummary | undefined;
+  if (transcript.trim().length > 0) {
+    try {
+      const speaker = meta.players.find((p) => p.id === turn.speakerIdentity);
+      const nameOf = (id: string) =>
+        meta.players.find((p) => p.id === id)?.display_name ?? id;
+      const leaderName = proposalCtx ? nameOf(proposalCtx.leaderId) : 'unknown';
+      const proposedTeam = proposalCtx
+        ? proposalCtx.teamMemberIds.map(nameOf).join(', ')
+        : 'unknown';
+      summary = await summarizeTurn(llm, {
+        questNumber: turn.questNumber,
+        turnIndex: turn.turnIndex,
+        speakerDisplayName: turn.speakerDisplayName,
+        speakerSeat: speaker?.seat_number ?? null,
+        leaderDisplayName: leaderName,
+        proposedTeam,
+        seatTable: buildSeatTable(meta),
+        transcript,
+      });
+    } catch (err) {
+      log.error(`summarizer failed for Q${turn.questNumber}/${turn.turnIndex}`, err);
+    }
+  }
+
+  // 3. Persist the turn file (with or without summary).
   const out: TurnJson = {
     gameId,
     questNumber: turn.questNumber,
@@ -170,12 +284,56 @@ async function processTurn(
     transcript,
     confidence,
     language: config.azureSpeech.language,
+    summary,
   };
-
   await writeJsonAtomic(
     turnPath(config.storage.dataDir, gameId, turn.questNumber, turn.turnIndex),
     out
   );
+
+  // 4. Update the speaker's dossier (only when we have a summary to feed it).
+  if (summary) {
+    try {
+      const speaker = meta.players.find((p) => p.id === turn.speakerIdentity);
+      await updateDossier(llm, {
+        dataDir: config.storage.dataDir,
+        gameId,
+        playerId: turn.speakerIdentity,
+        playerDisplayName: turn.speakerDisplayName,
+        playerSeat: speaker?.seat_number ?? null,
+        questNumber: turn.questNumber,
+        turnIndex: turn.turnIndex,
+        turnSummary: summary,
+      });
+    } catch (err) {
+      log.error(`dossier update failed for ${turn.speakerDisplayName}`, err);
+    }
+  }
+}
+
+/**
+ * Run quest synthesis, but first wait for any in-flight turn pipelines for
+ * THIS quest to finish writing their JSON files — otherwise the synthesizer
+ * would read partial data.
+ */
+async function runQuestSynthesisWhenReady(
+  config: AgentConfig,
+  db: SupabaseClient,
+  llm: LLMClient,
+  gameId: string,
+  questNumber: number,
+  pendingTurns: Set<Promise<void>>,
+  playerNames: Map<string, string>
+): Promise<void> {
+  if (pendingTurns.size > 0) {
+    await Promise.allSettled(Array.from(pendingTurns));
+  }
+  await synthesizeQuest(llm, db, {
+    dataDir: config.storage.dataDir,
+    gameId,
+    questNumber,
+    playerNames,
+  });
 }
 
 async function main(): Promise<void> {
@@ -183,27 +341,25 @@ async function main(): Promise<void> {
   console.log('[agent] booting; data dir:', config.storage.dataDir);
 
   const db = createDbClient(config.supabase.url, config.supabase.serviceRoleKey);
+  const llm = createLLMClient(config);
   let session: Session | null = null;
 
   const watcher = startWatcher(db, config.polling.gameWatcherMs, {
     onGameStart: async (game) => {
-      // Single-concurrent assumption; the watcher guarantees this is only
-      // called when no game is currently tracked. If an exception escapes,
-      // the watcher rolls back currentGameId and retries on the next tick.
-      session = await startSession(config, db, game);
+      session = await startSession(config, db, llm, game);
     },
     onGameEnd: async (_gameId) => {
       if (!session) return;
       const s = session;
       session = null;
-      await endSession(config, s);
+      await endSession(config, db, llm, s);
     },
   });
 
   const shutdown = async (signal: string) => {
     console.log(`[agent] received ${signal}, shutting down`);
     watcher.stop();
-    if (session) await endSession(config, session).catch(() => {});
+    if (session) await endSession(config, db, llm, session).catch(() => {});
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));
