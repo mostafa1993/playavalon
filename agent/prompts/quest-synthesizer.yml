@@ -1,6 +1,7 @@
 name: quest_synthesizer
+model: gemini-3.1-pro-preview
 temperature: 0.3
-max_output_tokens: 3500
+max_output_tokens: 5000
 response_mime_type: application/json
 
 system: |

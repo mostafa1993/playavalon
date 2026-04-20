@@ -31,6 +31,11 @@ const prompts: Array<{
   expectedVars: string[];
 }> = [
   {
+    file: 'correct-transcript.yml',
+    mime: 'text/plain',
+    expectedVars: ['raw_transcript'],
+  },
+  {
     file: 'turn-summarizer.yml',
     mime: 'application/json',
     expectedVars: [

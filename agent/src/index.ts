@@ -33,6 +33,7 @@ import { isSilent } from './stt/silence.js';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
 import { metaPath, summaryPath, turnPath } from './storage/layout.js';
 import { createLLMClient, type LLMClient } from './reviewer/llm.js';
+import { correctTranscript } from './reviewer/transcriptCorrector.js';
 import { summarizeTurn } from './reviewer/turnSummarizer.js';
 import { updateDossier } from './reviewer/playerDossier.js';
 import { synthesizeQuest } from './reviewer/questSynthesizer.js';
@@ -341,7 +342,7 @@ async function processTurn(
         }
       );
 
-  const [{ transcript, confidence }, proposalCtx] = await Promise.all([
+  const [{ transcript: rawTranscript, confidence }, proposalCtx] = await Promise.all([
     sttPromise,
     getLatestProposal(db, gameId, turn.questNumber).catch((err) => {
       log.error(`latest proposal fetch failed for Q${turn.questNumber}`, err);
@@ -349,7 +350,24 @@ async function processTurn(
     }),
   ]);
 
-  // 2. Summarize (skip on empty transcript).
+  // 2. LLM proofreading pass on the STT output. Fixes misheard words, wrong
+  //    verb persons, Persian half-space / number artifacts before the text
+  //    reaches the summarizer. Fails soft — we keep the raw transcript on error.
+  let transcript = rawTranscript;
+  let transcriptCorrected = false;
+  if (config.correction.enabled && rawTranscript.trim().length > 0) {
+    try {
+      transcript = await correctTranscript(llm, rawTranscript);
+      transcriptCorrected = true;
+    } catch (err) {
+      log.error(
+        `transcript correction failed for Q${turn.questNumber}/${turn.turnIndex}, using raw STT`,
+        err
+      );
+    }
+  }
+
+  // 3. Summarize (skip on empty transcript).
   let summary: TurnSummary | undefined;
   if (transcript.trim().length > 0) {
     try {
@@ -375,7 +393,7 @@ async function processTurn(
     }
   }
 
-  // 3. Persist the turn file (with or without summary).
+  // 4. Persist the turn file (with or without summary).
   const out: TurnJson = {
     gameId,
     questNumber: turn.questNumber,
@@ -386,6 +404,8 @@ async function processTurn(
     durationSec: Number(turn.durationSec.toFixed(2)),
     sampleRate: turn.sampleRate,
     transcript,
+    transcript_raw: rawTranscript,
+    transcript_corrected: transcriptCorrected,
     confidence,
     language: config.azureSpeech.language,
     summary,
@@ -395,7 +415,7 @@ async function processTurn(
     out
   );
 
-  // 4. Update the speaker's dossier (only when we have a summary to feed it).
+  // 5. Update the speaker's dossier (only when we have a summary to feed it).
   if (summary) {
     try {
       const speaker = meta.players.find((p) => p.id === turn.speakerIdentity);

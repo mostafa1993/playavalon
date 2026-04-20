@@ -63,7 +63,13 @@ export interface TurnJson {
   startedAt: string;
   durationSec: number;
   sampleRate: number;
+  /** The text actually consumed by downstream prompts (corrected if the
+   *  correction step ran and succeeded, otherwise identical to `transcript_raw`). */
   transcript: string;
+  /** The raw Azure STT output — preserved for auditing + reproducibility. */
+  transcript_raw: string;
+  /** True if the LLM correction step ran successfully on this turn. */
+  transcript_corrected: boolean;
   confidence: number | null;
   language: string;
   /** Undefined if summarization was skipped or failed. */

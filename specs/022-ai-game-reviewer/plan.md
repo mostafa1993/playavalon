@@ -260,7 +260,7 @@ All prompts follow one shape:
 
 ```yaml
 name: <string id>
-model: gemini-2.5-pro
+model: gemini-3.1-pro-preview
 temperature: <float>
 max_output_tokens: <int>
 response_mime_type: application/json | text/plain
@@ -318,9 +318,9 @@ AZURE_SPEECH_REGION=eastus
 AZURE_SPEECH_LANGUAGE=fa-IR
 
 GCP_PROJECT_ID=
-GCP_VERTEX_LOCATION=us-central1
+GCP_LLM_LOCATION=us-central1
 GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/vertex-sa.json
-GEMINI_MODEL=gemini-2.5-pro
+GCP_LLM_MODEL=gemini-3.1-pro-preview
 
 # Agent needs service-role DB access
 SUPABASE_SERVICE_ROLE_KEY=
@@ -404,6 +404,15 @@ Each milestone is independently shippable and produces visible output.
 - RMS-based silence detector (`src/stt/silence.ts`). Clips below
   `SILENCE_RMS_THRESHOLD` (default 250) skip STT entirely — no API cost,
   no garbage fed to the summarizer.
+- LLM proofreading pass (`prompts/correct-transcript.yml` +
+  `src/reviewer/transcriptCorrector.ts`, wired into `processTurn` between
+  STT and the summarizer). Fixes Persian STT's common error classes —
+  misheard words, wrong verb persons, homophones, Persian half-space /
+  number artifacts — before the text feeds downstream prompts. Defaults to
+  the default `GCP_LLM_MODEL` (prompt's `model:` field is free to override). Fails soft:
+  on error, downstream falls back to the raw transcript. Turn JSON
+  preserves both `transcript` (corrected) and `transcript_raw`. Toggle via
+  `TRANSCRIPT_CORRECTION_ENABLED` (default `true`).
 - Regression tests under `agent/test/` using Node's built-in `node:test`
   (zero extra deps). Covers: every prompt YAML parses, declares the right
   `response_mime_type`, and its `{{placeholder}}` set matches exactly the

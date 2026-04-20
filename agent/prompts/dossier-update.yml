@@ -1,6 +1,7 @@
 name: dossier_update
+model: gemini-3.1-pro-preview
 temperature: 0.3
-max_output_tokens: 2000
+max_output_tokens: 8000
 response_mime_type: application/json
 
 system: |

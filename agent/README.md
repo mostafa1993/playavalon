@@ -33,8 +33,13 @@ See repo-root `.env.example`. Required vars:
 - `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` — e.g. `eastus`.
 - `AZURE_SPEECH_LANGUAGE` — defaults to `fa-IR`.
 - `GCP_PROJECT_ID` — GCP project for Vertex AI.
-- `GCP_VERTEX_LOCATION` — defaults to `us-central1`.
-- `GEMINI_MODEL` — defaults to `gemini-2.5-pro`.
+- `GCP_LLM_LOCATION` — region for the LLM model, defaults to `us-central1`.
+  Separate from any future embedding-model location.
+- `GCP_LLM_MODEL` — defaults to `gemini-3.1-pro-preview`. Must currently be
+  a Gemini model ID (the SDK is Google's). Renamed from `GEMINI_MODEL` for
+  future flexibility if the code is later adapted to another Vertex-hosted
+  model. Individual prompts can override this via a `model:` field in their
+  YAML.
 - `GOOGLE_APPLICATION_CREDENTIALS` — path to a service-account JSON file
   with the `Vertex AI User` role. In Docker, mount the file as a volume:
   `./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro` and set
@@ -50,13 +55,19 @@ See repo-root `.env.example`. Required vars:
   - `RETRY_MAX_ATTEMPTS` — total attempts for transient-failure retries on
     STT and LLM calls (default `3`).
   - `RETRY_BASE_DELAY_MS` — base exponential-backoff delay (default `500`).
+  - `TRANSCRIPT_CORRECTION_ENABLED` — if `true` (default), every non-silent
+    STT transcript goes through an LLM proofreading pass
+    (`prompts/correct-transcript.yml`) before reaching the summarizer.
+    Fixes Persian STT's common error classes (misheard words, wrong verb
+    persons, homophones, Persian half-space / number glitches). The
+    turn JSON preserves both `transcript` (corrected) and `transcript_raw`.
 
 ## Output layout
 
 ```
 $DATA_DIR/<game_id>/
   meta.json                        # players, roles, seating (written at game start)
-  turn_<quest>_<idx>.json          # transcript + summary (written per speaking turn)
+  turn_<quest>_<idx>.json          # raw + corrected transcript + summary
   dossier_<playerId>.json          # evolving per-player memory
   quest_<n>.json                   # LLM synthesis of one quest
 ```

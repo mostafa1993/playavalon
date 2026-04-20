@@ -92,6 +92,12 @@ export interface AgentConfig {
     /** Base delay in ms; doubled each attempt with jitter. */
     baseDelayMs: number;
   };
+  correction: {
+    /** If true, run an LLM proofreading pass on each raw STT transcript before
+     *  it reaches the summarizer. Improves quality for Persian; costs one
+     *  extra LLM call (Gemini Flash by default) per non-empty turn. */
+    enabled: boolean;
+  };
 }
 
 export function loadConfig(): AgentConfig {
@@ -114,8 +120,11 @@ export function loadConfig(): AgentConfig {
     },
     gemini: {
       project: required('GCP_PROJECT_ID'),
-      location: optional('GCP_VERTEX_LOCATION', 'us-central1'),
-      model: optional('GEMINI_MODEL', 'gemini-2.5-pro'),
+      location: optional('GCP_LLM_LOCATION', 'us-central1'),
+      // Currently only Gemini models work here (the SDK is @google-cloud/vertexai).
+      // The env var is named generically so we can swap to a different Vertex-hosted
+      // model family later without renaming config.
+      model: optional('GCP_LLM_MODEL', 'gemini-3.1-pro-preview'),
     },
     storage: {
       dataDir: optional('DATA_DIR', '/data/games'),
@@ -135,5 +144,19 @@ export function loadConfig(): AgentConfig {
       maxAttempts: intEnv('RETRY_MAX_ATTEMPTS', 3, 1),
       baseDelayMs: intEnv('RETRY_BASE_DELAY_MS', 500, 0),
     },
+    correction: {
+      enabled: boolEnv('TRANSCRIPT_CORRECTION_ENABLED', true),
+    },
   };
+}
+
+/** Parse a boolean env var — truthy strings `1/true/yes/on` enable. */
+function boolEnv(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  console.warn(`[config] ${name}="${raw}" is not a valid boolean; using default ${fallback}`);
+  return fallback;
 }

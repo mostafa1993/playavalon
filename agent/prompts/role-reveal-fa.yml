@@ -1,6 +1,7 @@
 name: role_reveal_fa
+model: gemini-3.1-pro-preview
 temperature: 0.4
-max_output_tokens: 800
+max_output_tokens: 5000
 response_mime_type: text/plain
 
 system: |
