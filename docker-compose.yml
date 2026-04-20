@@ -66,6 +66,9 @@ services:
     volumes:
       - game_reviews_data:/data/games
       - ./agent/prompts:/app/prompts:ro
+      # Mount the GCP service-account JSON for Vertex AI. Uncomment and
+      # point $GOOGLE_APPLICATION_CREDENTIALS at the in-container path (see .env.example).
+      # - ./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro
     depends_on:
       - livekit
     restart: unless-stopped

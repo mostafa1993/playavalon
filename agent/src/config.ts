@@ -27,6 +27,30 @@ function requiredOneOf(primary: string, ...alternatives: string[]): string {
   );
 }
 
+/** Parse an int env var, falling back on missing/invalid input. */
+function intEnv(name: string, fallback: number, min?: number): number {
+  const raw = process.env[name];
+  if (!raw || raw.trim().length === 0) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) {
+    console.warn(`[config] ${name}="${raw}" is not a valid integer; using default ${fallback}`);
+    return fallback;
+  }
+  return min !== undefined ? Math.max(min, parsed) : parsed;
+}
+
+/** Parse a float env var, falling back on missing/invalid input. */
+function floatEnv(name: string, fallback: number, min?: number): number {
+  const raw = process.env[name];
+  if (!raw || raw.trim().length === 0) return fallback;
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed)) {
+    console.warn(`[config] ${name}="${raw}" is not a valid number; using default ${fallback}`);
+    return fallback;
+  }
+  return min !== undefined ? Math.max(min, parsed) : parsed;
+}
+
 export interface AgentConfig {
   supabase: {
     url: string;
@@ -100,16 +124,16 @@ export function loadConfig(): AgentConfig {
       promptsDir: optional('PROMPTS_DIR', './prompts'),
     },
     polling: {
-      gameWatcherMs: Number.parseInt(optional('GAME_WATCHER_INTERVAL_MS', '3000'), 10),
+      gameWatcherMs: intEnv('GAME_WATCHER_INTERVAL_MS', 3000, 500),
     },
     audio: {
-      sampleRate: Number.parseInt(optional('AUDIO_SAMPLE_RATE', '16000'), 10),
+      sampleRate: intEnv('AUDIO_SAMPLE_RATE', 16000, 8000),
       channels: 1,
-      silenceRmsThreshold: Number.parseFloat(optional('SILENCE_RMS_THRESHOLD', '250')),
+      silenceRmsThreshold: floatEnv('SILENCE_RMS_THRESHOLD', 250, 0),
     },
     retry: {
-      maxAttempts: Number.parseInt(optional('RETRY_MAX_ATTEMPTS', '3'), 10),
-      baseDelayMs: Number.parseInt(optional('RETRY_BASE_DELAY_MS', '500'), 10),
+      maxAttempts: intEnv('RETRY_MAX_ATTEMPTS', 3, 1),
+      baseDelayMs: intEnv('RETRY_BASE_DELAY_MS', 500, 0),
     },
   };
 }
