@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { AlertTriangle, Search } from 'lucide-react';
 import { Lobby } from '@/components/Lobby';
 import { RoleRevealModal } from '@/components/RoleRevealModal';
+import { AIConsentModal } from '@/components/lobby/AIConsentModal';
 import { VideoRoom } from '@/components/video';
 import { ViewModeToggle } from '@/components/video/ViewModeToggle';
 import { VideoControls } from '@/components/video/VideoControls';
@@ -32,6 +33,10 @@ export default function RoomPage() {
 
   const [isDistributing, setIsDistributing] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isTogglingAIReview, setIsTogglingAIReview] = useState(false);
+  const [isAcceptingAIConsent, setIsAcceptingAIConsent] = useState(false);
+  const [aiConsentModalOpen, setAIConsentModalOpen] = useState(false);
+  const [aiConsentError, setAIConsentError] = useState<string | null>(null);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [roleData, setRoleData] = useState<{
     role: 'good' | 'evil';
@@ -182,6 +187,60 @@ export default function RoomPage() {
     }
   };
 
+  // Feature 022: AI Game Reviewer
+  const handleToggleAIReview = async (enabled: boolean) => {
+    setIsTogglingAIReview(true);
+    setRoleError(null);
+    try {
+      const response = await fetch(`/api/rooms/${code}/ai-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error?.message || 'Failed to toggle AI Game Review');
+      }
+      await refresh();
+    } catch (err) {
+      setRoleError(err instanceof Error ? err.message : 'Failed to toggle AI Game Review');
+    } finally {
+      setIsTogglingAIReview(false);
+    }
+  };
+
+  const handleAcceptAIConsent = async () => {
+    setIsAcceptingAIConsent(true);
+    setAIConsentError(null);
+    try {
+      const response = await fetch(`/api/rooms/${code}/ai-consent`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error?.message || 'Failed to submit consent');
+      }
+      setAIConsentModalOpen(false);
+      await refresh();
+    } catch (err) {
+      setAIConsentError(err instanceof Error ? err.message : 'Failed to submit consent');
+    } finally {
+      setIsAcceptingAIConsent(false);
+    }
+  };
+
+  // Auto-open modal when AI review is enabled and this player hasn't consented yet.
+  // Closes automatically when either condition flips (toggle off, or player accepted).
+  useEffect(() => {
+    const needsConsent = !!room?.ai_review?.enabled && !room.ai_review?.caller_consented;
+    if (needsConsent) {
+      setAIConsentModalOpen(true);
+    } else {
+      setAIConsentModalOpen(false);
+      setAIConsentError(null);
+    }
+  }, [room?.ai_review?.enabled, room?.ai_review?.caller_consented]);
+
   // Loading state
   if (authLoading || roomLoading) {
     return (
@@ -250,6 +309,19 @@ export default function RoomPage() {
         isDistributing={isDistributing}
         isStarting={isStarting}
         isConnected={isConnected}
+        onToggleAIReview={handleToggleAIReview}
+        isTogglingAIReview={isTogglingAIReview}
+      />
+
+      <AIConsentModal
+        isOpen={aiConsentModalOpen}
+        isAccepting={isAcceptingAIConsent}
+        error={aiConsentError}
+        onAccept={handleAcceptAIConsent}
+        onDismiss={() => {
+          setAIConsentModalOpen(false);
+          setAIConsentError(null);
+        }}
       />
 
       {roleData && (

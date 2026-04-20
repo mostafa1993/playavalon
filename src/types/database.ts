@@ -49,6 +49,8 @@ export interface Database {
           role_config: RoleConfig;
           lady_of_lake_enabled: boolean;
           lady_of_lake_holder_id: string | null;
+          // Feature 022
+          ai_review_enabled: boolean;
         };
         Insert: {
           id?: string;
@@ -62,6 +64,8 @@ export interface Database {
           role_config?: RoleConfig;
           lady_of_lake_enabled?: boolean;
           lady_of_lake_holder_id?: string | null;
+          // Feature 022
+          ai_review_enabled?: boolean;
         };
         Update: {
           id?: string;
@@ -75,6 +79,57 @@ export interface Database {
           role_config?: RoleConfig;
           lady_of_lake_enabled?: boolean;
           lady_of_lake_holder_id?: string | null;
+          // Feature 022
+          ai_review_enabled?: boolean;
+        };
+      };
+      room_ai_consents: {
+        Row: {
+          room_id: string;
+          player_id: string;
+          accepted: boolean;
+          accepted_at: string;
+        };
+        Insert: {
+          room_id: string;
+          player_id: string;
+          accepted: boolean;
+          accepted_at?: string;
+        };
+        Update: {
+          room_id?: string;
+          player_id?: string;
+          accepted?: boolean;
+          accepted_at?: string;
+        };
+      };
+      game_reviews: {
+        Row: {
+          game_id: string;
+          status: GameReviewStatus;
+          summary_fa_path: string | null;
+          summary_en_path: string | null;
+          error_message: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          game_id: string;
+          status: GameReviewStatus;
+          summary_fa_path?: string | null;
+          summary_en_path?: string | null;
+          error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          game_id?: string;
+          status?: GameReviewStatus;
+          summary_fa_path?: string | null;
+          summary_en_path?: string | null;
+          error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
       };
       room_players: {
@@ -165,6 +220,9 @@ export interface Database {
 // 'closed' = archived room (inactive but preserved for statistics)
 export type RoomStatus = 'waiting' | 'roles_distributed' | 'started' | 'closed';
 
+// Feature 022: AI Game Reviewer
+export type GameReviewStatus = 'pending' | 'recording' | 'generating' | 'ready' | 'failed';
+
 // Role enum (base alignment)
 export type Role = 'good' | 'evil';
 
@@ -200,3 +258,10 @@ export type RoomPlayerUpdate = Database['public']['Tables']['room_players']['Upd
 export type PlayerRole = Database['public']['Tables']['player_roles']['Row'];
 export type PlayerRoleInsert = Database['public']['Tables']['player_roles']['Insert'];
 export type PlayerRoleUpdate = Database['public']['Tables']['player_roles']['Update'];
+
+export type RoomAiConsent = Database['public']['Tables']['room_ai_consents']['Row'];
+export type RoomAiConsentInsert = Database['public']['Tables']['room_ai_consents']['Insert'];
+
+export type GameReview = Database['public']['Tables']['game_reviews']['Row'];
+export type GameReviewInsert = Database['public']['Tables']['game_reviews']['Insert'];
+export type GameReviewUpdate = Database['public']['Tables']['game_reviews']['Update'];

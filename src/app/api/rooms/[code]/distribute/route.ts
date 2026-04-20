@@ -73,6 +73,33 @@ export async function POST(request: Request, { params }: RouteParams) {
       return errors.roomNotFull();
     }
 
+    // Feature 022: AI Game Reviewer consent gate.
+    // Intersect consents with current room members so stale consent rows
+    // (from players who left) don't satisfy the gate for a replacement.
+    if (room.ai_review_enabled) {
+      const { data: consents, error: consentErr } = await supabase
+        .from('room_ai_consents')
+        .select('player_id')
+        .eq('room_id', room.id)
+        .eq('accepted', true);
+      if (consentErr) throw consentErr;
+
+      const { data: currentMembers, error: memberErr } = await supabase
+        .from('room_players')
+        .select('player_id')
+        .eq('room_id', room.id);
+      if (memberErr) throw memberErr;
+
+      const acceptedIds = new Set((consents || []).map((c: { player_id: string }) => c.player_id));
+      const consentedCurrent = (currentMembers || []).filter(
+        (m: { player_id: string }) => acceptedIds.has(m.player_id)
+      ).length;
+
+      if (consentedCurrent < playerCount) {
+        return errors.aiConsentRequired(playerCount - consentedCurrent);
+      }
+    }
+
     // Get all player IDs in the room (ordered by join time for Lady of Lake)
     const { data: roomPlayers, error: rpError } = await supabase
       .from('room_players')

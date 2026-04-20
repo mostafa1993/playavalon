@@ -112,6 +112,13 @@ export const errors = {
 
   alreadyStarted: () =>
     errorResponse(ERROR_CODES.ALREADY_STARTED, 'Game has already started', 409),
+
+  aiConsentRequired: (missing: number) =>
+    errorResponse(
+      ERROR_CODES.AI_CONSENT_REQUIRED,
+      `AI Game Review is enabled but ${missing} player(s) have not consented. Ask them to accept or toggle the feature off.`,
+      412
+    ),
 };
 
 /**

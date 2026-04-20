@@ -279,6 +279,9 @@ export const ERROR_CODES = {
   // Feature 020: Lunatic/Brute quest action errors
   LUNATIC_MUST_FAIL: 'LUNATIC_MUST_FAIL',
   BRUTE_CANNOT_FAIL_LATE_QUEST: 'BRUTE_CANNOT_FAIL_LATE_QUEST',
+
+  // Feature 022: AI Game Reviewer
+  AI_CONSENT_REQUIRED: 'AI_CONSENT_REQUIRED',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

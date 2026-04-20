@@ -125,8 +125,8 @@ Agent is LLM-driven (Gemini 3.5 Pro on GCP Vertex AI — chosen for strong Persi
 1. Manager toggles "AI Game Review" ON in lobby → `POST /api/rooms/[code]/ai-review { enabled: true }` → `rooms.ai_review_enabled = true`, existing `room_ai_consents` for this room cleared.
 2. Every player (including manager) sees an `AIConsentModal` because `ai_review_enabled=true` AND their consent row is absent.
 3. Each player clicks "I agree" → `POST /api/rooms/[code]/ai-consent { accepted: true }` → row inserted.
-4. Manager clicks Distribute → `POST /api/rooms/[code]/distribute` validates `count(accepted consents) == player_count` (if toggle on). If missing, 412. Otherwise proceeds as today. A `game_reviews` row is created with `status='pending'`.
-5. Game starts. Agent watcher detects the new `games` row with `ai_review_enabled=true` and `status='started'`. Updates `game_reviews.status='recording'`.
+4. Manager clicks Distribute → `POST /api/rooms/[code]/distribute` validates consents (if toggle on). If missing, 412. Otherwise proceeds as today.
+5. Game starts. Agent watcher detects the new `games` row where the parent room has `ai_review_enabled=true` and `status='started'`. Agent **inserts** a `game_reviews` row with `status='recording'`. (The `game_reviews` table is owned exclusively by the agent — Next.js only reads from it.)
 6. Agent's LiveKit bot joins the room, subscribes to every remote participant's `Track.Source.Microphone`.
 7. Agent subscribes to the `speaking-timer` LiveKit data channel (already broadcast by `useSpeakingTimer`). Parses turn boundaries.
 8. On each `TurnEnded` event: `turnSegmenter` produces PCM16 clip for that speaker → `azureSpeech.transcribe(clip, 'fa-IR')` → transcript returned → `writeJsonAtomic(turnPath(...), { speaker, transcript, ... })`.
@@ -343,16 +343,17 @@ Each milestone is independently shippable and produces visible output.
 ### M1 — Lobby UX + DB (no agent running)
 
 **Scope:**
-- Migration applied.
+- Migration applied (`rooms.ai_review_enabled`, `room_ai_consents`, `game_reviews`).
 - `AIReviewToggle` wired.
 - `AIConsentModal` wired (English copy only).
-- Distribute endpoint gated on consent count.
-- `useRoom` response extended.
+- Distribute endpoint gated on consent count, intersected with current room members.
+- `GET /api/rooms/[code]` response extended with `ai_review` block.
+- No writes to `game_reviews` — the agent (M2) will own that table.
 
 **Exit criteria:**
 - Manager can toggle the feature in the lobby.
 - All players (including manager) see the consent modal when the feature is on.
-- Manager cannot distribute until all players consent; they see a clear blocking message otherwise.
+- Manager cannot distribute until all currently-present players consent; they see a clear blocking message otherwise.
 - No recording, no agent, no summary yet — this milestone changes only UX and gating.
 
 ### M2 — Recorder bot + STT pipeline (transcripts on disk)

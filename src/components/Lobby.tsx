@@ -7,6 +7,7 @@ import { PlayerList } from './PlayerList';
 import { RolesInPlay } from './RolesInPlay';
 import { LadyOfLakeBadge } from './LadyOfLakeBadge';
 import { RulebookModal } from './rulebook/RulebookModal';
+import { AIReviewToggle } from './lobby/AIReviewToggle';
 import type { RoomDetails } from '@/types/room';
 
 interface LobbyProps {
@@ -18,6 +19,9 @@ interface LobbyProps {
   isDistributing?: boolean;
   isStarting?: boolean;
   isConnected?: boolean;
+  // Feature 022
+  onToggleAIReview?: (enabled: boolean) => Promise<void>;
+  isTogglingAIReview?: boolean;
 }
 
 /**
@@ -33,6 +37,8 @@ export function Lobby({
   isDistributing = false,
   isStarting = false,
   isConnected = true,
+  onToggleAIReview,
+  isTogglingAIReview = false,
 }: LobbyProps) {
   const [copied, setCopied] = useState(false);
   const [showRulebook, setShowRulebook] = useState(false);
@@ -42,6 +48,11 @@ export function Lobby({
   const canDistribute = isManager && isFull && room.room.status === 'waiting';
   const allConfirmed = room.confirmations?.confirmed === room.confirmations?.total;
   const canStart = isManager && room.room.status === 'roles_distributed' && allConfirmed;
+  const aiReviewEnabled = !!room.ai_review?.enabled;
+  const aiConsented = room.ai_review?.consented_count ?? 0;
+  const aiTotal = room.ai_review?.total_players ?? room.players.length;
+  const aiConsentsComplete = !aiReviewEnabled || aiConsented >= aiTotal;
+  const distributeBlockedByConsent = canDistribute && !aiConsentsComplete;
 
   /**
    * Copy room code to clipboard
@@ -175,6 +186,17 @@ export function Lobby({
         </div>
       )}
 
+      {/* Feature 022: AI Game Reviewer — manager-only toggle, waiting phase only */}
+      {isManager && room.room.status === 'waiting' && onToggleAIReview && (
+        <AIReviewToggle
+          enabled={aiReviewEnabled}
+          consentedCount={aiConsented}
+          totalPlayers={aiTotal}
+          isToggling={isTogglingAIReview}
+          onToggle={(enabled) => { void onToggleAIReview(enabled); }}
+        />
+      )}
+
       {/* Manager Controls */}
       {isManager && (
         <div className="space-y-2">
@@ -184,9 +206,17 @@ export function Lobby({
               fullWidth
               onClick={onDistributeRoles}
               isLoading={isDistributing}
+              disabled={distributeBlockedByConsent}
             >
               ⚔️ Distribute Roles
             </Button>
+          )}
+
+          {distributeBlockedByConsent && (
+            <p className="text-center text-avalon-silver/80 text-xs">
+              Waiting for all players to accept the AI Review consent
+              ({aiConsented} / {aiTotal}).
+            </p>
           )}
 
           {canStart && onStartGame && (

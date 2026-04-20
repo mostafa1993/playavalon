@@ -57,6 +57,13 @@ export interface RoomDetails {
     id: string;
     display_name: string;
   } | null;
+  // Feature 022: AI Game Reviewer
+  ai_review?: {
+    enabled: boolean;
+    caller_consented: boolean;
+    consented_count: number;
+    total_players: number;
+  };
 }
 
 /**
