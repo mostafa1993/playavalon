@@ -32,6 +32,29 @@ export interface ReviewQuest {
   completedAt: string;
 }
 
+export interface ReviewDiscussionSpeaker {
+  identity: string;
+  display_name: string;
+  durationSec: number;
+  transcript: string;
+  summary?: {
+    key_points?: string[];
+    notable_quotes?: string[];
+    stance?: string;
+    claims?: string[];
+    suspicions?: Array<{ target: string; reason: string }>;
+    defenses?: Array<{ subject: string; reason: string }>;
+  };
+}
+
+export interface ReviewDiscussion {
+  gameId: string;
+  startedAt: string;
+  durationSec: number;
+  assassinDisplayName: string | null;
+  speakers: ReviewDiscussionSpeaker[];
+}
+
 export interface ReviewSummary {
   language: 'fa' | 'en';
   gameId: string;
@@ -52,6 +75,7 @@ export interface ReviewSummary {
   role_reveal: string;
   narrative: string;
   quests: ReviewQuest[];
+  discussion?: ReviewDiscussion | null;
 }
 
 export type ReviewApiResponse =

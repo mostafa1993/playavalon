@@ -119,6 +119,30 @@ export interface QuestJson extends QuestSynthesis {
   completedAt: string;
 }
 
+/** One speaker's contribution to the assassin-phase discussion. */
+export interface DiscussionSpeakerRecord {
+  identity: string;
+  display_name: string;
+  durationSec: number;
+  sampleRate: number;
+  transcript: string;
+  transcript_raw: string;
+  transcript_corrected: boolean;
+  confidence: number | null;
+  /** Undefined if summarization was skipped (silent clip) or failed. */
+  summary?: TurnSummary;
+}
+
+/** Written to discussion.json when the assassin-phase discussion runs. */
+export interface DiscussionJson {
+  gameId: string;
+  startedAt: string;
+  durationSec: number;
+  assassinIdentity: string | null;
+  assassinDisplayName: string | null;
+  speakers: DiscussionSpeakerRecord[];
+}
+
 /**
  * Written to summary.<lang>.json after the game ends and the final narrative
  * is generated. Each language gets its own file; same structured data.
@@ -147,6 +171,8 @@ export interface SummaryJson {
   narrative: string;
   /** Per-quest structured data from quest_<n>.json files (order preserved). */
   quests: QuestJson[];
+  /** The assassin-phase discussion, if one happened. Null otherwise. */
+  discussion: DiscussionJson | null;
 }
 
 /** One completed turn before STT has been applied. */

@@ -7,8 +7,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { LLMClient } from './llm.js';
-import { gameDir } from '../storage/layout.js';
-import type { DossierJson, GameMetaSnapshot, QuestJson } from '../types.js';
+import { discussionPath, gameDir } from '../storage/layout.js';
+import type {
+  DiscussionJson,
+  DossierJson,
+  GameMetaSnapshot,
+  QuestJson,
+} from '../types.js';
 import type { GameOutcome } from '../gamestate/db.js';
 
 /** Load every quest_<n>.json for a game, ordered by quest number. */
@@ -70,11 +75,30 @@ export async function loadAllDossiers(
   return loaded;
 }
 
+/**
+ * Load the discussion.json file if present. Returns null when the game
+ * didn't reach the assassin phase or the manager never started a discussion
+ * timer — both are valid and the narrative prompt handles that case.
+ */
+export async function loadDiscussion(
+  dataDir: string,
+  gameId: string
+): Promise<DiscussionJson | null> {
+  try {
+    const raw = await fs.readFile(discussionPath(dataDir, gameId), 'utf8');
+    return JSON.parse(raw) as DiscussionJson;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
 export interface FinalNarrativeContext {
   meta: GameMetaSnapshot;
   outcome: GameOutcome;
   dossiers: DossierJson[];
   quests: QuestJson[];
+  discussion: DiscussionJson | null;
 }
 
 export async function generateFinalNarrative(
@@ -100,10 +124,29 @@ export async function generateFinalNarrative(
     })),
   };
 
+  // For the prompt, strip the large raw PCM-metadata fields (sampleRate,
+  // confidence) down to what actually helps the narrative.
+  const discussionForPrompt = ctx.discussion
+    ? {
+        startedAt: ctx.discussion.startedAt,
+        durationSec: ctx.discussion.durationSec,
+        assassinDisplayName: ctx.discussion.assassinDisplayName,
+        speakers: ctx.discussion.speakers
+          .filter((s) => s.transcript.trim().length > 0)
+          .map((s) => ({
+            display_name: s.display_name,
+            durationSec: s.durationSec,
+            transcript: s.transcript,
+            summary: s.summary,
+          })),
+      }
+    : null;
+
   return llm.runText(promptFile, {
     meta: JSON.stringify(metaForPrompt, null, 2),
     outcome: JSON.stringify(ctx.outcome, null, 2),
     dossiers: JSON.stringify(ctx.dossiers, null, 2),
     quests: JSON.stringify(ctx.quests, null, 2),
+    discussion: JSON.stringify(discussionForPrompt, null, 2),
   });
 }

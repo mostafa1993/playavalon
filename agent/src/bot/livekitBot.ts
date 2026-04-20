@@ -16,6 +16,7 @@ import {
 } from '@livekit/rtc-node';
 import { AccessToken } from 'livekit-server-sdk';
 import { TIMER_TOPIC } from './timerListener.js';
+import { DISCUSSION_TIMER_TOPIC } from './discussionListener.js';
 
 export interface BotOptions {
   wsUrl: string;
@@ -31,6 +32,7 @@ export interface BotOptions {
 export interface BotEvents {
   onAudioFrame: (identity: string, data: Int16Array, sampleRate: number) => void;
   onTimerData: (payload: Uint8Array) => void;
+  onDiscussionTimerData: (payload: Uint8Array) => void;
 }
 
 export class LiveKitBot {
@@ -82,6 +84,7 @@ export class LiveKitBot {
       RoomEvent.DataReceived,
       (payload: Uint8Array, _participant?: RemoteParticipant, _kind?: unknown, topic?: string) => {
         if (topic === TIMER_TOPIC) this.events.onTimerData(payload);
+        else if (topic === DISCUSSION_TIMER_TOPIC) this.events.onDiscussionTimerData(payload);
       }
     );
 

@@ -19,6 +19,7 @@ import { useLiveKit } from '@/hooks/useLiveKit';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useGameState } from '@/hooks/useGameState';
 import { useSpeakingTimer } from '@/hooks/useSpeakingTimer';
+import { useDiscussionTimer } from '@/hooks/useDiscussionTimer';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function GamePage() {
@@ -28,7 +29,7 @@ export default function GamePage() {
   const { user, loading: authLoading } = useAuth();
   const [initialLeaderIndex, setInitialLeaderIndex] = useState<number | null>(null);
   const { isConnected, viewMode, room, isLayoutSwapped } = useLiveKit();
-  const { roomCode, gameState, isManager } = useGameState(gameId);
+  const { roomCode, gameState, isManager, playerRole } = useGameState(gameId);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -98,11 +99,33 @@ export default function GamePage() {
     questNumber: gameState?.game?.current_quest ?? 0,
   });
 
-  // Manager shortcut: "T" toggles the speaking timer (start / skip-to-next).
+  // Assassin identity → LiveKit identity, via display_name.
+  const assassinIdentity = useMemo(() => {
+    const ap = gameState?.assassin_phase;
+    if (!ap || !room) return null;
+    const participants = [room.localParticipant, ...Array.from(room.remoteParticipants.values())];
+    const lk = participants.find((p) => p.name === ap.assassin_display_name);
+    return lk?.identity ?? `db-${ap.assassin_id}`;
+  }, [gameState?.assassin_phase, room]);
+
+  const isAssassinPhase = gameState?.game?.phase === 'assassin';
+  const discussionTimer = useDiscussionTimer({
+    isManager,
+    enabled: isAssassinPhase,
+    playerRole,
+    assassinIdentity,
+  });
+
+  // Unified "active timer" — one of the two, depending on phase. Both hooks
+  // expose the same shape so downstream (VideoRoom, VideoTile ring) doesn't
+  // need to care which kind of turn we're in.
+  const activeTimer = isAssassinPhase ? discussionTimer : speakingTimer;
+
+  // Manager shortcut: "T" toggles whichever timer is active for the current phase.
   // timeRemaining is stored in a ref so the effect doesn't re-subscribe every tick.
-  const timeRemainingRef = useRef<number | null>(speakingTimer.timeRemaining);
-  timeRemainingRef.current = speakingTimer.timeRemaining;
-  const { startTimer, skipToNext } = speakingTimer;
+  const timeRemainingRef = useRef<number | null>(activeTimer.timeRemaining);
+  timeRemainingRef.current = activeTimer.timeRemaining;
+  const { startTimer, skipToNext } = activeTimer;
 
   useEffect(() => {
     if (!isManager) return;
@@ -135,9 +158,9 @@ export default function GamePage() {
           <ViewModeToggle />
           <div className="flex items-center gap-2">
             <TimerButton
-              onStart={speakingTimer.startTimer}
-              onReset={speakingTimer.skipToNext}
-              isRunning={speakingTimer.timeRemaining !== null && speakingTimer.timeRemaining > 0}
+              onStart={activeTimer.startTimer}
+              onReset={activeTimer.skipToNext}
+              isRunning={activeTimer.timeRemaining !== null && activeTimer.timeRemaining > 0}
               isManager={isManager}
             />
             <LayoutSwapButton />
@@ -173,7 +196,7 @@ export default function GamePage() {
               ${viewMode === 'game' ? 'hidden' : 'flex-1 min-w-0 h-full'}
             `}
           >
-            <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls currentSpeaker={speakingTimer.currentSpeaker} timerColor={speakingTimer.timerColor} timerProgress={speakingTimer.timerProgress} timeRemaining={speakingTimer.timeRemaining} />
+            <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls currentSpeaker={activeTimer.currentSpeaker} timerColor={activeTimer.timerColor} timerProgress={activeTimer.timerProgress} timeRemaining={activeTimer.timeRemaining} />
           </div>
         )}
       </div>

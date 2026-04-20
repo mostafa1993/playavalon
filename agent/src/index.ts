@@ -28,6 +28,9 @@ import type { ActiveGameRow } from './gamestate/db.js';
 import { LiveKitBot } from './bot/livekitBot.js';
 import { TurnSegmenter } from './bot/turnSegmenter.js';
 import { TimerListener } from './bot/timerListener.js';
+import { DiscussionRecorder, type RecordedDiscussion } from './bot/discussionRecorder.js';
+import { DiscussionListener } from './bot/discussionListener.js';
+import { processDiscussion } from './reviewer/discussionProcessor.js';
 import { transcribe } from './stt/azureSpeech.js';
 import { isSilent } from './stt/silence.js';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
@@ -42,6 +45,7 @@ import {
   generateFinalNarrative,
   loadAllDossiers,
   loadAllQuestJsons,
+  loadDiscussion,
 } from './reviewer/finalNarrative.js';
 import type {
   GameMetaSnapshot,
@@ -59,10 +63,14 @@ interface Session {
   bot: LiveKitBot;
   segmenter: TurnSegmenter;
   timerListener: TimerListener;
+  discussionRecorder: DiscussionRecorder;
+  discussionListener: DiscussionListener;
   /** Tracks in-flight per-turn pipelines so we can await them on session end. */
   pendingTurns: Set<Promise<void>>;
   /** Tracks in-flight quest synthesis calls. */
   pendingQuests: Set<Promise<void>>;
+  /** Tracks in-flight discussion processing (0 or 1 at a time). */
+  pendingDiscussion: Set<Promise<void>>;
 }
 
 function buildSessionLogger(gameId: string) {
@@ -107,9 +115,10 @@ async function startSession(
   };
   await writeJsonAtomic(metaPath(config.storage.dataDir, game.id), metaJson);
 
-  // 3. Set up segmenter, timer listener, then bot.
+  // 3. Set up segmenter, discussion recorder, timer listeners, then bot.
   const pendingTurns = new Set<Promise<void>>();
   const pendingQuests = new Set<Promise<void>>();
+  const pendingDiscussion = new Set<Promise<void>>();
 
   const onTurnFinished = (turn: RecordedTurn) => {
     const task = processTurn(config, db, llm, game.id, meta, turn).catch((err) => {
@@ -119,6 +128,20 @@ async function startSession(
     void task.finally(() => pendingTurns.delete(task));
   };
   const segmenter = new TurnSegmenter(onTurnFinished);
+
+  const onDiscussionFinished = (recording: RecordedDiscussion) => {
+    const task = processDiscussion(
+      { config, db, llm, gameId: game.id, meta },
+      recording,
+      {
+        info: (msg) => log.info(msg),
+        error: (msg, err) => log.error(msg, err),
+      }
+    ).catch((err) => log.error('discussion processor failed', err));
+    pendingDiscussion.add(task);
+    void task.finally(() => pendingDiscussion.delete(task));
+  };
+  const discussionRecorder = new DiscussionRecorder(onDiscussionFinished);
 
   const metaByIdentity = new Map(meta.players.map((p) => [p.id, p.display_name]));
 
@@ -141,6 +164,10 @@ async function startSession(
     { displayName: (identity) => metaByIdentity.get(identity) ?? identity },
     onQuestChanged
   );
+  const discussionListener = new DiscussionListener(
+    discussionRecorder,
+    (identity) => metaByIdentity.get(identity) ?? identity
+  );
 
   const bot = new LiveKitBot(
     {
@@ -154,8 +181,16 @@ async function startSession(
       channels: config.audio.channels,
     },
     {
-      onAudioFrame: (identity, data, sr) => segmenter.onAudioFrame(identity, data, sr),
+      // Every audio frame goes to both the per-turn segmenter (which drops
+      // frames that aren't from the active quest speaker) and the discussion
+      // recorder (which buffers all participants when a discussion is active).
+      // Outside of an active window both are cheap no-ops.
+      onAudioFrame: (identity, data, sr) => {
+        segmenter.onAudioFrame(identity, data, sr);
+        discussionRecorder.onAudioFrame(identity, data, sr);
+      },
       onTimerData: (payload) => timerListener.onPayload(payload),
+      onDiscussionTimerData: (payload) => discussionListener.onPayload(payload),
     }
   );
 
@@ -163,6 +198,9 @@ async function startSession(
     displayName: (identity) =>
       bot.displayNameFor(identity) || metaByIdentity.get(identity) || identity,
   });
+  discussionListener.setResolver(
+    (identity) => bot.displayNameFor(identity) || metaByIdentity.get(identity) || identity
+  );
 
   await bot.join();
   log.info('bot joined LiveKit room');
@@ -174,8 +212,11 @@ async function startSession(
     bot,
     segmenter,
     timerListener,
+    discussionRecorder,
+    discussionListener,
     pendingTurns,
     pendingQuests,
+    pendingDiscussion,
   };
 }
 
@@ -192,9 +233,19 @@ async function endSession(
   // triggers onTurnFinished → pipeline adds to pendingTurns.
   session.timerListener.finalize();
 
+  // Flush any in-flight discussion recording (e.g., manager never broadcasted
+  // the stop, or the session ended mid-discussion).
+  session.discussionListener.finalize();
+
   if (session.pendingTurns.size > 0) {
     log.info(`waiting for ${session.pendingTurns.size} pending turn pipeline(s)`);
     await Promise.allSettled(Array.from(session.pendingTurns));
+  }
+  if (session.pendingDiscussion.size > 0) {
+    log.info(
+      `waiting for ${session.pendingDiscussion.size} pending discussion pipeline(s)`
+    );
+    await Promise.allSettled(Array.from(session.pendingDiscussion));
   }
 
   // Synthesize the final quest (the one in-progress at end-of-game that never
@@ -248,19 +299,21 @@ async function generateFinalReport(
   session: Session
 ): Promise<void> {
   const log = buildSessionLogger(session.gameId);
-  const [outcome, quests, dossiers] = await Promise.all([
+  const [outcome, quests, dossiers, discussion] = await Promise.all([
     loadGameOutcome(db, session.gameId),
     loadAllQuestJsons(config.storage.dataDir, session.gameId),
     loadAllDossiers(config.storage.dataDir, session.gameId),
+    loadDiscussion(config.storage.dataDir, session.gameId),
   ]);
 
   // All four LLM calls in parallel — they're independent.
   log.info('invoking role-reveal + final-narrative prompts (fa + en)');
+  const narrativeCtx = { meta: session.meta, outcome, dossiers, quests, discussion };
   const [roleRevealFa, roleRevealEn, narrativeFa, narrativeEn] = await Promise.all([
     renderRoleReveal(llm, session.meta, 'fa'),
     renderRoleReveal(llm, session.meta, 'en'),
-    generateFinalNarrative(llm, { meta: session.meta, outcome, dossiers, quests }, 'fa'),
-    generateFinalNarrative(llm, { meta: session.meta, outcome, dossiers, quests }, 'en'),
+    generateFinalNarrative(llm, narrativeCtx, 'fa'),
+    generateFinalNarrative(llm, narrativeCtx, 'en'),
   ]);
 
   const build = (
@@ -283,6 +336,7 @@ async function generateFinalReport(
     role_reveal: roleReveal,
     narrative,
     quests,
+    discussion,
   });
 
   const faPath = summaryPath(config.storage.dataDir, session.gameId, 'fa');

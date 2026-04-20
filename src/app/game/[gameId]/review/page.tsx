@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Sparkles, ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import type { ReviewApiResponse, ReviewSummary } from '@/types/review';
+import type { ReviewApiResponse, ReviewDiscussion, ReviewSummary } from '@/types/review';
 
 type Language = 'fa' | 'en';
 
@@ -165,6 +165,10 @@ export default function GameReviewPage() {
             ))}
           </div>
         </div>
+
+        {summary.discussion && summary.discussion.speakers.length > 0 && (
+          <DiscussionSection discussion={summary.discussion} isRtl={isRtl} />
+        )}
 
         <div className="text-avalon-silver/60 text-xs text-center pt-4">
           {isRtl ? 'تولید شده در' : 'Generated'}{' '}
@@ -384,5 +388,63 @@ function QuestCard({
         )}
       </div>
     </details>
+  );
+}
+
+function DiscussionSection({
+  discussion,
+  isRtl,
+}: {
+  discussion: ReviewDiscussion;
+  isRtl: boolean;
+}) {
+  const t = (fa: string, en: string) => (isRtl ? fa : en);
+  return (
+    <div>
+      <h2 className="text-avalon-gold font-display text-lg mb-2">
+        {t('بحث آدمکش', 'Assassin Discussion')}
+      </h2>
+      <div className="card p-3 space-y-3">
+        <div className="text-avalon-silver text-xs">
+          {t('آدمکش:', 'Assassin:')} {discussion.assassinDisplayName ?? '—'} ·{' '}
+          {t('مدت:', 'Duration:')} {Math.round(discussion.durationSec)}s
+        </div>
+        <div className="space-y-2">
+          {discussion.speakers
+            .filter((s) => s.transcript.trim().length > 0)
+            .map((s) => (
+              <details key={s.identity} className="bg-avalon-navy/50 rounded px-2 py-1">
+                <summary className="cursor-pointer list-none flex items-center justify-between">
+                  <span className="text-avalon-text font-semibold">{s.display_name}</span>
+                  <span className="text-avalon-silver/80 text-xs">
+                    {Math.round(s.durationSec)}s
+                  </span>
+                </summary>
+                <div className="mt-2 space-y-2 text-sm">
+                  {s.summary?.key_points && s.summary.key_points.length > 0 && (
+                    <ul className="list-disc list-inside text-avalon-text-secondary space-y-0.5">
+                      {s.summary.key_points.map((kp, i) => (
+                        <li key={i}>{kp}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {s.summary?.notable_quotes && s.summary.notable_quotes.length > 0 && (
+                    <div className="space-y-0.5">
+                      {s.summary.notable_quotes.map((q, i) => (
+                        <p
+                          key={i}
+                          className="text-avalon-gold/90 text-xs italic border-l-2 border-avalon-gold/40 pl-2"
+                        >
+                          « {q} »
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </details>
+            ))}
+        </div>
+      </div>
+    </div>
   );
 }

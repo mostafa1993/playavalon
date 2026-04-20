@@ -56,4 +56,12 @@ user: |
   Per-quest syntheses (JSON array in quest order):
   {{quests}}
 
+  Assassin-phase discussion (JSON; may be null if the manager did not run a
+  discussion timer or the game ended without reaching the assassin phase).
+  If present, weave the key moments of this deliberation into the closing
+  section of the narrative, just before the outcome paragraph. Attribute
+  quotes to the right speaker and note when the assassin's decision felt
+  well-reasoned vs. rushed.
+  {{discussion}}
+
   Write the Persian narrative now.

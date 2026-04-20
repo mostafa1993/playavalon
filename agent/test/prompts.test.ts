@@ -71,12 +71,12 @@ const prompts: Array<{
   {
     file: 'final-narrative-fa.yml',
     mime: 'text/plain',
-    expectedVars: ['meta', 'outcome', 'dossiers', 'quests'],
+    expectedVars: ['meta', 'outcome', 'dossiers', 'quests', 'discussion'],
   },
   {
     file: 'final-narrative-en.yml',
     mime: 'text/plain',
-    expectedVars: ['meta', 'outcome', 'dossiers', 'quests'],
+    expectedVars: ['meta', 'outcome', 'dossiers', 'quests', 'discussion'],
   },
 ];
 

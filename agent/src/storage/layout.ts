@@ -47,3 +47,7 @@ export function summaryPath(
 ): string {
   return path.join(gameDir(dataDir, gameId), `summary.${language}.json`);
 }
+
+export function discussionPath(dataDir: string, gameId: string): string {
+  return path.join(gameDir(dataDir, gameId), 'discussion.json');
+}
