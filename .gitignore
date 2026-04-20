@@ -59,3 +59,9 @@ supabase/.temp
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Feature 022: credentials / keys mounted into the agent container
+# (GCP service-account JSON, anything else under secrets/).
+/secrets/
+*.json.key
+
