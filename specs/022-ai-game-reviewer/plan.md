@@ -396,16 +396,35 @@ Each milestone is independently shippable and produces visible output.
 
 ### M5 — Polish
 
-**Scope:**
-- Better error paths (`status='failed'` + UI treatment).
-- Silence detection (skip STT for near-silent clips; saves cost).
-- Regression fixtures + snapshot tests for prompt outputs under `agent/test/fixtures/`.
-- Prompt tuning based on first few real games.
-- `agent/README.md` operator guide.
+**Scope (landed):**
+- Exponential-backoff + jitter retry wrapper (`src/util/retry.ts`) wired around
+  both Azure Speech STT and Vertex AI Gemini calls. Retries transient HTTP
+  statuses (408/429/5xx) and network errors; auth/safety/invalid-argument
+  errors fail fast. Tunable via `RETRY_MAX_ATTEMPTS` / `RETRY_BASE_DELAY_MS`.
+- RMS-based silence detector (`src/stt/silence.ts`). Clips below
+  `SILENCE_RMS_THRESHOLD` (default 250) skip STT entirely — no API cost,
+  no garbage fed to the summarizer.
+- Regression tests under `agent/test/` using Node's built-in `node:test`
+  (zero extra deps). Covers: every prompt YAML parses, declares the right
+  `response_mime_type`, and its `{{placeholder}}` set matches exactly the
+  vars the agent code passes. Plus unit tests for the silence detector.
+  `npm test` runs without external services.
+
+**Already landed earlier milestones:**
+- `status='failed'` with `error_message` surfaced to the review page (M4).
+- Agent `README.md` operator guide (M2/M3, expanded in M5 with retry + silence knobs).
+
+**Deferred (not needed to ship):**
+- Empirical prompt tuning — requires real game data. Prompts are
+  volume-mounted so tweaking won't require a rebuild post-launch.
+- Snapshot tests on actual LLM output — would require recording Gemini
+  responses; the current structural checks catch prompt/code drift
+  without that complexity.
 
 **Exit criteria:**
-- Agent survives malformed / unexpected inputs without crashing.
-- Prompts produce stable outputs on fixtures.
+- Transient STT/LLM failures recover automatically without operator intervention.
+- Silent turns don't hit Azure or produce turn-summary LLM calls.
+- `npm test` passes in CI without any secrets.
 
 ## Resolved decisions
 

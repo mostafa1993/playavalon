@@ -29,6 +29,7 @@ import { LiveKitBot } from './bot/livekitBot.js';
 import { TurnSegmenter } from './bot/turnSegmenter.js';
 import { TimerListener } from './bot/timerListener.js';
 import { transcribe } from './stt/azureSpeech.js';
+import { isSilent } from './stt/silence.js';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
 import { metaPath, summaryPath, turnPath } from './storage/layout.js';
 import { createLLMClient, type LLMClient } from './reviewer/llm.js';
@@ -312,18 +313,36 @@ async function processTurn(
     `turn Q${turn.questNumber}/${turn.turnIndex} speaker=${turn.speakerDisplayName} (${turn.durationSec.toFixed(1)}s)`
   );
 
-  // 1. STT + proposal context fetch in parallel (both hit external services;
-  //    pipeline them to avoid adding latency to the per-turn flow).
+  // 1. STT (or silence skip) + proposal context fetch in parallel.
+  //    The silence check avoids a round-trip to Azure for clips that clearly
+  //    contain no speech, saving cost and sparing the LLM stage garbage input.
+  const silent = isSilent(turn.pcm, config.audio.silenceRmsThreshold);
+  if (silent) {
+    log.info(
+      `turn Q${turn.questNumber}/${turn.turnIndex} skipped STT (RMS below silence threshold)`
+    );
+  }
+
+  const sttPromise: Promise<{ transcript: string; confidence: number | null }> = silent
+    ? Promise.resolve({ transcript: '', confidence: null })
+    : transcribe(
+        {
+          key: config.azureSpeech.key,
+          region: config.azureSpeech.region,
+          language: config.azureSpeech.language,
+        },
+        turn.pcm,
+        turn.sampleRate,
+        {
+          retry: {
+            maxAttempts: config.retry.maxAttempts,
+            baseDelayMs: config.retry.baseDelayMs,
+          },
+        }
+      );
+
   const [{ transcript, confidence }, proposalCtx] = await Promise.all([
-    transcribe(
-      {
-        key: config.azureSpeech.key,
-        region: config.azureSpeech.region,
-        language: config.azureSpeech.language,
-      },
-      turn.pcm,
-      turn.sampleRate
-    ),
+    sttPromise,
     getLatestProposal(db, gameId, turn.questNumber).catch((err) => {
       log.error(`latest proposal fetch failed for Q${turn.questNumber}`, err);
       return null;

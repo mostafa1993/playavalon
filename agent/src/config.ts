@@ -59,6 +59,14 @@ export interface AgentConfig {
     /** Target sample rate we tell LiveKit to deliver at (and pass to Azure). */
     sampleRate: number;
     channels: number;
+    /** RMS threshold (PCM16 units) below which a turn is considered silent and STT is skipped. */
+    silenceRmsThreshold: number;
+  };
+  retry: {
+    /** Total attempts (including the first) for retriable external calls. */
+    maxAttempts: number;
+    /** Base delay in ms; doubled each attempt with jitter. */
+    baseDelayMs: number;
   };
 }
 
@@ -97,6 +105,11 @@ export function loadConfig(): AgentConfig {
     audio: {
       sampleRate: Number.parseInt(optional('AUDIO_SAMPLE_RATE', '16000'), 10),
       channels: 1,
+      silenceRmsThreshold: Number.parseFloat(optional('SILENCE_RMS_THRESHOLD', '250')),
+    },
+    retry: {
+      maxAttempts: Number.parseInt(optional('RETRY_MAX_ATTEMPTS', '3'), 10),
+      baseDelayMs: Number.parseInt(optional('RETRY_BASE_DELAY_MS', '500'), 10),
     },
   };
 }

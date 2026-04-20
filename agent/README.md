@@ -39,8 +39,17 @@ See repo-root `.env.example`. Required vars:
   with the `Vertex AI User` role. In Docker, mount the file as a volume:
   `./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro` and set
   `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/vertex-sa.json` in `.env`.
-- Optional overrides: `DATA_DIR`, `PROMPTS_DIR`, `LIVEKIT_BOT_IDENTITY_PREFIX`,
-  `GAME_WATCHER_INTERVAL_MS`, `AUDIO_SAMPLE_RATE`.
+- Optional overrides:
+  - `DATA_DIR` — on-disk output root (default `/data/games`).
+  - `PROMPTS_DIR` — YAML prompts dir (default `./prompts`).
+  - `LIVEKIT_BOT_IDENTITY_PREFIX` — default `reviewer-`.
+  - `GAME_WATCHER_INTERVAL_MS` — polling cadence (default `3000`).
+  - `AUDIO_SAMPLE_RATE` — PCM sample rate delivered to STT (default `16000`).
+  - `SILENCE_RMS_THRESHOLD` — clips with RMS below this skip STT entirely
+    (default `250`). Raise to skip more, lower to transcribe more.
+  - `RETRY_MAX_ATTEMPTS` — total attempts for transient-failure retries on
+    STT and LLM calls (default `3`).
+  - `RETRY_BASE_DELAY_MS` — base exponential-backoff delay (default `500`).
 
 ## Output layout
 
@@ -60,3 +69,17 @@ M4 will add `summary.fa.json`, `summary.en.json` + a review UI page.
 npm install
 npm run dev
 ```
+
+## Tests
+
+Regression tests verify prompt YAML files parse, declare the right
+`response_mime_type`, and reference exactly the variables the agent code
+passes in — catching drift between a prompt and its caller. Plus a few
+unit tests for the silence detector.
+
+```
+npm test
+```
+
+Tests hit no external services (no Azure, no Vertex) so they run in CI
+without secrets.

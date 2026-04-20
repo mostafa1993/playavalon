@@ -13,6 +13,7 @@
 import { VertexAI, type GenerativeModel } from '@google-cloud/vertexai';
 import type { AgentConfig } from '../config.js';
 import { loadPrompt, fill } from './prompts.js';
+import { isNetworkError, retry } from '../util/retry.js';
 
 export interface LLMClient {
   /** Run a prompt file, substituting `{{var}}` placeholders, return the raw text. */
@@ -58,23 +59,36 @@ export function createLLMClient(config: AgentConfig): LLMClient {
       prompt.max_output_tokens
     );
 
-    const res = await model.generateContent({
-      systemInstruction: { role: 'system', parts: [{ text: systemText }] },
-      contents: [{ role: 'user', parts: [{ text: userText }] }],
-    });
+    return retry(
+      async () => {
+        const res = await model.generateContent({
+          systemInstruction: { role: 'system', parts: [{ text: systemText }] },
+          contents: [{ role: 'user', parts: [{ text: userText }] }],
+        });
 
-    const candidate = res.response?.candidates?.[0];
-    const text = candidate?.content?.parts?.[0]?.text;
-    if (typeof text !== 'string' || text.length === 0) {
-      const finishReason = candidate?.finishReason ?? 'UNKNOWN';
-      const blockReason = res.response?.promptFeedback?.blockReason;
-      throw new Error(
-        `LLM returned empty response for prompt ${promptFile} (finishReason=${finishReason}${
-          blockReason ? `, promptBlocked=${blockReason}` : ''
-        })`
-      );
-    }
-    return text;
+        const candidate = res.response?.candidates?.[0];
+        const text = candidate?.content?.parts?.[0]?.text;
+        if (typeof text !== 'string' || text.length === 0) {
+          const finishReason = candidate?.finishReason ?? 'UNKNOWN';
+          const blockReason = res.response?.promptFeedback?.blockReason;
+          throw new Error(
+            `LLM returned empty response for prompt ${promptFile} (finishReason=${finishReason}${
+              blockReason ? `, promptBlocked=${blockReason}` : ''
+            })`
+          );
+        }
+        return text;
+      },
+      {
+        maxAttempts: config.retry.maxAttempts,
+        baseDelayMs: config.retry.baseDelayMs,
+        shouldRetry: (err) => isRetriableLlmError(err),
+        onRetry: (err, attempt, delayMs) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[llm] retry ${attempt} on ${promptFile} after ${delayMs}ms — ${msg}`);
+        },
+      }
+    );
   };
 
   return {
@@ -90,4 +104,44 @@ export function createLLMClient(config: AgentConfig): LLMClient {
       }
     },
   };
+}
+
+/**
+ * Decide whether a Vertex AI error is worth retrying.
+ *
+ * The Vertex SDK surfaces:
+ *   - gRPC-style errors with numeric `code` (UNAVAILABLE=14, DEADLINE_EXCEEDED=4,
+ *     RESOURCE_EXHAUSTED=8) or matching `.status` string,
+ *   - wrapped Google API errors exposing `.code` as HTTP status,
+ *   - plain Errors whose message contains "429" / "503" / "unavailable".
+ *
+ * Anything else (safety block, invalid arg, auth) is non-transient.
+ */
+function isRetriableLlmError(err: unknown): boolean {
+  if (isNetworkError(err)) return true;
+  if (!err || typeof err !== 'object') return false;
+
+  const e = err as { code?: number | string; status?: string; message?: string };
+
+  // gRPC status codes (numeric or string)
+  if (e.code === 4 || e.code === 8 || e.code === 14) return true;
+  if (e.status === 'UNAVAILABLE' || e.status === 'DEADLINE_EXCEEDED' || e.status === 'RESOURCE_EXHAUSTED') {
+    return true;
+  }
+
+  // HTTP-shaped errors from the SDK
+  if (typeof e.code === 'number') {
+    if (e.code === 408 || e.code === 429 || (e.code >= 500 && e.code < 600)) return true;
+  }
+
+  const msg = (e.message ?? '').toLowerCase();
+  return (
+    msg.includes('429') ||
+    msg.includes('rate limit') ||
+    msg.includes('unavailable') ||
+    msg.includes('deadline') ||
+    msg.includes('503') ||
+    msg.includes('502') ||
+    msg.includes('500')
+  );
 }
