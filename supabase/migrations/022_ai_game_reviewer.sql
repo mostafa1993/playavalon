@@ -107,4 +107,17 @@ CREATE POLICY "Room members read game review status"
     )
   );
 
+-- ============================================
+-- Grants
+-- ============================================
+-- Supabase's service_role bypasses RLS but still needs table-level grants.
+-- The authenticated role goes through RLS but needs grants to reach the
+-- policy check.
+
+GRANT ALL ON public.room_ai_consents TO service_role;
+GRANT ALL ON public.game_reviews     TO service_role;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.room_ai_consents TO authenticated;
+GRANT SELECT                         ON public.game_reviews     TO authenticated;
+
 COMMIT;
