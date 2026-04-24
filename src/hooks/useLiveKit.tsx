@@ -249,6 +249,11 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
+        // Mix all remote audio through a single Web Audio AudioContext instead
+        // of one <audio> element per track. Bypasses the browser's concurrent
+        // WebRTC-audio-element limit (~6 on Chrome) that would otherwise leave
+        // the 7th+ participant unable to hear anyone.
+        webAudioMix: true,
       });
 
       // Set up event listeners
