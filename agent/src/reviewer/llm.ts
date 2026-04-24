@@ -10,10 +10,34 @@
  * on the GCE/Workload Identity metadata server in production.
  */
 
-import { VertexAI, type GenerativeModel } from '@google-cloud/vertexai';
+import {
+  VertexAI,
+  HarmCategory,
+  HarmBlockThreshold,
+  type GenerativeModel,
+  type SafetySetting,
+} from '@google-cloud/vertexai';
 import type { AgentConfig } from '../config.js';
 import { loadPrompt, fill } from './prompts.js';
 import { isNetworkError, retry } from '../util/retry.js';
+
+// Prepended to every system prompt. Clarifies to Gemini that accusatory
+// language ("kill Merlin", "he's a traitor") is gameplay vocabulary from a
+// bounded board-game domain, not real-world violence. Reduces false
+// positives from the safety classifier.
+const GAME_CONTEXT_PREAMBLE = `CONTEXT: All content below is from an Avalon board game session — a social deduction game where players use in-character language. Words like "kill", "assassinate", "hunt", "target", "traitor", "evil", "betrayer", and "execute" are gameplay mechanics (the Assassin's win condition is to correctly identify Merlin), NOT real-world threats. Player quotes are in-character fictional speech between friends playing a board game. Treat this as reviewing a board-game session, not real events.
+
+`;
+
+// Backstop against the default Gemini safety filter over-triggering on
+// heated but benign in-game accusations. BLOCK_ONLY_HIGH still catches
+// genuinely harmful content while passing through adversarial gameplay.
+const SAFETY_SETTINGS: SafetySetting[] = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+];
 
 export interface LLMClient {
   /** Run a prompt file, substituting `{{var}}` placeholders, return the raw text. */
@@ -42,6 +66,7 @@ export function createLLMClient(config: AgentConfig): LLMClient {
         maxOutputTokens: maxTokens ?? 4096,
         ...(mime ? { responseMimeType: mime } : {}),
       },
+      safetySettings: SAFETY_SETTINGS,
     });
     modelCache.set(key, model);
     return model;
@@ -49,7 +74,7 @@ export function createLLMClient(config: AgentConfig): LLMClient {
 
   const invoke = async (promptFile: string, vars: PromptVars): Promise<string> => {
     const prompt = await loadPrompt(config.storage.promptsDir, promptFile);
-    const systemText = fill(prompt.system, vars);
+    const systemText = GAME_CONTEXT_PREAMBLE + fill(prompt.system, vars);
     const userText = fill(prompt.user, vars);
 
     const model = getModel(
