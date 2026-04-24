@@ -1,6 +1,6 @@
 name: final_narrative_fa
 model: gemini-3.1-pro-preview
-temperature: 0.6
+temperature: 0.3
 max_output_tokens: 10000
 response_mime_type: text/plain
 

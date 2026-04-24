@@ -1,0 +1,125 @@
+[
+  {
+    "gameId": "test-game-001",
+    "completedAt": "2026-04-24T18:12:00Z",
+    "quest_number": 1,
+    "leader_display_name": "علی",
+    "proposals": [
+      {
+        "proposal_number": 1,
+        "team": ["علی", "نیما"],
+        "approvals": ["علی", "مریم", "نیما"],
+        "rejections": ["رضا", "سارا"],
+        "status": "approved"
+      }
+    ],
+    "mission": {
+      "team": ["علی", "نیما"],
+      "success_count": 2,
+      "fail_count": 0,
+      "result": "success"
+    },
+    "narrative_summary": "ماموریت اول با رهبری علی و تیم خودش و نیما موفق شد. سارا و رضا به این تیم رای منفی دادن.",
+    "turning_points": [
+      "رای منفی رضا و سارا به تیم اول، یه الگویی رو شروع کرد که تا آخر بازی ادامه پیدا کرد."
+    ],
+    "mvp": {
+      "player": "علی",
+      "reason": "یه تیم پاک پیشنهاد داد و ماموریت رو خوب پیش برد."
+    },
+    "suspicious_players": [
+      {
+        "player": "رضا",
+        "reason": "بی‌دلیل به یه تیم واضحاً پاک رای منفی داد."
+      },
+      {
+        "player": "سارا",
+        "reason": "با رضا هم‌رای بود بدون دلیل روشن."
+      }
+    ]
+  },
+  {
+    "gameId": "test-game-001",
+    "completedAt": "2026-04-24T18:25:00Z",
+    "quest_number": 2,
+    "leader_display_name": "مریم",
+    "proposals": [
+      {
+        "proposal_number": 1,
+        "team": ["مریم", "علی", "نیما"],
+        "approvals": ["مریم", "علی", "نیما"],
+        "rejections": ["رضا", "سارا"],
+        "status": "rejected"
+      },
+      {
+        "proposal_number": 2,
+        "team": ["رضا", "سارا", "علی"],
+        "approvals": ["رضا", "سارا", "نیما"],
+        "rejections": ["علی", "مریم"],
+        "status": "approved"
+      }
+    ],
+    "mission": {
+      "team": ["رضا", "سارا", "علی"],
+      "success_count": 1,
+      "fail_count": 2,
+      "result": "fail"
+    },
+    "narrative_summary": "ماموریت دوم شکست خورد. پیشنهاد اول مریم رد شد و آخرش یه تیم با رضا و سارا (هردو خبیث) و علی رفت ماموریت. دو تا کارت شکست رو شد که واضح بود رضا و سارا هردوشون خراب کردن.",
+    "turning_points": [
+      "شکست این ماموریت بازی رو به سمت خطر برد.",
+      "مریم و علی همون لحظه رضا و سارا رو متهم کردن."
+    ],
+    "mvp": null,
+    "suspicious_players": [
+      {
+        "player": "رضا",
+        "reason": "یکی از دو کارت شکست از طرف اون بود."
+      },
+      {
+        "player": "سارا",
+        "reason": "یکی از دو کارت شکست از طرف اون بود."
+      }
+    ]
+  },
+  {
+    "gameId": "test-game-001",
+    "completedAt": "2026-04-24T18:38:00Z",
+    "quest_number": 3,
+    "leader_display_name": "علی",
+    "proposals": [
+      {
+        "proposal_number": 1,
+        "team": ["علی", "مریم"],
+        "approvals": ["علی", "مریم", "نیما"],
+        "rejections": ["رضا", "سارا"],
+        "status": "approved"
+      }
+    ],
+    "mission": {
+      "team": ["علی", "مریم"],
+      "success_count": 2,
+      "fail_count": 0,
+      "result": "success"
+    },
+    "narrative_summary": "علی یه تیم پاک و محکم از خودش و مریم پیشنهاد داد. با وجود رای منفی رضا و سارا، تیم تایید شد و ماموریت موفق شد. با این موفقیت، خوب‌ها سه تا ماموریت بردن و بازی رسید به مرحله قاتل.",
+    "turning_points": [
+      "علی با یه تیم دو نفره هوشمندانه، شانس خرابکاری رو صفر کرد.",
+      "این رای‌گیری نهایی کرد که رضا و سارا جفت خبیث‌ن."
+    ],
+    "mvp": {
+      "player": "علی",
+      "reason": "تیم برنده رو پیشنهاد داد و خوب‌ها رو به پیروزی نزدیک کرد."
+    },
+    "suspicious_players": [
+      {
+        "player": "رضا",
+        "reason": "رای منفی دادن به یه تیم پاک دیگه جای شکی نذاشت."
+      },
+      {
+        "player": "سارا",
+        "reason": "بازم با رضا هم‌رای بود."
+      }
+    ]
+  }
+]

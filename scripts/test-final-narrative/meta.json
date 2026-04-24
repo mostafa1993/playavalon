@@ -1,0 +1,38 @@
+{
+  "gameId": "test-game-001",
+  "roomCode": "TEST1",
+  "playerCount": 5,
+  "startedAt": "2026-04-24T18:00:00Z",
+  "players": [
+    {
+      "display_name": "علی",
+      "seat_number": 1,
+      "role": "good",
+      "special_role": "Merlin"
+    },
+    {
+      "display_name": "مریم",
+      "seat_number": 2,
+      "role": "good",
+      "special_role": "Percival"
+    },
+    {
+      "display_name": "رضا",
+      "seat_number": 3,
+      "role": "evil",
+      "special_role": "Assassin"
+    },
+    {
+      "display_name": "سارا",
+      "seat_number": 4,
+      "role": "evil",
+      "special_role": "Morgana"
+    },
+    {
+      "display_name": "نیما",
+      "seat_number": 5,
+      "role": "good",
+      "special_role": null
+    }
+  ]
+}

@@ -848,6 +848,90 @@ Optimization, mobile support, and quality-of-life features that aren't needed to
 
 ---
 
+## Phase 4 — Deployment Tiers (Self-Host Friendly)
+
+### Goal
+Let someone deploy this project on their own VM without needing LiveKit bandwidth or AI credentials. Offer three tiers so operators pick the one that fits their resources, and the frontend gracefully hides features that aren't deployed.
+
+### 4.1 Tier Definitions
+
+| Tier          | Services running                     | External deps needed                          | Who it's for                                      |
+|---------------|--------------------------------------|-----------------------------------------------|---------------------------------------------------|
+| **Minimal**   | app + redis                          | Supabase only                                 | Low-bandwidth VMs; players use Zoom/Meet for video |
+| **Video**     | app + redis + livekit                | Supabase + LiveKit keys                       | Standard self-host; game + built-in video         |
+| **Full**      | app + redis + livekit + agent        | Supabase + LiveKit + Azure STT + GCP Vertex  | Operators with AI credentials                     |
+
+### 4.2 Coupling Findings (from code audit, Apr 2026)
+
+- **Agent service is cleanly separable.** Omitting the `agent` service in `docker-compose.yml` already works — the game runs fine, `game_reviews` rows stay pending, and `/api/reviews/[gameId]` returns `{ enabled: false }`. **Zero code changes** needed for the "Video" tier.
+- **LiveKit is tightly coupled.** `useLiveKit()` wraps the whole app at [Providers.tsx](src/app/Providers.tsx) and is called directly by [game/[gameId]/page.tsx](src/app/game/[gameId]/page.tsx). `/api/livekit/token/route.ts` throws if `LIVEKIT_*` env vars are missing. The "Minimal" tier requires real refactoring (~200 LOC).
+- **No existing feature flags.** `.env.example` treats LiveKit and Supabase as equally required.
+
+### 4.3 Mechanism — Docker Compose Profiles
+
+Single `docker-compose.yml` (no more `docker-compose-prod-local.yml` drift). Services tagged with profiles:
+
+```yaml
+services:
+  app:      { ... }               # always on
+  redis:    { ... }               # always on
+  traefik:  { ... }               # always on (prod)
+  livekit:  { profiles: [video] }
+  agent:    { profiles: [ai], depends_on: [livekit] }
+```
+
+Operator commands:
+```bash
+docker compose up                                    # Minimal
+docker compose --profile video up                    # Video
+docker compose --profile video --profile ai up       # Full
+```
+
+Profiles beat multiple compose files because there's one source of truth — no drift between `minimal.yml` and `full.yml`.
+
+### 4.4 Frontend Feature Flags
+
+New public env vars (read at build time by Next.js):
+
+| Flag                            | Default | Effect when `false`                                               |
+|---------------------------------|---------|-------------------------------------------------------------------|
+| `NEXT_PUBLIC_ENABLE_LIVEKIT`    | `true`  | `LiveKitProvider` becomes a no-op; video UI hidden; view mode locked to Game |
+| `NEXT_PUBLIC_ENABLE_AI_REVIEW`  | `true`  | `AIReviewToggle` hidden in lobby; review API short-circuits to disabled |
+
+### 4.5 Implementation Work (Minimal tier — the only tier that needs code)
+
+Spec 048 covers these changes:
+
+1. [Providers.tsx](src/app/Providers.tsx) — wrap `<LiveKitProvider>` in `NEXT_PUBLIC_ENABLE_LIVEKIT` conditional
+2. [useLiveKit.tsx](src/contexts/useLiveKit.tsx) — return a no-op context (`isConnected: false`, `connect: noop`) when disabled
+3. [game/[gameId]/page.tsx](src/app/game/[gameId]/page.tsx) — hide video panels, force `view: 'game'` mode when disabled
+4. [api/livekit/token/route.ts](src/app/api/livekit/token/route.ts) — return `503` when disabled (stop throwing on missing env)
+5. [AIReviewToggle.tsx](src/components/lobby/AIReviewToggle.tsx) — hide when `NEXT_PUBLIC_ENABLE_AI_REVIEW=false`
+6. New `.env.minimal.example` and README section documenting the three tiers
+
+Estimated effort: half a day, mostly mechanical conditionals.
+
+### 4.6 Env File Strategy
+
+- `.env.example` — full-tier template (current behavior)
+- `.env.video.example` — Supabase + LiveKit only (new)
+- `.env.minimal.example` — Supabase only (new)
+
+Each explicitly sets `NEXT_PUBLIC_ENABLE_LIVEKIT` / `NEXT_PUBLIC_ENABLE_AI_REVIEW` so the build matches the compose profile.
+
+### 4.7 Documentation Work
+
+- README: add a "Deployment tiers" section with the table from 4.1 and a decision tree ("Do you have bandwidth for video? → yes: Video tier. No: Minimal tier. Do you also have Azure + GCP credentials? → yes: Full tier")
+- Keep `docker-compose-dev.yml` unchanged — dev workflow assumes full stack
+- Retire `docker-compose-prod-local.yml` if profiles cover its use cases (verify during 048)
+
+### 4.8 Non-Goals
+
+- Mixing tiers at runtime (e.g., "enable video later without redeploy") — not worth the complexity.
+- Graceful per-credential degradation inside the agent (e.g., Azure-only, no GCP). Agent stays all-or-nothing; if you want the agent, bring all its credentials.
+
+---
+
 ## Feature Summary by Spec Number
 
 Continuing the existing spec numbering:
@@ -883,6 +967,9 @@ Continuing the existing spec numbering:
 | 045   | Rejoin video after disconnect    | 3     | P0       |
 | 046   | Screen sharing                   | 3     | P2       |
 | 047   | Game session recording           | 3     | P2       |
+| 048   | Minimal deploy — feature flags + compose profiles | 4 | P1 |
+| 049   | `.env.minimal.example` + `.env.video.example`      | 4 | P1 |
+| 050   | Deployment-tier docs in README                      | 4 | P2 |
 
 ---
 
