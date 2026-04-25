@@ -54,6 +54,11 @@ export function GameOver({
 }: GameOverProps) {
   const router = useRouter();
 
+  // Whether the viewer is Merlin themselves — they should not take the quiz.
+  const isMerlin = !!currentPlayerId && players.some(
+    (p) => p.id === currentPlayerId && p.revealed_special_role === 'merlin'
+  );
+
   // Feature 010: Quiz state management
   const [quizDisplayState, setQuizDisplayState] = useState<QuizDisplayState>(
     hasMerlin ? 'quiz' : 'roles'
@@ -99,6 +104,15 @@ export function GameOver({
   useEffect(() => {
     checkQuizState();
   }, [checkQuizState]);
+
+  // Merlin doesn't render the quiz UI (which would normally poll), so poll
+  // here while waiting so the results screen shows when others finish voting.
+  useEffect(() => {
+    if (!isMerlin || !hasMerlin || !gameId) return;
+    if (quizDisplayState !== 'quiz') return;
+    const interval = setInterval(checkQuizState, 5000);
+    return () => clearInterval(interval);
+  }, [isMerlin, hasMerlin, gameId, quizDisplayState, checkQuizState]);
 
   // Handle quiz completion
   const handleQuizComplete = useCallback(() => {
@@ -156,15 +170,27 @@ export function GameOver({
           </h1>
         </div>
 
-        {/* Merlin Quiz */}
+        {/* Merlin Quiz — Merlin themselves doesn't take it; they wait for results. */}
         <div className="w-full max-w-md">
-          <MerlinQuiz
-            gameId={gameId}
-            players={players}
-            currentPlayerId={currentPlayerId}
-            onQuizComplete={handleQuizComplete}
-            onSkip={handleShowRoles}
-          />
+          {isMerlin ? (
+            <div className="bg-gradient-to-br from-slate-900 to-indigo-900 rounded-xl p-6 shadow-2xl border border-indigo-500/30 text-center">
+              <div className="text-5xl mb-3">🧙</div>
+              <h2 className="text-xl font-bold text-indigo-300 mb-2">
+                You are Merlin!
+              </h2>
+              <p className="text-slate-300 text-sm">
+                Other players are guessing who you were. Results will appear here once everyone has voted.
+              </p>
+            </div>
+          ) : (
+            <MerlinQuiz
+              gameId={gameId}
+              players={players}
+              currentPlayerId={currentPlayerId}
+              onQuizComplete={handleQuizComplete}
+              onSkip={handleShowRoles}
+            />
+          )}
         </div>
 
         {/* Skip directly to role reveal */}

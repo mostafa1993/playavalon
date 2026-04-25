@@ -85,6 +85,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    // Merlin knows their own role, so they don't take the quiz.
+    if (user.id === merlinRole.player_id) {
+      return NextResponse.json(
+        { error: { code: 'MERLIN_CANNOT_VOTE', message: 'Merlin cannot vote in the quiz' } },
+        { status: 403 }
+      );
+    }
+
     // Check if player already voted
     const existingVote = await getPlayerQuizVote(supabase, gameId, user.id);
     if (existingVote) {
@@ -131,19 +139,23 @@ export async function POST(request: Request, { params }: RouteParams) {
       .select('player_id, players!inner(last_activity_at)')
       .eq('room_id', game.room_id);
 
-    const connectedCount = (roomPlayers || []).filter(rp => {
+    const connectedRoomPlayers = (roomPlayers || []).filter(rp => {
       const lastActivity = (rp.players as { last_activity_at?: string })?.last_activity_at;
       if (!lastActivity) return true;
       const timeSince = Date.now() - new Date(lastActivity).getTime();
       return timeSince < 60000;
-    }).length;
+    });
+
+    // Merlin doesn't vote, so exclude them from the expected voter count.
+    const merlinIsConnected = connectedRoomPlayers.some(rp => rp.player_id === merlinRole.player_id);
+    const connectedCount = connectedRoomPlayers.length - (merlinIsConnected ? 1 : 0);
 
     const quizComplete = isQuizComplete(voteCount, connectedCount, quizStartTime);
 
     const response: MerlinQuizVoteResponse = {
       success: true,
       votes_submitted: voteCount,
-      total_players: game.player_count,
+      total_players: game.player_count - 1,
       quiz_complete: quizComplete,
     };
 
@@ -223,12 +235,17 @@ export async function GET(request: Request, { params }: RouteParams) {
       .select('player_id, players!inner(last_activity_at)')
       .eq('room_id', game.room_id);
 
-    const connectedCount = (roomPlayers || []).filter(rp => {
+    const connectedRoomPlayers = (roomPlayers || []).filter(rp => {
       const lastActivity = (rp.players as { last_activity_at?: string })?.last_activity_at;
       if (!lastActivity) return true;
       const timeSince = Date.now() - new Date(lastActivity).getTime();
       return timeSince < 60000;
-    }).length;
+    });
+
+    // Merlin doesn't vote, so exclude them from the expected voter count.
+    const merlinPlayerId = merlinRole!.player_id;
+    const merlinIsConnected = connectedRoomPlayers.some(rp => rp.player_id === merlinPlayerId);
+    const connectedCount = connectedRoomPlayers.length - (merlinIsConnected ? 1 : 0);
 
     const voteStatus = getPlayerVoteStatus(votes, user.id);
 
@@ -243,7 +260,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       has_voted: voteStatus.hasVoted,
       has_skipped: voteStatus.hasSkipped,
       votes_submitted: votes.length,
-      total_players: game.player_count,
+      total_players: game.player_count - 1,
       connected_players: connectedCount,
       quiz_started_at: quizStartTime,
       timeout_seconds: QUIZ_TIMEOUT_SECONDS,
