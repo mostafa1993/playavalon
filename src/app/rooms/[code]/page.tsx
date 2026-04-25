@@ -361,7 +361,7 @@ export default function RoomPage() {
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
       {videoConnected && (
-        <div className={`fixed top-6 ${isLayoutSwapped && viewMode === 'split' ? 'left-4 origin-top-left' : 'right-4 origin-top-right'} scale-[1.15] flex items-center gap-4 px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50`}>
+        <div className={`fixed top-6 ${isLayoutSwapped && viewMode === 'split' ? 'left-4 origin-top-left' : 'right-4 origin-top-right'} md:scale-[1.15] flex items-center gap-2 md:gap-4 px-2 md:px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50`}>
           <ViewModeToggle />
           <div className="flex items-center gap-2">
             <LayoutSwapButton />
