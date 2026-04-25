@@ -541,8 +541,8 @@ export interface MerlinQuizState {
   has_voted: boolean;             // Whether current player has voted
   has_skipped: boolean;           // Whether current player skipped
   votes_submitted: number;        // Count of votes submitted
-  total_players: number;          // Total players in game
-  connected_players: number;      // Currently connected players
+  total_players: number;          // Expected voters (player count minus Merlin, who doesn't vote)
+  connected_players: number;      // Currently connected non-Merlin players
   quiz_started_at: string | null; // First vote timestamp for timeout calc
   timeout_seconds: number;        // Quiz timeout (60)
 }
@@ -557,6 +557,7 @@ export interface MerlinQuizResults {
   actual_merlin_display_name: string;
   total_votes: number;
   skipped_count: number;
+  vote_breakdown: MerlinQuizVoteBreakdownEntry[];
 }
 
 /**
@@ -568,6 +569,16 @@ export interface MerlinQuizResultEntry {
   vote_count: number;
   is_most_voted: boolean;
   is_actual_merlin: boolean;
+}
+
+/**
+ * Per-voter breakdown of who voted for whom (null target = skipped)
+ */
+export interface MerlinQuizVoteBreakdownEntry {
+  voter_id: string;
+  voter_display_name: string;
+  suspected_player_id: string | null;
+  suspected_display_name: string | null;
 }
 
 /**

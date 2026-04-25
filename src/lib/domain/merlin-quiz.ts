@@ -6,7 +6,13 @@
  * Quiz only appears at game_over phase when Merlin was in the game.
  */
 
-import type { MerlinQuizVote, MerlinQuizResults, MerlinQuizResultEntry, GamePlayer } from '@/types/game';
+import type {
+  MerlinQuizVote,
+  MerlinQuizResults,
+  MerlinQuizResultEntry,
+  MerlinQuizVoteBreakdownEntry,
+  GamePlayer,
+} from '@/types/game';
 
 /**
  * Quiz timeout in seconds
@@ -163,6 +169,19 @@ export function calculateQuizResults(
   // Find actual Merlin
   const merlin = players.find(p => p.id === merlinId);
 
+  // Per-voter breakdown, ordered by submission time so it reads chronologically
+  const playerById = new Map(players.map(p => [p.id, p]));
+  const vote_breakdown: MerlinQuizVoteBreakdownEntry[] = [...votes]
+    .sort((a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime())
+    .map(v => ({
+      voter_id: v.voter_player_id,
+      voter_display_name: playerById.get(v.voter_player_id)?.display_name ?? 'Unknown',
+      suspected_player_id: v.suspected_player_id,
+      suspected_display_name: v.suspected_player_id
+        ? playerById.get(v.suspected_player_id)?.display_name ?? 'Unknown'
+        : null,
+    }));
+
   return {
     quiz_complete: true,
     results,
@@ -170,6 +189,7 @@ export function calculateQuizResults(
     actual_merlin_display_name: merlin?.display_name ?? 'Unknown',
     total_votes: votes.length - skippedCount,
     skipped_count: skippedCount,
+    vote_breakdown,
   };
 }
 

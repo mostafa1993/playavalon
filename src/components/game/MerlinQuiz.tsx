@@ -353,7 +353,7 @@ export function MerlinQuiz({
       <div className="mt-4 pt-4 border-t border-slate-700/50">
         <div className="flex justify-between items-center text-xs text-slate-400">
           <span>Votes: {quizState.votes_submitted}/{quizState.total_players}</span>
-          <span>Connected: {quizState.connected_players}</span>
+          <span>Voters: {quizState.connected_players}</span>
         </div>
       </div>
     </div>

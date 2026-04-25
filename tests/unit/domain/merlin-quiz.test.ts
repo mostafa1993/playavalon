@@ -203,6 +203,36 @@ describe('merlin-quiz', () => {
       });
     });
 
+    it('should include per-voter breakdown sorted by submission time', () => {
+      const votes: MerlinQuizVote[] = [
+        { id: 'v1', game_id: 'g1', voter_player_id: 'player-2', suspected_player_id: 'player-3', submitted_at: '2025-01-01T00:01:00Z' },
+        { id: 'v2', game_id: 'g1', voter_player_id: 'player-1', suspected_player_id: 'player-3', submitted_at: '2025-01-01T00:00:00Z' },
+        { id: 'v3', game_id: 'g1', voter_player_id: 'player-4', suspected_player_id: null, submitted_at: '2025-01-01T00:02:00Z' },
+      ];
+
+      const result = calculateQuizResults(votes, players, 'player-3');
+
+      expect(result.vote_breakdown).toHaveLength(3);
+      // Sorted by submitted_at ascending
+      expect(result.vote_breakdown[0].voter_id).toBe('player-1');
+      expect(result.vote_breakdown[0].voter_display_name).toBe('Alice');
+      expect(result.vote_breakdown[0].suspected_player_id).toBe('player-3');
+      expect(result.vote_breakdown[0].suspected_display_name).toBe('Charlie');
+
+      expect(result.vote_breakdown[1].voter_id).toBe('player-2');
+      expect(result.vote_breakdown[1].voter_display_name).toBe('Bob');
+
+      // Skipped vote: target is null
+      expect(result.vote_breakdown[2].voter_id).toBe('player-4');
+      expect(result.vote_breakdown[2].suspected_player_id).toBeNull();
+      expect(result.vote_breakdown[2].suspected_display_name).toBeNull();
+    });
+
+    it('should return empty vote_breakdown when no votes', () => {
+      const result = calculateQuizResults([], players, 'player-1');
+      expect(result.vote_breakdown).toEqual([]);
+    });
+
     it('should sort results by vote count descending', () => {
       const votes: MerlinQuizVote[] = [
         { id: 'v1', game_id: 'g1', voter_player_id: 'player-1', suspected_player_id: 'player-3', submitted_at: '2025-01-01T00:00:00Z' },

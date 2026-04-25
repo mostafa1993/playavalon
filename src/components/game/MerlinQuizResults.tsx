@@ -180,6 +180,44 @@ export function MerlinQuizResults({
         </div>
       )}
 
+      {/* Per-voter breakdown — shown only after Merlin is revealed,
+          to avoid leaking Merlin's identity by omission from the voter list. */}
+      {showMerlin && results.vote_breakdown.length > 0 && (
+        <div className="bg-slate-800/50 rounded-lg p-4 mb-4">
+          <h3 className="text-sm font-medium text-slate-400 mb-3">Who voted for whom</h3>
+          <ul className="space-y-1.5">
+            {results.vote_breakdown.map((entry) => {
+              const skipped = entry.suspected_player_id === null;
+              const guessedMerlin =
+                !skipped && entry.suspected_player_id === results.actual_merlin_id;
+              return (
+                <li
+                  key={entry.voter_id}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <span className="text-slate-200 font-medium truncate mr-2">
+                    {entry.voter_display_name}
+                  </span>
+                  <span className="text-slate-500 mx-2">→</span>
+                  <span
+                    className={`truncate ${
+                      skipped
+                        ? 'text-slate-500 italic'
+                        : guessedMerlin
+                        ? 'text-blue-300 font-medium'
+                        : 'text-slate-300'
+                    }`}
+                  >
+                    {skipped ? 'skipped' : entry.suspected_display_name}
+                    {guessedMerlin && ' 🧙'}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       {/* Continue Button */}
       <button
         onClick={onShowRoles}
