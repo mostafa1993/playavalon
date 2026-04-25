@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Providers } from './Providers';
 import '@/styles/globals.css';
 
@@ -6,6 +6,11 @@ export const metadata: Metadata = {
   title: 'Avalon Online - Social Deduction Game',
   description: 'Play the classic social deduction game Avalon with friends online. Create rooms, assign roles, and discover who serves Arthur or Mordred.',
   keywords: ['Avalon', 'board game', 'social deduction', 'multiplayer', 'online game'],
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({

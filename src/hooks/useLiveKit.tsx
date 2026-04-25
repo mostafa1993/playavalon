@@ -60,6 +60,8 @@ interface LiveKitContextValue {
   isLayoutSwapped: boolean;
   /** Toggle the split-mode layout swap */
   toggleLayoutSwap: () => void;
+  /** True when the viewport is narrow (phone). Split mode is disabled in this case. */
+  isNarrowViewport: boolean;
   /** Chat messages */
   chatMessages: ChatMessage[];
   /** Send a chat message */
@@ -129,11 +131,33 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     reactionTimersRef.current.set(identity, t);
   }, []);
 
-  // View mode — persisted in localStorage
+  // Narrow viewport (phone) — split panels don't fit, so we force a single-pane mode.
+  const NARROW_QUERY = '(max-width: 767px)';
+  const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia(NARROW_QUERY).matches;
+  });
+
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_QUERY);
+    const handler = (e: MediaQueryListEvent) => setIsNarrowViewport(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // View mode — persisted in localStorage. On phones, never start in 'split'.
   const [viewMode, setViewModeState] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') return 'split';
-    return (localStorage.getItem('avalon-view-mode') as ViewMode) || 'split';
+    const saved = (localStorage.getItem('avalon-view-mode') as ViewMode) || 'split';
+    if (saved === 'split' && window.matchMedia(NARROW_QUERY).matches) return 'video';
+    return saved;
   });
+
+  // If the viewport becomes narrow while in split mode, fall back to video (don't persist —
+  // keep the user's split preference for when they're back on a wider screen).
+  useEffect(() => {
+    if (isNarrowViewport && viewMode === 'split') setViewModeState('video');
+  }, [isNarrowViewport, viewMode]);
 
   const setViewMode = useCallback((mode: ViewMode) => {
     setViewModeState(mode);
@@ -169,9 +193,13 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
         !(e.target instanceof HTMLElement && e.target.isContentEditable)
       ) {
         setViewModeState((prev) => {
-          const modes: ViewMode[] = ['video', 'split', 'game'];
+          const isNarrow = window.matchMedia(NARROW_QUERY).matches;
+          const modes: ViewMode[] = isNarrow ? ['video', 'game'] : ['video', 'split', 'game'];
           const delta = isArrowRight ? 1 : -1;
-          const next = modes[(modes.indexOf(prev) + delta + modes.length) % modes.length];
+          const idx = modes.indexOf(prev);
+          // If current mode isn't in the available list (shouldn't happen, but safe), reset to first.
+          const baseIdx = idx === -1 ? 0 : idx;
+          const next = modes[(baseIdx + delta + modes.length) % modes.length];
           localStorage.setItem('avalon-view-mode', next);
           return next;
         });
@@ -467,6 +495,7 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     setViewMode,
     isLayoutSwapped,
     toggleLayoutSwap,
+    isNarrowViewport,
     chatMessages,
     sendChatMessage,
     unreadCount,

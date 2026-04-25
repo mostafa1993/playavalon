@@ -14,13 +14,16 @@ const modes: { value: ViewMode; label: string; Icon: LucideIcon }[] = [
 ];
 
 export function ViewModeToggle() {
-  const { viewMode, setViewMode, isConnected } = useLiveKit();
+  const { viewMode, setViewMode, isConnected, isNarrowViewport } = useLiveKit();
 
   if (!isConnected) return null;
 
+  // Split mode doesn't fit on narrow (phone) viewports — hide that option.
+  const visibleModes = isNarrowViewport ? modes.filter((m) => m.value !== 'split') : modes;
+
   return (
     <div className="flex items-center bg-avalon-navy rounded-lg border border-avalon-dark-border p-0.5">
-      {modes.map((mode) => (
+      {visibleModes.map((mode) => (
         <button
           key={mode.value}
           onClick={() => setViewMode(mode.value)}
