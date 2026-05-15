@@ -5,18 +5,18 @@
  * prompt file. This module loads the file, fills its template vars,
  * and invokes Gemini with the configured defaults.
  *
- * Authentication uses Application Default Credentials; set
- * GOOGLE_APPLICATION_CREDENTIALS to a service-account JSON path, or rely
- * on the GCE/Workload Identity metadata server in production.
+ * Uses the unified @google/genai SDK in Vertex AI mode. Authentication is
+ * via Application Default Credentials; set GOOGLE_APPLICATION_CREDENTIALS
+ * to a service-account JSON path, or rely on the GCE/Workload Identity
+ * metadata server in production.
  */
 
 import {
-  VertexAI,
+  GoogleGenAI,
   HarmCategory,
   HarmBlockThreshold,
-  type GenerativeModel,
   type SafetySetting,
-} from '@google-cloud/vertexai';
+} from '@google/genai';
 import type { AgentConfig } from '../config.js';
 import { loadPrompt, fill } from './prompts.js';
 import { isNetworkError, retry } from '../util/retry.js';
@@ -49,53 +49,41 @@ export interface LLMClient {
 export type PromptVars = Record<string, string | number | null | undefined>;
 
 export function createLLMClient(config: AgentConfig): LLMClient {
-  const vertex = new VertexAI({
+  const ai = new GoogleGenAI({
+    vertexai: true,
     project: config.gemini.project,
     location: config.gemini.location,
   });
-
-  const modelCache = new Map<string, GenerativeModel>();
-  const getModel = (modelName: string, mime?: string, temperature?: number, maxTokens?: number) => {
-    const key = `${modelName}|${mime ?? ''}|${temperature ?? ''}|${maxTokens ?? ''}`;
-    const existing = modelCache.get(key);
-    if (existing) return existing;
-    const model = vertex.getGenerativeModel({
-      model: modelName,
-      generationConfig: {
-        temperature: temperature ?? 0.4,
-        maxOutputTokens: maxTokens ?? 4096,
-        ...(mime ? { responseMimeType: mime } : {}),
-      },
-      safetySettings: SAFETY_SETTINGS,
-    });
-    modelCache.set(key, model);
-    return model;
-  };
 
   const invoke = async (promptFile: string, vars: PromptVars): Promise<string> => {
     const prompt = await loadPrompt(config.storage.promptsDir, promptFile);
     const systemText = GAME_CONTEXT_PREAMBLE + fill(prompt.system, vars);
     const userText = fill(prompt.user, vars);
 
-    const model = getModel(
-      prompt.model ?? config.gemini.model,
-      prompt.response_mime_type,
-      prompt.temperature,
-      prompt.max_output_tokens
-    );
+    const modelName = prompt.model ?? config.gemini.model;
+    const temperature = prompt.temperature ?? 0.4;
+    const maxOutputTokens = prompt.max_output_tokens ?? 4096;
+    const responseMimeType = prompt.response_mime_type;
 
     return retry(
       async () => {
-        const res = await model.generateContent({
-          systemInstruction: { role: 'system', parts: [{ text: systemText }] },
-          contents: [{ role: 'user', parts: [{ text: userText }] }],
+        const res = await ai.models.generateContent({
+          model: modelName,
+          contents: userText,
+          config: {
+            systemInstruction: systemText,
+            temperature,
+            maxOutputTokens,
+            safetySettings: SAFETY_SETTINGS,
+            ...(responseMimeType ? { responseMimeType } : {}),
+          },
         });
 
-        const candidate = res.response?.candidates?.[0];
-        const text = candidate?.content?.parts?.[0]?.text;
+        const text = res.text;
         if (typeof text !== 'string' || text.length === 0) {
+          const candidate = res.candidates?.[0];
           const finishReason = candidate?.finishReason ?? 'UNKNOWN';
-          const blockReason = res.response?.promptFeedback?.blockReason;
+          const blockReason = res.promptFeedback?.blockReason;
           throw new Error(
             `LLM returned empty response for prompt ${promptFile} (finishReason=${finishReason}${
               blockReason ? `, promptBlocked=${blockReason}` : ''
@@ -132,13 +120,12 @@ export function createLLMClient(config: AgentConfig): LLMClient {
 }
 
 /**
- * Decide whether a Vertex AI error is worth retrying.
+ * Decide whether a Gemini API error is worth retrying.
  *
- * The Vertex SDK surfaces:
- *   - gRPC-style errors with numeric `code` (UNAVAILABLE=14, DEADLINE_EXCEEDED=4,
- *     RESOURCE_EXHAUSTED=8) or matching `.status` string,
- *   - wrapped Google API errors exposing `.code` as HTTP status,
- *   - plain Errors whose message contains "429" / "503" / "unavailable".
+ * The @google/genai SDK surfaces:
+ *   - HTTP-style errors with numeric `code` (408/429/5xx),
+ *   - gRPC status numbers/strings (UNAVAILABLE, DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED),
+ *   - plain Errors whose message contains 429/503/"unavailable" etc.
  *
  * Anything else (safety block, invalid arg, auth) is non-transient.
  */

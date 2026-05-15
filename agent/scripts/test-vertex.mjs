@@ -10,7 +10,7 @@
  *   docker compose exec agent node scripts/test-vertex.mjs
  */
 
-import { VertexAI } from '@google-cloud/vertexai';
+import { GoogleGenAI } from '@google/genai';
 
 const project = process.env.GCP_PROJECT_ID;
 const location = process.env.GCP_LLM_LOCATION || 'us-central1';
@@ -28,8 +28,6 @@ console.log('[probe] model:', modelName);
 console.log('[probe] GOOGLE_APPLICATION_CREDENTIALS:', creds || '(unset)');
 
 // Patch global fetch to print the raw error body when Google returns non-2xx.
-// The Vertex SDK swallows the body into a JSON.parse failure — we want to see
-// the actual HTML/text Google sent.
 const origFetch = globalThis.fetch;
 globalThis.fetch = async (...args) => {
   const res = await origFetch(...args);
@@ -42,16 +40,16 @@ globalThis.fetch = async (...args) => {
   return res;
 };
 
-const vertex = new VertexAI({ project, location });
-const model = vertex.getGenerativeModel({
-  model: modelName,
-  generationConfig: { temperature: 0.2, maxOutputTokens: 64 },
-});
+const ai = new GoogleGenAI({ vertexai: true, project, location });
 
 try {
   const t0 = Date.now();
-  const result = await model.generateContent('Say hello in 5 words.');
-  const reply = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text ?? '(no text)';
+  const res = await ai.models.generateContent({
+    model: modelName,
+    contents: 'Say hello in 5 words.',
+    config: { temperature: 0.2, maxOutputTokens: 64 },
+  });
+  const reply = res.text ?? '(no text)';
   console.log(`[probe] OK — ${Date.now() - t0}ms`);
   console.log('[probe] reply:', reply.trim());
   process.exit(0);
