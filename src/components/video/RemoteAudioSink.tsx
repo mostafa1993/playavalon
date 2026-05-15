@@ -59,9 +59,14 @@ export function RemoteAudioSink() {
       setParticipants(Array.from(room.remoteParticipants.values()));
     };
     update();
+    // ParticipantConnected is suppressed by livekit-client for participants
+    // already in the room at join time, so listen for Connected too to pick
+    // up the initial set once room.remoteParticipants is populated.
+    room.on(RoomEvent.Connected, update);
     room.on(RoomEvent.ParticipantConnected, update);
     room.on(RoomEvent.ParticipantDisconnected, update);
     return () => {
+      room.off(RoomEvent.Connected, update);
       room.off(RoomEvent.ParticipantConnected, update);
       room.off(RoomEvent.ParticipantDisconnected, update);
     };
