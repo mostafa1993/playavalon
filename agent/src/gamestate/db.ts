@@ -30,9 +30,10 @@ export async function findActiveReviewGame(
 ): Promise<ActiveGameRow | null> {
   const { data, error } = await db
     .from('games')
-    .select('id, room_id, rooms!inner(code, ai_review_enabled)')
+    .select('id, room_id, phase, rooms!inner(code, ai_review_enabled)')
     .eq('rooms.ai_review_enabled', true)
     .is('ended_at', null)
+    .neq('phase', 'game_over')
     .limit(1);
 
   if (error) throw error;
