@@ -64,14 +64,13 @@ async function sendBroadcast<T>(
     const supabase = createServiceClient();
     const channelName = getChannelName(gameId);
 
-    // Create or get channel and send broadcast
+    // Create or get channel and send broadcast.
+    // httpSend is the explicit REST path — required from server-side code
+    // that isn't subscribed to the channel (channel.send's auto-fallback
+    // to REST is being removed by Supabase).
     const channel = supabase.channel(channelName);
 
-    await channel.send({
-      type: 'broadcast',
-      event,
-      payload,
-    });
+    await channel.httpSend(event, payload);
 
     logBroadcast(event, gameId, true);
   } catch (error) {

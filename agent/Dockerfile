@@ -22,5 +22,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY package.json ./
 COPY prompts ./prompts
+COPY scripts ./scripts
 
 CMD ["node", "dist/index.js"]
