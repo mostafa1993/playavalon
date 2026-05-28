@@ -106,6 +106,30 @@ services:
     stop_grace_period: 120s
     restart: unless-stopped
 
+  # Daily keepalive — hits /api/cleanup so Supabase sees activity and doesn't
+  # auto-pause after 7 days of idle (free tier). The endpoint also archives
+  # stale rooms, so this doubles as the room-cleanup cron.
+  # Requires CLEANUP_API_KEY in .env (any random string; also referenced by
+  # src/app/api/cleanup/route.ts).
+  cleanup-cron:
+    profiles: [prod]
+    image: alpine:3.19
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      CLEANUP_API_KEY: ${CLEANUP_API_KEY}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache curl >/dev/null
+        while true; do
+          curl -fsS -H "x-api-key: $$CLEANUP_API_KEY" http://app:3000/api/cleanup > /dev/null \
+            && echo "[$$(date -u +%FT%TZ)] cleanup keepalive ok" \
+            || echo "[$$(date -u +%FT%TZ)] cleanup keepalive FAILED"
+          sleep 86400
+        done
+
 volumes:
   letsencrypt:
   redis_data:
