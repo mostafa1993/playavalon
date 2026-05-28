@@ -86,6 +86,10 @@ interface LiveKitContextValue {
   setControlsLocked: (locked: boolean) => void;
   /** Broadcast a lock/unlock to everyone in the LiveKit room and apply locally */
   broadcastControlsLock: (locked: boolean) => void;
+  /** Manager action: ask a participant to mute their mic (they can unmute themselves) */
+  forceMuteParticipant: (identity: string) => void;
+  /** True while a manager force-mute is in effect and the local user cannot unmute yet */
+  unmuteLocked: boolean;
 }
 
 const LiveKitContext = createContext<LiveKitContextValue | null>(null);
@@ -93,8 +97,11 @@ const LiveKitContext = createContext<LiveKitContextValue | null>(null);
 const CHAT_TOPIC = 'chat';
 const REACTION_TOPIC = 'reaction';
 const CONTROLS_LOCK_TOPIC = 'controls-lock';
+const FORCE_MUTE_TOPIC = 'force-mute';
 const REACTION_COOLDOWN_MS = 2000;
 const REACTION_DURATION_MS = 3000;
+// After a manager force-mute, the muted player cannot unmute themselves for this long.
+const FORCE_MUTE_UNMUTE_LOCK_MS = 10000;
 
 export function LiveKitProvider({ children }: { children: ReactNode }) {
   const [room, setRoom] = useState<Room | null>(null);
@@ -113,6 +120,10 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
   const [isReactionCoolingDown, setIsReactionCoolingDown] = useState(false);
   const lastReactionSentRef = useRef(0);
   const reactionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // Self-unmute lock applied after a manager force-mute (auto-expires).
+  const [unmuteLocked, setUnmuteLocked] = useState(false);
+  const unmuteLockUntilRef = useRef(0);
+  const unmuteLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [controlsLocked, setControlsLockedState] = useState(false);
   const controlsLockedRef = useRef(false);
 
@@ -320,6 +331,24 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
           const locked = new TextDecoder().decode(payload) === '1';
           setControlsLocked(locked);
         }
+
+        // Force-mute: a manager asked someone to mute. Only act if it targets us.
+        // The mic is cut and self-unmute is locked for FORCE_MUTE_UNMUTE_LOCK_MS,
+        // after which the player may unmute themselves again.
+        if (topic === FORCE_MUTE_TOPIC) {
+          const targetIdentity = new TextDecoder().decode(payload);
+          if (targetIdentity === room.localParticipant.identity) {
+            room.localParticipant.setMicrophoneEnabled(false).catch(() => {});
+            setIsMicEnabled(false);
+            unmuteLockUntilRef.current = Date.now() + FORCE_MUTE_UNMUTE_LOCK_MS;
+            setUnmuteLocked(true);
+            if (unmuteLockTimerRef.current) clearTimeout(unmuteLockTimerRef.current);
+            unmuteLockTimerRef.current = setTimeout(() => {
+              unmuteLockUntilRef.current = 0;
+              setUnmuteLocked(false);
+            }, FORCE_MUTE_UNMUTE_LOCK_MS);
+          }
+        }
       });
 
       // Sync local mic/camera state whenever tracks change
@@ -397,6 +426,8 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
 
     try {
       const enabled = room.localParticipant.isMicrophoneEnabled;
+      // Block self-unmute while a manager force-mute cooldown is active.
+      if (!enabled && Date.now() < unmuteLockUntilRef.current) return;
       await room.localParticipant.setMicrophoneEnabled(!enabled);
       setIsMicEnabled(!enabled);
     } catch (err) {
@@ -454,6 +485,17 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setIsReactionCoolingDown(false), REACTION_COOLDOWN_MS);
   }, [scheduleReactionClear]);
 
+  // Manager → target: publish the target's identity on the force-mute topic.
+  // The target's client mutes itself on receipt (see DataReceived handler).
+  const forceMuteParticipant = useCallback((identity: string) => {
+    const room = roomRef.current;
+    if (!room || !identity) return;
+    const payload = new TextEncoder().encode(identity);
+    room.localParticipant
+      .publishData(payload, { topic: FORCE_MUTE_TOPIC, reliable: true })
+      .catch(() => {});
+  }, []);
+
   const markChatRead = useCallback(() => {
     setUnreadCount(0);
   }, []);
@@ -473,6 +515,7 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
       }
       reactionTimersRef.current.forEach((t) => clearTimeout(t));
       reactionTimersRef.current.clear();
+      if (unmuteLockTimerRef.current) clearTimeout(unmuteLockTimerRef.current);
     };
   }, []);
 
@@ -503,6 +546,8 @@ export function LiveKitProvider({ children }: { children: ReactNode }) {
     controlsLocked,
     setControlsLocked,
     broadcastControlsLock,
+    forceMuteParticipant,
+    unmuteLocked,
   };
 
   return (

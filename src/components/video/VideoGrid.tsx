@@ -21,6 +21,8 @@ interface VideoGridProps {
   timerProgress?: number | null;
   /** Time remaining in seconds */
   timeRemaining?: number | null;
+  /** Whether the local user is the room manager (enables force-mute on remote tiles) */
+  isManager?: boolean;
 }
 
 /**
@@ -50,7 +52,7 @@ function calcLayout(count: number, containerW: number, containerH: number, gap: 
   return { cols: bestCols, rows: bestRows, tileSize: bestSize };
 }
 
-export function VideoGrid({ participants, seatNumbers, fullscreen = false, currentSpeaker, timerColor, timerProgress, timeRemaining }: VideoGridProps) {
+export function VideoGrid({ participants, seatNumbers, fullscreen = false, currentSpeaker, timerColor, timerProgress, timeRemaining, isManager = false }: VideoGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState({ cols: 1, rows: 1, tileSize: 200 });
 
@@ -109,7 +111,7 @@ export function VideoGrid({ participants, seatNumbers, fullscreen = false, curre
             <VideoTile
               participant={participant}
               seatNumber={seatNumbers?.get(participant.identity)}
-
+              isManager={isManager}
               isCurrentSpeaker={currentSpeaker === participant.identity}
               timerColor={currentSpeaker === participant.identity ? timerColor : null}
               timerProgress={currentSpeaker === participant.identity ? timerProgress : null}

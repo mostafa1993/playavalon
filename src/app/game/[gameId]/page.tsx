@@ -196,7 +196,7 @@ export default function GamePage() {
               ${viewMode === 'game' ? 'hidden' : 'flex-1 min-w-0 h-full'}
             `}
           >
-            <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls currentSpeaker={activeTimer.currentSpeaker} timerColor={activeTimer.timerColor} timerProgress={activeTimer.timerProgress} timeRemaining={activeTimer.timeRemaining} />
+            <VideoRoom roomCode={roomCode} seatNumbers={seatNumbers} fullscreen hideControls isManager={isManager} currentSpeaker={activeTimer.currentSpeaker} timerColor={activeTimer.timerColor} timerProgress={activeTimer.timerProgress} timeRemaining={activeTimer.timeRemaining} />
           </div>
         )}
       </div>

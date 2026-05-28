@@ -9,7 +9,8 @@
  * 3. Clockwise from there, skipping leader
  * 4. Leader speaks last (defends)
  *
- * Timer: 50s countdown, auto-mute at 55s
+ * Timer: 50s countdown, auto-advance when it hits 0 (no auto-mute — the manager
+ * force-mutes manually; see forceMuteParticipant in useLiveKit)
  * Manager controls: start timer (auto-advance + auto-reset)
  */
 
@@ -18,7 +19,6 @@ import { RoomEvent, type RemoteParticipant } from 'livekit-client';
 import { useLiveKit } from './useLiveKit';
 
 const TIMER_DURATION = 50; // seconds
-const AUTO_MUTE_DELAY = 5; // seconds after timer ends
 const TIMER_TOPIC = 'speaking-timer';
 
 export interface SpeakingTimerState {
@@ -100,7 +100,6 @@ export function useSpeakingTimer({
     questNumber: 0,
   });
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
-  const autoMutedRef = useRef(false);
   const advancedRef = useRef(false);
   // Track which leader we last generated the speaking order for.
   // Regenerating on leader change (instead of quest change) correctly handles
@@ -150,7 +149,6 @@ export function useSpeakingTimer({
       try {
         const data = JSON.parse(new TextDecoder().decode(payload)) as SpeakingTimerState;
         setState(data);
-        autoMutedRef.current = false;
         advancedRef.current = false;
       } catch {}
     };
@@ -188,7 +186,6 @@ export function useSpeakingTimer({
         timerStartTime: null,
       };
       pendingBroadcastRef.current = newState;
-      autoMutedRef.current = false;
       advancedRef.current = false;
       return newState;
     });
@@ -201,32 +198,23 @@ export function useSpeakingTimer({
       return;
     }
 
-    // Reset guards when timer starts
+    // Reset guard when timer starts
     advancedRef.current = false;
-    autoMutedRef.current = false;
 
     const interval = setInterval(() => {
       const elapsed = (Date.now() - state.timerStartTime!) / 1000;
       const remaining = Math.max(0, state.timerDuration - elapsed);
       setTimeRemaining(remaining);
 
-      // Auto-mute at timerDuration + AUTO_MUTE_DELAY
-      if (elapsed >= state.timerDuration + AUTO_MUTE_DELAY && !autoMutedRef.current) {
-        autoMutedRef.current = true;
-        if (room && state.speakingOrder[state.currentSpeakerIndex] === room.localParticipant.identity) {
-          room.localParticipant.setMicrophoneEnabled(false);
-        }
-      }
-
-      // Auto-advance once after auto-mute (manager only, guard prevents repeated calls)
-      if (elapsed >= state.timerDuration + AUTO_MUTE_DELAY && isManager && !advancedRef.current) {
+      // Auto-advance the moment the timer hits 0 (manager only, guard prevents repeated calls)
+      if (elapsed >= state.timerDuration && isManager && !advancedRef.current) {
         advancedRef.current = true;
         advanceToNext();
       }
     }, 200);
 
     return () => clearInterval(interval);
-  }, [state.timerRunning, state.timerStartTime, state.timerDuration, state.currentSpeakerIndex, room, isManager, advanceToNext, state.speakingOrder]);
+  }, [state.timerRunning, state.timerStartTime, state.timerDuration, isManager, advanceToNext]);
 
   // Start timer (manager only). No-op when all speakers done.
   const startTimer = useCallback(() => {
@@ -239,7 +227,6 @@ export function useSpeakingTimer({
         timerStartTime: Date.now(),
       };
       pendingBroadcastRef.current = newState;
-      autoMutedRef.current = false;
       advancedRef.current = false;
       return newState;
     });

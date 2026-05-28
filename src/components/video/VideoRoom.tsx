@@ -36,9 +36,11 @@ interface VideoRoomProps {
   timerProgress?: number | null;
   /** Time remaining */
   timeRemaining?: number | null;
+  /** Whether the local user is the room manager (enables force-mute on remote tiles) */
+  isManager?: boolean;
 }
 
-export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscreen = false, hideControls = false, inline = false, currentSpeaker, timerColor, timerProgress, timeRemaining }: VideoRoomProps) {
+export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscreen = false, hideControls = false, inline = false, currentSpeaker, timerColor, timerProgress, timeRemaining, isManager = false }: VideoRoomProps) {
   const {
     room,
     isConnected,
@@ -161,7 +163,7 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
     // Parent handles header/controls — just render the grid
     return (
       <div className={`${fullscreen ? 'h-full' : ''} bg-avalon-navy`}>
-        <VideoGrid participants={participants} seatNumbers={seatNumbers} fullscreen={fullscreen} currentSpeaker={currentSpeaker} timerColor={timerColor} timerProgress={timerProgress} timeRemaining={timeRemaining} />
+        <VideoGrid participants={participants} seatNumbers={seatNumbers} fullscreen={fullscreen} currentSpeaker={currentSpeaker} timerColor={timerColor} timerProgress={timerProgress} timeRemaining={timeRemaining} isManager={isManager} />
       </div>
     );
   }
@@ -176,7 +178,7 @@ export function VideoRoom({ roomCode, autoConnect = false, seatNumbers, fullscre
 
       {/* Video grid */}
       <div className="flex-1 min-h-0">
-        <VideoGrid participants={participants} seatNumbers={seatNumbers} fullscreen={fullscreen} currentSpeaker={currentSpeaker} timerColor={timerColor} timerProgress={timerProgress} timeRemaining={timeRemaining} />
+        <VideoGrid participants={participants} seatNumbers={seatNumbers} fullscreen={fullscreen} currentSpeaker={currentSpeaker} timerColor={timerColor} timerProgress={timerProgress} timeRemaining={timeRemaining} isManager={isManager} />
       </div>
 
       {/* Controls */}

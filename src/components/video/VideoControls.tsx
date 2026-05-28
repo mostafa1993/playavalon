@@ -16,26 +16,30 @@ export function VideoControls() {
     toggleMic,
     disconnect,
     controlsLocked,
+    unmuteLocked,
   } = useLiveKit();
 
   if (!isConnected) return null;
 
   const lockTitle = 'Locked while roles are being viewed';
+  // After a manager force-mute, self-unmute is blocked briefly.
+  const micUnmuteBlocked = unmuteLocked && !isMicEnabled;
+  const micDisabled = controlsLocked || micUnmuteBlocked;
 
   return (
     <div className="flex items-center justify-center gap-1">
       <button
         onClick={toggleMic}
-        disabled={controlsLocked}
+        disabled={micDisabled}
         className={`
           p-1.5 rounded-full flex items-center justify-center transition-colors
-          ${controlsLocked
+          ${micDisabled
             ? 'text-avalon-text-muted opacity-50 cursor-not-allowed'
             : isMicEnabled
               ? 'text-avalon-text hover:text-avalon-gold'
               : 'text-red-400 hover:text-red-300'}
         `}
-        title={controlsLocked ? lockTitle : isMicEnabled ? 'Mute mic' : 'Unmute mic'}
+        title={controlsLocked ? lockTitle : micUnmuteBlocked ? 'Host muted you — you can unmute in a few seconds' : isMicEnabled ? 'Mute mic' : 'Unmute mic'}
       >
         {isMicEnabled ? <Mic size={18} /> : <MicOff size={18} />}
       </button>

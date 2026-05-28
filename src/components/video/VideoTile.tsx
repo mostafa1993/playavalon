@@ -28,11 +28,13 @@ interface VideoTileProps {
   isCurrentSpeaker?: boolean;
   /** Time remaining in seconds */
   timeRemaining?: number | null;
+  /** Whether the local user is the room manager (shows force-mute on remote tiles) */
+  isManager?: boolean;
 }
 
-export function VideoTile({ participant, seatNumber, timerColor, timerProgress, isCurrentSpeaker = false, timeRemaining }: VideoTileProps) {
+export function VideoTile({ participant, seatNumber, timerColor, timerProgress, isCurrentSpeaker = false, timeRemaining, isManager = false }: VideoTileProps) {
   const isSpeaking = useIsSpeaking(participant);
-  const { toggleMic, toggleCamera, reactions, controlsLocked } = useLiveKit();
+  const { toggleMic, toggleCamera, reactions, controlsLocked, forceMuteParticipant, unmuteLocked } = useLiveKit();
   const reaction = reactions.get(participant.identity);
   // Force re-render when tracks change on this participant
   const [, setTrackUpdate] = useState(0);
@@ -65,6 +67,9 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
   const isMicOn = isLocal
     ? !!micPublication?.track && !micPublication.isMuted
     : !!micPublication?.isSubscribed && !micPublication.isMuted;
+  // After a manager force-mute, this player can't unmute themselves for a few seconds.
+  const micUnmuteBlocked = isLocal && unmuteLocked && !isMicOn;
+  const micDisabled = controlsLocked || micUnmuteBlocked;
   const rawName = participant.name || participant.identity;
   const name = seatNumber ? `${seatNumber} - ${rawName}` : rawName;
   const initials = rawName
@@ -233,14 +238,14 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
         <div className="absolute bottom-7 right-1.5 flex items-center gap-1 z-20">
           <button
             onClick={(e) => { e.stopPropagation(); toggleMic(); }}
-            disabled={controlsLocked}
+            disabled={micDisabled}
             className={`
               p-1.5 rounded-full bg-black/60 backdrop-blur-sm transition-colors
-              ${controlsLocked
+              ${micDisabled
                 ? 'text-white/50 opacity-50 cursor-not-allowed'
                 : isMicOn ? 'text-white hover:text-avalon-gold' : 'text-red-400 hover:text-red-300'}
             `}
-            title={controlsLocked ? 'Locked while roles are being viewed' : isMicOn ? 'Mute mic' : 'Unmute mic'}
+            title={controlsLocked ? 'Locked while roles are being viewed' : micUnmuteBlocked ? 'Host muted you — you can unmute in a few seconds' : isMicOn ? 'Mute mic' : 'Unmute mic'}
           >
             {isMicOn ? <Mic size={14} /> : <MicOff size={14} />}
           </button>
@@ -256,6 +261,20 @@ export function VideoTile({ participant, seatNumber, timerColor, timerProgress, 
             title={controlsLocked ? 'Locked while roles are being viewed' : isCameraOn ? 'Turn off camera' : 'Turn on camera'}
           >
             {isCameraOn ? <Video size={14} /> : <VideoOff size={14} />}
+          </button>
+        </div>
+      )}
+
+      {/* Manager force-mute (remote tiles only) — shown while the player's mic is on.
+          This is a one-time mute; the player can unmute themselves again. */}
+      {!isLocal && isManager && isMicOn && (
+        <div className="absolute bottom-7 right-1.5 flex items-center gap-1 z-20">
+          <button
+            onClick={(e) => { e.stopPropagation(); forceMuteParticipant(participant.identity); }}
+            className="p-1.5 rounded-full bg-black/60 backdrop-blur-sm text-white hover:text-red-300 transition-colors"
+            title="Force mute (player can unmute themselves)"
+          >
+            <MicOff size={14} />
           </button>
         </div>
       )}
