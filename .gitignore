@@ -65,3 +65,4 @@ supabase/.temp
 /secrets/
 *.json.key
 
+.tmp

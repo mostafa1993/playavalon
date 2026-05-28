@@ -1,5 +1,22 @@
+# docker-compose.yml — unified prod + local-test stack.
+#
+# Modes:
+#   docker compose up
+#     Local-test mode: app + livekit + redis, accessible on http://localhost:3000.
+#     Uses ${ENV_FILE:-.env.local} for the app's runtime envs.
+#
+#   docker compose --profile prod up
+#     Full prod: adds traefik (TLS/routing for playavalon.fun) + agent (AI reviewer).
+#     Set ENV_FILE=.env (and ACME_EMAIL, NEXT_PUBLIC_SUPABASE_*, LIVEKIT_API_*) in your
+#     shell or .env file. You can also set COMPOSE_PROFILES=prod to skip the --profile
+#     flag on every invocation.
+#
+# Note: docker-compose-dev.yml is separate — it runs LiveKit alone for use alongside
+# `npm run dev` on the host.
+
 services:
   traefik:
+    profiles: [prod]
     image: traefik:v3
     command:
       - --providers.docker=true
@@ -28,9 +45,15 @@ services:
       args:
         - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
         - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-    env_file: .env
+    env_file: ${ENV_FILE:-.env.local}
     depends_on:
       - redis
+      - livekit
+    ports:
+      # Bind to 127.0.0.1 so the port is reachable on the host (local mode + VM
+      # debugging) without exposing the non-TLS port externally in prod — traefik
+      # still routes externals via the docker network.
+      - "127.0.0.1:3000:3000"
     volumes:
       # Read-only mount of the agent's data so the review API can serve summary files.
       - game_reviews_data:/data/games:ro
@@ -45,7 +68,7 @@ services:
     image: livekit/livekit-server:latest
     network_mode: host
     volumes:
-      - ./livekit.yaml:/etc/livekit.yaml
+      - ${LIVEKIT_CONFIG:-./livekit-dev.yaml}:/etc/livekit.yaml
     command: ["--config", "/etc/livekit.yaml"]
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
@@ -55,12 +78,17 @@ services:
     image: redis:7-alpine
     volumes:
       - redis_data:/data
+    ports:
+      # Bind to 127.0.0.1 so redis-cli works from the host without externally
+      # exposing redis in prod.
+      - "127.0.0.1:6379:6379"
     restart: unless-stopped
 
   agent:
+    profiles: [prod]
     build:
       context: ./agent
-    env_file: .env
+    env_file: ${ENV_FILE:-.env.local}
     environment:
       # Agent talks to LiveKit on the same host — skip Traefik/TLS, which
       # would otherwise trip rustls cert validation in @livekit/rtc-node.
