@@ -12,6 +12,10 @@ const PUBLIC_ROUTES = [
 
 const PUBLIC_API_PREFIXES = [
   '/api/auth/',
+  // Cron-callable endpoint — has its own header-based auth (x-api-key /
+  // Bearer CRON_SECRET) in the route handler, so middleware must let it
+  // through (the cron has no Supabase session cookie).
+  '/api/cleanup',
 ];
 
 function isPublicRoute(pathname: string): boolean {
