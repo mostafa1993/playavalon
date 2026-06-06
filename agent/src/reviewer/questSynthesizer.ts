@@ -45,7 +45,16 @@ async function loadTurnSummariesForQuest(
     }
   }
 
-  loaded.sort((a, b) => a.turnIndex - b.turnIndex);
+  // Order by (roundIndex, turnIndex). Old files written before roundIndex
+  // existed have it undefined → treat as round 0, preserving their order
+  // relative to each other while putting newer multi-round games in true
+  // chronological order.
+  loaded.sort((a, b) => {
+    const ar = a.roundIndex ?? 0;
+    const br = b.roundIndex ?? 0;
+    if (ar !== br) return ar - br;
+    return a.turnIndex - b.turnIndex;
+  });
   return loaded;
 }
 
@@ -71,6 +80,7 @@ export async function synthesizeQuest(
 
   // Reduce to just the summary + minimal context to keep the prompt focused.
   const turnSummaries = turns.map((t) => ({
+    round_index: t.roundIndex ?? 0,
     turn_index: t.turnIndex,
     speaker: t.speakerDisplayName,
     duration_sec: t.durationSec,

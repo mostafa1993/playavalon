@@ -53,10 +53,15 @@ export interface TurnSummary {
   notable_quotes: string[];
 }
 
-/** Written to turn_<q>_<i>.json after STT + summarizer complete. */
+/** Written to turn_<q>_<r>_<i>.json after STT + summarizer complete. */
 export interface TurnJson {
   gameId: string;
   questNumber: number;
+  /** Proposal round within the quest (0-indexed). Bumps when the leader
+   *  rotates within the same quest (= a proposal got rejected, new round
+   *  starts). Optional for backward compat with files written before this
+   *  field existed; treat absent as round 0. */
+  roundIndex?: number;
   turnIndex: number;
   speakerIdentity: string;
   speakerDisplayName: string;
@@ -81,6 +86,9 @@ export interface DossierJson {
   playerId: string;
   playerDisplayName: string;
   lastQuestNumber: number;
+  /** Highest roundIndex seen for this player in lastQuestNumber. Optional
+   *  for backward compat with dossier files written before this existed. */
+  lastRoundIndex?: number;
   lastTurnIndex: number;
   updatedAt: string;
   behavior_arc: string[];
@@ -178,6 +186,8 @@ export interface SummaryJson {
 /** One completed turn before STT has been applied. */
 export interface RecordedTurn {
   questNumber: number;
+  /** Proposal round within the quest (0-indexed). See TurnJson.roundIndex. */
+  roundIndex: number;
   turnIndex: number;
   speakerIdentity: string;
   speakerDisplayName: string;

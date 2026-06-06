@@ -111,6 +111,7 @@ async function processSpeaker(
         // The assassin phase has no proposal/leader context; pass 0 and
         // 'unknown' so the summarizer doesn't try to interpret them.
         questNumber: 0,
+        roundIndex: 0,
         turnIndex: 0,
         speakerDisplayName: seg.displayName,
         speakerSeat: speakerMeta?.seat_number ?? null,

@@ -20,6 +20,7 @@ function emptyDossier(playerId: string, playerDisplayName: string): DossierJson 
     playerId,
     playerDisplayName,
     lastQuestNumber: 0,
+    lastRoundIndex: 0,
     lastTurnIndex: -1,
     updatedAt: new Date().toISOString(),
     behavior_arc: [],
@@ -60,6 +61,7 @@ export interface DossierUpdateContext {
   playerDisplayName: string;
   playerSeat: number | null;
   questNumber: number;
+  roundIndex: number;
   turnIndex: number;
   turnSummary: TurnSummary;
 }
@@ -101,12 +103,13 @@ async function doUpdate(
     ctx.playerDisplayName
   );
 
-  const updated = await llm.runJson<Omit<DossierJson, 'playerId' | 'playerDisplayName' | 'lastQuestNumber' | 'lastTurnIndex' | 'updatedAt'>>(
+  const updated = await llm.runJson<Omit<DossierJson, 'playerId' | 'playerDisplayName' | 'lastQuestNumber' | 'lastRoundIndex' | 'lastTurnIndex' | 'updatedAt'>>(
     'dossier-update.yml',
     {
       player_display_name: ctx.playerDisplayName,
       player_seat: ctx.playerSeat,
       quest_number: ctx.questNumber,
+      round_index: ctx.roundIndex,
       turn_index: ctx.turnIndex,
       previous_dossier: JSON.stringify(
         {
@@ -127,6 +130,7 @@ async function doUpdate(
     playerId: ctx.playerId,
     playerDisplayName: ctx.playerDisplayName,
     lastQuestNumber: ctx.questNumber,
+    lastRoundIndex: ctx.roundIndex,
     lastTurnIndex: ctx.turnIndex,
     updatedAt: new Date().toISOString(),
     behavior_arc: Array.isArray(updated.behavior_arc) ? updated.behavior_arc : previous.behavior_arc,

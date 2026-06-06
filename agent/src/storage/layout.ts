@@ -3,11 +3,18 @@
  * Base dir is configured via DATA_DIR (default /data/games).
  *
  *   <dataDir>/<gameId>/meta.json
- *   <dataDir>/<gameId>/turn_<quest>_<idx>.json
+ *   <dataDir>/<gameId>/turn_<quest>_<round>_<idx>.json
  *   <dataDir>/<gameId>/dossier_<playerIdentity>.json   (M3+)
  *   <dataDir>/<gameId>/quest_<n>.json                  (M3+)
  *   <dataDir>/<gameId>/summary.fa.json                 (M4+)
  *   <dataDir>/<gameId>/summary.en.json                 (M4+)
+ *
+ * The <round> segment is the proposal-round-within-quest counter and was
+ * added to fix the bug where a rejected proposal's discussion was
+ * overwritten by the next round's discussion (currentSpeakerIndex resets
+ * to 0 on every leader rotation, so the old `turn_<q>_<idx>` scheme
+ * collided). Old data files (3-segment names) are still readable; the
+ * questSynthesizer prefix-match `turn_<q>_` matches both naming schemes.
  */
 
 import path from 'node:path';
@@ -24,11 +31,12 @@ export function turnPath(
   dataDir: string,
   gameId: string,
   questNumber: number,
+  roundIndex: number,
   turnIndex: number
 ): string {
   return path.join(
     gameDir(dataDir, gameId),
-    `turn_${questNumber}_${turnIndex}.json`
+    `turn_${questNumber}_${roundIndex}_${turnIndex}.json`
   );
 }
 

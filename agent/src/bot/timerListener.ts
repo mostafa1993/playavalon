@@ -27,6 +27,14 @@ export class TimerListener {
   private activeSpeaker: string | null = null;
   private lastQuestNumber = 0;
   private onQuestChanged: QuestChangeHandler;
+  // Round-detection state. The proposal-round counter within the current
+  // quest. Bumps when the leader rotates within the same quest (= a proposal
+  // got rejected and a new round starts). Resets to 0 when the quest advances.
+  // `lastLeaderIdentity` is speakingOrder[0] from the last broadcast we
+  // processed — comparing it to the current speakingOrder[0] is the cheapest
+  // reliable signal that the leader changed.
+  private currentRoundIndex = 0;
+  private lastLeaderIdentity: string | null = null;
 
   constructor(
     segmenter: TurnSegmenter,
@@ -48,6 +56,13 @@ export class TimerListener {
     return this.lastQuestNumber;
   }
 
+  /** Current proposal round within the current quest (0-indexed).
+   *  Exposed for diagnostics; the value is also carried on every emitted
+   *  turn record. */
+  getCurrentRoundIndex(): number {
+    return this.currentRoundIndex;
+  }
+
   /** Called by the bot on every `dataReceived` matching TIMER_TOPIC. */
   onPayload(payload: Uint8Array): void {
     let state: SpeakingTimerState;
@@ -60,9 +75,13 @@ export class TimerListener {
     // Detect quest increment BEFORE driving speaker transitions, so the
     // previous quest's active speaker (if any) is flushed under the old
     // quest number by the setActiveSpeaker/clearActiveSpeaker call below.
-    if (state.questNumber > this.lastQuestNumber) {
+    const questAdvanced = state.questNumber > this.lastQuestNumber;
+    if (questAdvanced) {
       const previous = this.lastQuestNumber;
       this.lastQuestNumber = state.questNumber;
+      // A new quest is by definition round 0; the new leader starts fresh.
+      this.currentRoundIndex = 0;
+      this.lastLeaderIdentity = null;
       if (previous > 0) {
         try {
           this.onQuestChanged(previous, state.questNumber);
@@ -70,6 +89,20 @@ export class TimerListener {
           console.error('[timer] onQuestChanged handler threw:', err);
         }
       }
+    }
+
+    // Detect proposal-round increment WITHIN the current quest. Signal:
+    // speakingOrder[0] (the leader) changed since the last broadcast we
+    // processed. This rotates only on rejected proposals (and Lady-of-Lake
+    // investigations, which we treat the same — a new round of discussion).
+    // Skip if quest just advanced (already handled above).
+    const currentLeader = state.speakingOrder?.[0] ?? null;
+    if (!questAdvanced && currentLeader && this.lastLeaderIdentity !== null
+        && currentLeader !== this.lastLeaderIdentity) {
+      this.currentRoundIndex += 1;
+    }
+    if (currentLeader) {
+      this.lastLeaderIdentity = currentLeader;
     }
 
     const newSpeaker = this.deriveActiveSpeaker(state);
@@ -84,7 +117,10 @@ export class TimerListener {
         identity: newSpeaker,
         displayName: this.resolver.displayName(newSpeaker),
         questNumber: state.questNumber,
-        // Use the speaker index *at turn start* as the turn index within the quest.
+        // Proposal round within the quest — bumps on leader rotation so
+        // each round's transcripts get unique file names.
+        roundIndex: this.currentRoundIndex,
+        // Speaker's position within this round's speaking order.
         turnIndex: state.currentSpeakerIndex,
         startedAt: new Date(),
       });

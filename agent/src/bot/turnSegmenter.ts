@@ -15,6 +15,7 @@ interface ActiveState {
   identity: string;
   displayName: string;
   questNumber: number;
+  roundIndex: number;
   turnIndex: number;
   startedAt: Date;
   frames: Int16Array[];
@@ -38,6 +39,7 @@ export class TurnSegmenter {
     identity: string;
     displayName: string;
     questNumber: number;
+    roundIndex: number;
     turnIndex: number;
     startedAt: Date;
   }): void {
@@ -85,6 +87,7 @@ export class TurnSegmenter {
 
     this.onFinished({
       questNumber: a.questNumber,
+      roundIndex: a.roundIndex,
       turnIndex: a.turnIndex,
       speakerIdentity: a.identity,
       speakerDisplayName: a.displayName,

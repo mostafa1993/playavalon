@@ -122,7 +122,7 @@ async function startSession(
 
   const onTurnFinished = (turn: RecordedTurn) => {
     const task = processTurn(config, db, llm, game.id, meta, turn).catch((err) => {
-      log.error(`turn Q${turn.questNumber}/${turn.turnIndex} failed`, err);
+      log.error(`turn Q${turn.questNumber}/R${turn.roundIndex}/${turn.turnIndex} failed`, err);
     });
     pendingTurns.add(task);
     void task.finally(() => pendingTurns.delete(task));
@@ -365,7 +365,7 @@ async function processTurn(
 ): Promise<void> {
   const log = buildSessionLogger(gameId);
   log.info(
-    `turn Q${turn.questNumber}/${turn.turnIndex} speaker=${turn.speakerDisplayName} (${turn.durationSec.toFixed(1)}s)`
+    `turn Q${turn.questNumber}/R${turn.roundIndex}/${turn.turnIndex} speaker=${turn.speakerDisplayName} (${turn.durationSec.toFixed(1)}s)`
   );
 
   // 1. STT (or silence skip) + proposal context fetch in parallel.
@@ -374,7 +374,7 @@ async function processTurn(
   const silent = isSilent(turn.pcm, config.audio.silenceRmsThreshold);
   if (silent) {
     log.info(
-      `turn Q${turn.questNumber}/${turn.turnIndex} skipped STT (RMS below silence threshold)`
+      `turn Q${turn.questNumber}/R${turn.roundIndex}/${turn.turnIndex} skipped STT (RMS below silence threshold)`
     );
   }
 
@@ -415,7 +415,7 @@ async function processTurn(
       transcriptCorrected = true;
     } catch (err) {
       log.error(
-        `transcript correction failed for Q${turn.questNumber}/${turn.turnIndex}, using raw STT`,
+        `transcript correction failed for Q${turn.questNumber}/R${turn.roundIndex}/${turn.turnIndex}, using raw STT`,
         err
       );
     }
@@ -434,6 +434,7 @@ async function processTurn(
         : 'unknown';
       summary = await summarizeTurn(llm, {
         questNumber: turn.questNumber,
+        roundIndex: turn.roundIndex,
         turnIndex: turn.turnIndex,
         speakerDisplayName: turn.speakerDisplayName,
         speakerSeat: speaker?.seat_number ?? null,
@@ -443,7 +444,7 @@ async function processTurn(
         transcript,
       });
     } catch (err) {
-      log.error(`summarizer failed for Q${turn.questNumber}/${turn.turnIndex}`, err);
+      log.error(`summarizer failed for Q${turn.questNumber}/R${turn.roundIndex}/${turn.turnIndex}`, err);
     }
   }
 
@@ -451,6 +452,7 @@ async function processTurn(
   const out: TurnJson = {
     gameId,
     questNumber: turn.questNumber,
+    roundIndex: turn.roundIndex,
     turnIndex: turn.turnIndex,
     speakerIdentity: turn.speakerIdentity,
     speakerDisplayName: turn.speakerDisplayName,
@@ -465,7 +467,7 @@ async function processTurn(
     summary,
   };
   await writeJsonAtomic(
-    turnPath(config.storage.dataDir, gameId, turn.questNumber, turn.turnIndex),
+    turnPath(config.storage.dataDir, gameId, turn.questNumber, turn.roundIndex, turn.turnIndex),
     out
   );
 
@@ -480,6 +482,7 @@ async function processTurn(
         playerDisplayName: turn.speakerDisplayName,
         playerSeat: speaker?.seat_number ?? null,
         questNumber: turn.questNumber,
+        roundIndex: turn.roundIndex,
         turnIndex: turn.turnIndex,
         turnSummary: summary,
       });
