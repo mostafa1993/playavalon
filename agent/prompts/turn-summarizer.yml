@@ -27,7 +27,7 @@ system: |
   - Return ONLY the JSON object, no surrounding prose or markdown.
 
 user: |
-  Quest {{quest_number}}, turn index {{turn_index}} (0-based within this quest).
+  Quest {{quest_number}}, proposal round {{round_index}} (0-based; bumps every time a proposal is rejected and a new round of discussion starts), turn index {{turn_index}} (0-based speaker position within this round).
   Speaker: {{speaker_display_name}} (seat {{speaker_seat}}).
   Leader this round: {{leader_display_name}}.
   Proposed team for this round: {{proposed_team}}.

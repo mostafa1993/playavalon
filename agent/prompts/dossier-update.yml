@@ -31,7 +31,7 @@ system: |
 
 user: |
   Player: {{player_display_name}} (seat {{player_seat}}).
-  Quest {{quest_number}}, turn index {{turn_index}}.
+  Quest {{quest_number}}, proposal round {{round_index}} (0-based within the quest), turn index {{turn_index}}.
 
   Previous dossier (JSON):
   {{previous_dossier}}

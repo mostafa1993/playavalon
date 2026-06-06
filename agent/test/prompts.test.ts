@@ -40,6 +40,7 @@ const prompts: Array<{
     mime: 'application/json',
     expectedVars: [
       'quest_number',
+      'round_index',
       'turn_index',
       'speaker_display_name',
       'speaker_seat',
@@ -56,6 +57,7 @@ const prompts: Array<{
       'player_display_name',
       'player_seat',
       'quest_number',
+      'round_index',
       'turn_index',
       'previous_dossier',
       'turn_summary',
