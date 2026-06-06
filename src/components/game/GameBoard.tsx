@@ -31,7 +31,10 @@ interface GameBoardProps {
 
 export function GameBoard({ gameId }: GameBoardProps) {
   const router = useRouter();
-  const { gameState, currentUserId: currentPlayerId, playerRole, specialRole, roomCode, loading, error, refetch } = useGameState(gameId);
+  const { gameState, currentUserId: currentPlayerId, playerRole, specialRole, roomCode, isManager, loading, error, refetch } = useGameState(gameId);
+  // Feature 023: end-intro action state for the manager button
+  const [isEndingIntro, setIsEndingIntro] = useState(false);
+  const [endIntroError, setEndIntroError] = useState<string | null>(null);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showRulebook, setShowRulebook] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -350,8 +353,67 @@ export function GameBoard({ gameId }: GameBoardProps) {
           </div>
         ) : (
           <>
-            {/* Team Building */}
-            {game.phase === 'team_building' && (
+            {/* Feature 023: Intro round — runs once at game start before any
+                proposal. Hides TeamProposal and shows an info banner; the
+                manager has a button to end it, which then reveals the propose
+                form with the SAME leader. */}
+            {game.phase === 'team_building' && game.in_intro_phase && (
+              <div className="card py-4 px-4 space-y-3">
+                <div>
+                  <h3 className="font-display text-avalon-gold text-lg font-bold mb-1">
+                    Intro round in progress
+                  </h3>
+                  <p className="text-avalon-silver/80 text-sm">
+                    The first leader is opening the game. Everyone speaks in
+                    order; no team is proposed yet. When the round is over,
+                    the manager will end the intro and the same leader will
+                    propose Quest 1.
+                  </p>
+                </div>
+
+                {isManager ? (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      disabled={isEndingIntro}
+                      onClick={async () => {
+                        setIsEndingIntro(true);
+                        setEndIntroError(null);
+                        try {
+                          const res = await fetch(`/api/games/${gameId}/end-intro`, {
+                            method: 'POST',
+                          });
+                          if (!res.ok) {
+                            const data = await res.json().catch(() => ({}));
+                            throw new Error(data?.error?.message || 'Failed to end intro');
+                          }
+                          // Realtime broadcast will trigger a re-fetch for everyone;
+                          // also refetch locally so the manager's UI updates immediately.
+                          await refetch();
+                        } catch (err) {
+                          setEndIntroError(err instanceof Error ? err.message : 'Failed to end intro');
+                        } finally {
+                          setIsEndingIntro(false);
+                        }
+                      }}
+                      className="w-full py-2 px-4 bg-avalon-gold text-avalon-midnight rounded-lg font-display font-bold hover:bg-avalon-gold-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isEndingIntro ? 'Ending intro…' : 'End intro round'}
+                    </button>
+                    {endIntroError && (
+                      <p className="text-red-400 text-xs">{endIntroError}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-avalon-silver/60 text-xs italic">
+                    Waiting for the room manager to end the intro round…
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Team Building (after intro is done, or when no intro was enabled) */}
+            {game.phase === 'team_building' && !game.in_intro_phase && (
               <TeamProposal
                 gameId={gameId}
                 players={players}

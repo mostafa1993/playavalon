@@ -70,6 +70,20 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    // Feature 023: block proposals while the intro round is still in progress.
+    // The room manager must end the intro first (POST /end-intro).
+    if (game.in_intro_phase) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'INTRO_IN_PROGRESS',
+            message: 'The intro round is in progress. The manager must end it before a team can be proposed.',
+          },
+        },
+        { status: 409 }
+      );
+    }
+
     // Validate proposer is current leader
     const proposerValidation = validateProposer(user.id, game.current_leader_id);
     if (!proposerValidation.valid) {

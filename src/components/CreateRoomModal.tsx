@@ -12,7 +12,11 @@ import type { RoleConfig } from '@/types/role-config';
 interface CreateRoomModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateRoom: (expectedPlayers: number, roleConfig: RoleConfig) => Promise<void>;
+  onCreateRoom: (
+    expectedPlayers: number,
+    roleConfig: RoleConfig,
+    introPhaseEnabled: boolean,
+  ) => Promise<void>;
   isLoading?: boolean;
 }
 
@@ -28,11 +32,12 @@ export function CreateRoomModal({
 }: CreateRoomModalProps) {
   const [expectedPlayers, setExpectedPlayers] = useState(5);
   const [roleConfig, setRoleConfig] = useState<RoleConfig>({});
+  const [introPhaseEnabled, setIntroPhaseEnabled] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onCreateRoom(expectedPlayers, roleConfig);
+    await onCreateRoom(expectedPlayers, roleConfig, introPhaseEnabled);
   };
 
   // T029b: Reset invalid options when player count changes
@@ -170,6 +175,30 @@ export function CreateRoomModal({
               expectedPlayers={expectedPlayers}
               className="mt-4"
             />
+
+            {/* Feature 023: Intro round toggle */}
+            <div className="mt-4 pt-4 border-t border-avalon-silver/10">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={introPhaseEnabled}
+                  onChange={(e) => setIntroPhaseEnabled(e.target.checked)}
+                  className="mt-1 w-4 h-4 accent-avalon-gold cursor-pointer"
+                />
+                <div>
+                  <div className="font-display text-avalon-parchment text-base font-bold">
+                    Intro round
+                  </div>
+                  <div className="text-sm text-avalon-silver/80 mt-1">
+                    Run a one-time discussion round at game start before the
+                    first proposal. The first leader speaks, then everyone in
+                    order, then the leader closes — no team is proposed during
+                    this round. After the manager ends it, the same leader
+                    proposes Quest 1 normally.
+                  </div>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
       </form>

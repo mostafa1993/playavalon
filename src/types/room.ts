@@ -99,6 +99,8 @@ export interface CreateRoomPayload {
   expected_players: number;
   // Phase 2: Optional role configuration
   role_config?: RoleConfig;
+  // Feature 023: opt into a one-time intro round at game start
+  intro_phase_enabled?: boolean;
 }
 
 /**

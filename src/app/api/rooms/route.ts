@@ -89,6 +89,8 @@ export async function POST(request: Request) {
       status: 'waiting',
       role_config: roleConfig,
       lady_of_lake_enabled: roleConfig.ladyOfLake || false,
+      // Feature 023: opt-in intro round at game start
+      intro_phase_enabled: body.intro_phase_enabled === true,
     });
 
     // Add creator to room

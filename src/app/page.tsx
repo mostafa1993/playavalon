@@ -22,14 +22,22 @@ export default function Home() {
   const [roomCodeError, setRoomCodeError] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
 
-  const handleCreateRoom = async (expectedPlayers: number, roleConfig: RoleConfig) => {
+  const handleCreateRoom = async (
+    expectedPlayers: number,
+    roleConfig: RoleConfig,
+    introPhaseEnabled: boolean,
+  ) => {
     setGeneralError(null);
     setIsCreatingRoom(true);
     try {
       const response = await fetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expected_players: expectedPlayers, role_config: roleConfig }),
+        body: JSON.stringify({
+          expected_players: expectedPlayers,
+          role_config: roleConfig,
+          intro_phase_enabled: introPhaseEnabled,
+        }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({ error: 'Failed to create room' }));

@@ -69,6 +69,8 @@ export interface Game {
   oberon_split_intel_mixed_good_id: string | null;       // Good player in Mixed group with Oberon
   // Feature 019: Evil Ring Visibility Mode
   evil_ring_assignments: EvilRingAssignments | null;  // Maps each evil player to their one known teammate
+  // Feature 023: One-time intro round at game start
+  in_intro_phase: boolean;  // True while waiting for the manager to end the intro round
   created_at: string;
   updated_at: string;
   ended_at: string | null;
@@ -99,6 +101,8 @@ export interface GameInsert {
   oberon_split_intel_mixed_good_id?: string | null;
   // Feature 019: Evil Ring Visibility Mode
   evil_ring_assignments?: EvilRingAssignments | null;
+  // Feature 023
+  in_intro_phase?: boolean;
   created_at?: string;
   updated_at?: string;
   ended_at?: string | null;
@@ -127,6 +131,8 @@ export interface GameUpdate {
   oberon_split_intel_mixed_good_id?: string | null;
   // Feature 019: Evil Ring Visibility Mode
   evil_ring_assignments?: EvilRingAssignments | null;
+  // Feature 023
+  in_intro_phase?: boolean;
   ended_at?: string | null;
 }
 

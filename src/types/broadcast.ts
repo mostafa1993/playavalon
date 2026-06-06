@@ -81,7 +81,8 @@ export type PhaseTransitionTrigger =
   | 'quest_result_shown' // Continue button pressed
   | 'lady_complete' // Lady investigation done
   | 'assassin_phase' // Good won 3, assassin's turn
-  | 'game_ended'; // Game is over
+  | 'game_ended' // Game is over
+  | 'intro_ended'; // Feature 023: manager ended the intro round, propose is now allowed
 
 /**
  * Payload for game_over event

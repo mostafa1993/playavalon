@@ -68,7 +68,7 @@ export async function initializeGame(
   try {
     const { data: roomData } = await client
       .from('rooms')
-      .select('lady_of_lake_enabled, lady_of_lake_holder_id, role_config')
+      .select('lady_of_lake_enabled, lady_of_lake_holder_id, role_config, intro_phase_enabled')
       .eq('id', roomId)
       .single();
 
@@ -79,6 +79,15 @@ export async function initializeGame(
           lady_enabled: roomData.lady_of_lake_enabled || false,
           lady_holder_id: roomData.lady_of_lake_holder_id || null,
         })
+        .eq('id', game.id);
+    }
+
+    // Feature 023: copy intro_phase flag from room → game so the UI gates
+    // the first proposal until the manager explicitly ends the intro round.
+    if (roomData?.intro_phase_enabled === true) {
+      await client
+        .from('games')
+        .update({ in_intro_phase: true })
         .eq('id', game.id);
     }
 

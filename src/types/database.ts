@@ -51,6 +51,8 @@ export interface Database {
           lady_of_lake_holder_id: string | null;
           // Feature 022
           ai_review_enabled: boolean;
+          // Feature 023: one-time intro round at game start
+          intro_phase_enabled: boolean;
         };
         Insert: {
           id?: string;
@@ -66,6 +68,8 @@ export interface Database {
           lady_of_lake_holder_id?: string | null;
           // Feature 022
           ai_review_enabled?: boolean;
+          // Feature 023
+          intro_phase_enabled?: boolean;
         };
         Update: {
           id?: string;
@@ -81,6 +85,8 @@ export interface Database {
           lady_of_lake_holder_id?: string | null;
           // Feature 022
           ai_review_enabled?: boolean;
+          // Feature 023
+          intro_phase_enabled?: boolean;
         };
       };
       room_ai_consents: {
