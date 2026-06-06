@@ -50,6 +50,17 @@ export interface RoomDetails {
   confirmations?: {
     total: number;
     confirmed: number;
+    /**
+     * Per-player confirmation status. `in_room: false` means the player has a
+     * stale player_roles row but is no longer in room_players (left after
+     * distribution) — used to surface the leaver-stuck-at-N/M case in the UI.
+     */
+    details: Array<{
+      player_id: string;
+      display_name: string;
+      is_confirmed: boolean;
+      in_room: boolean;
+    }>;
   };
   // Phase 2 additions
   roles_in_play?: string[];

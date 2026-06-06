@@ -250,21 +250,55 @@ export async function getRoomDetails(
     throw rpError;
   }
 
-  // Get role confirmations if roles distributed
-  let confirmations: { total: number; confirmed: number } | undefined;
+  // Get role confirmations if roles distributed — including per-player details
+  // so the lobby UI can show exactly who has/hasn't confirmed and who has
+  // disappeared (stale player_roles row for a player no longer in room_players).
+  let confirmations:
+    | {
+        total: number;
+        confirmed: number;
+        details: Array<{
+          player_id: string;
+          display_name: string;
+          is_confirmed: boolean;
+          in_room: boolean;
+        }>;
+      }
+    | undefined;
   if (room.status === 'roles_distributed') {
     const { data: roles, error: rolesError } = await client
       .from('player_roles')
-      .select('is_confirmed')
+      .select(`
+        player_id,
+        is_confirmed,
+        players!inner ( display_name )
+      `)
       .eq('room_id', roomId);
 
     if (rolesError) {
       throw rolesError;
     }
 
+    const currentMemberIds = new Set((roomPlayers || []).map((rp: { player_id: string }) => rp.player_id));
+
+    const details = (roles || []).map((r: {
+      player_id: string;
+      is_confirmed: boolean;
+      players: { display_name: string } | { display_name: string }[];
+    }) => {
+      const playerData = Array.isArray(r.players) ? r.players[0] : r.players;
+      return {
+        player_id: r.player_id,
+        display_name: playerData?.display_name || 'Unknown',
+        is_confirmed: r.is_confirmed,
+        in_room: currentMemberIds.has(r.player_id),
+      };
+    });
+
     confirmations = {
-      total: roles?.length || 0,
-      confirmed: roles?.filter((r: { is_confirmed: boolean }) => r.is_confirmed).length || 0,
+      total: details.length,
+      confirmed: details.filter((d) => d.is_confirmed).length,
+      details,
     };
   }
 

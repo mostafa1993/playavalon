@@ -167,7 +167,8 @@ export function Lobby({
         />
       )}
 
-      {/* Confirmation Progress (when roles distributed) */}
+      {/* Confirmation Progress (when roles distributed) — per-player dashboard
+          so it's obvious who hasn't confirmed (and who has silently left). */}
       {room.room.status === 'roles_distributed' && room.confirmations && (
         <div className="card py-2 px-3">
           <div className="flex items-center justify-between">
@@ -176,13 +177,66 @@ export function Lobby({
               {room.confirmations.confirmed} / {room.confirmations.total}
             </p>
           </div>
-          {room.confirmations.confirmed === room.confirmations.total ? (
-            <p className="text-good text-xs">All confirmed!</p>
-          ) : (
-            <p className="text-avalon-silver/80 text-xs">
-              Waiting for all players to confirm...
-            </p>
-          )}
+
+          {(() => {
+            const details = room.confirmations.details ?? [];
+            const orphans = details.filter((d) => !d.in_room);
+            const pending = details.filter((d) => d.in_room && !d.is_confirmed);
+            const confirmed = details.filter((d) => d.in_room && d.is_confirmed);
+            const allDone = room.confirmations!.confirmed === room.confirmations!.total;
+
+            return (
+              <>
+                {allDone ? (
+                  <p className="text-good text-xs mt-1">All confirmed!</p>
+                ) : (
+                  <p className="text-avalon-silver/80 text-xs mt-1">
+                    {pending.length > 0
+                      ? `Waiting for ${pending.length} player${pending.length === 1 ? '' : 's'} to confirm…`
+                      : 'Waiting for all players to confirm…'}
+                  </p>
+                )}
+
+                {/* Per-player breakdown — sorted: pending first, then orphans, then confirmed */}
+                <ul className="mt-2 space-y-1 text-xs">
+                  {[...pending, ...orphans, ...confirmed].map((p) => (
+                    <li
+                      key={p.player_id}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="truncate text-avalon-silver">
+                        {p.display_name}
+                      </span>
+                      {!p.in_room ? (
+                        <span
+                          className="badge bg-evil/20 text-evil whitespace-nowrap"
+                          title="This player left the room after roles were distributed. Their orphan role row is blocking the count — see the docs / leave route handling."
+                        >
+                          ⚠ left
+                        </span>
+                      ) : p.is_confirmed ? (
+                        <span className="badge bg-good/20 text-good whitespace-nowrap">
+                          ✓ confirmed
+                        </span>
+                      ) : (
+                        <span className="badge bg-avalon-gold/20 text-avalon-gold whitespace-nowrap">
+                          ⏳ waiting
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+
+                {orphans.length > 0 && (
+                  <p className="mt-2 text-evil text-xs">
+                    {orphans.length} player{orphans.length === 1 ? ' has' : 's have'} left
+                    after roles were distributed. The remaining players should leave and
+                    rejoin so the manager can re-distribute.
+                  </p>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 

@@ -12,6 +12,7 @@ import {
   getRoomPlayerCount,
   transferManager,
   deleteRoom,
+  updateRoomStatus,
 } from '@/lib/supabase/rooms';
 import { validateRoomCode } from '@/lib/domain/validation';
 import { errors, handleError } from '@/lib/utils/errors';
@@ -56,6 +57,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       return errors.notRoomMember();
     }
 
+    // Snapshot the pre-leave status — used to decide whether to roll back the
+    // role distribution (see below).
+    const statusBeforeLeave = room.status;
+
     // Remove player from room
     await removePlayerFromRoom(supabase, room.id, user.id);
 
@@ -68,9 +73,26 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (remainingPlayers === 0) {
       // Delete empty room
       await deleteRoom(supabase, room.id);
-    } else if (wasManager) {
-      // Transfer manager to longest-present player
-      await transferManager(supabase, room.id);
+    } else {
+      if (wasManager) {
+        // Transfer manager to longest-present player
+        await transferManager(supabase, room.id);
+      }
+
+      // Leaver-bug fix: if a player leaves between role distribution and game
+      // start, their player_roles row would be left orphaned, stuck-at-N/M
+      // forever. Roll the room back to 'waiting' and wipe all role rows so the
+      // manager can re-distribute with whoever is still present.
+      // (Once the game is 'started', leaving mid-game is a different problem
+      // and we don't touch the game state here.)
+      if (statusBeforeLeave === 'roles_distributed') {
+        const { error: rolesDelErr } = await supabase
+          .from('player_roles')
+          .delete()
+          .eq('room_id', room.id);
+        if (rolesDelErr) throw rolesDelErr;
+        await updateRoomStatus(supabase, room.id, 'waiting');
+      }
     }
 
     return NextResponse.json({
