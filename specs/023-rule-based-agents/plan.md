@@ -38,7 +38,8 @@ without touching the engine.
 - ❌ Cross-game memory or opponent modelling
 - ❌ Chat messages or emoji reactions
 - ❌ Agents creating or managing rooms (humans create; agents only join+play)
-- ❌ Agents running in production (dev tooling only)
+- ❌ Agents auto-joining *arbitrary* rooms — agents only join rooms whose
+  creator explicitly opted in via `agent_count > 0` (Phase 4)
 
 Everything in this list has a designed escape hatch (Brain interface,
 config flags, separate process model), so adding any of them later is
@@ -55,7 +56,10 @@ A new top-level `agents/` workspace containing:
 - A **YAML config schema** that defines an agent's identity, credentials,
   brain choice, brain parameters, and timing preferences.
 - Two **CLIs**: `run` (one agent) and `populate` (spawn many agents for one
-  room, optionally with a real human as manager).
+  room, optionally with a real human as manager) — for dev and ad-hoc use.
+- A **bot supervisor service** (Phase 4) that runs in production and
+  spawns agents into rooms whose creator opted in via the new
+  `agent_count` field on room creation.
 - A **clean interface for swapping in an LLM brain later** (the only thing
   that needs to change is one factory and one new file under `brains/`).
 
@@ -444,6 +448,12 @@ to the user, but each agent is a real isolated OS process.
 
 ## 10. Phased delivery
 
+> **🛑 STOP — before starting Phase 0**, run the three verifications in §13.
+> Each takes ~30 minutes. If any fail, the plan has small adjustments
+> ready (cookie jar instead of Bearer, polling instead of realtime,
+> process-group kill instead of default SIGINT). If all three pass,
+> Phase 0 implementation is mechanical from there.
+
 Each phase is independently shippable and demoable. Don't start the next
 until the previous is verified.
 
@@ -538,12 +548,67 @@ because the rule brain doesn't know how to defend).
 lady_of_lake:true}` runs to merlin-quiz screen and exits cleanly. Run 20
 games; verify assassin guesses Merlin correctly ~25% of the time.
 
-### Out of this plan but kept as the obvious next step
+### P4 — Production integration: opt-in agents at room creation
 
-- **P4 (future):** `LlmBrain` implementation. Same `Brain` interface, new
-  factory branch, prompt template under `agents/prompts/`. No engine changes
-  expected.
-- **P5 (future):** scenario YAMLs (`agents/scenarios/2024-12-01-evil-stomp.yaml`)
+**Goal:** the manager can fill empty seats with agents when creating a
+live room (default: 0 agents — current behaviour). When a room has
+`agent_count = N`, agents auto-join once `(expected_players − N)` humans
+have joined.
+
+What lands:
+- **Schema:**
+  - `rooms.agent_count INT NOT NULL DEFAULT 0 CHECK (agent_count >= 0)`
+  - `room_players.is_bot BOOLEAN NOT NULL DEFAULT FALSE` (or derive from
+    a `bot_*` username prefix — design decision deferred)
+- **UI:**
+  - Number input in `CreateRoomModal` next to player count: "Bots
+    (auto-fill empty seats)", default 0, max `expected_players − 1`.
+  - 🤖 badge on bot tiles in the lobby and game board so it's obvious
+    which players are agents.
+- **Bot supervisor service** (new): a small persistent Node service added
+  to `docker-compose.yml` under `profiles: [prod]`. Polls (or subscribes
+  via realtime) for rooms that have `agent_count > 0` and unfilled bot
+  slots; spawns child agent processes (using the same `cli/run.ts` from
+  P0) to fill them. Tracks per-process state, restarts on crash.
+- **Bot account pool**: the existing 9 `bot_alice`…`bot_iris` accounts
+  cover one concurrent game. Adding more accounts later is a one-line
+  change in `add-fake-players.ts`'s `BOT_NAMES`.
+- **Identity strategy** (default, override later if needed): the
+  supervisor picks the next available `bot_<name>` not currently in any
+  active room.
+
+What stays the same:
+- Agent engine code from P0–P3 needs **zero changes**. The supervisor
+  just spawns the same CLI that a developer would run manually.
+- Existing CLI workflows (`cli/run.ts`, `cli/populate.ts`) continue to
+  work for dev use.
+
+Open questions to revisit at the start of P4 (not blockers):
+- Bot picker UI: number-only vs let manager pick specific bots by name.
+  Default proposal: number-only.
+- Mid-game crash policy: supervisor auto-restarts the agent vs leaves
+  the seat dormant. Default proposal: auto-restart up to 3 times, then
+  leave dormant with a manager alert.
+- Concurrent games at scale: 9 bot accounts is enough for 1 game with
+  9 bots. For multi-game concurrency, either expand the pool or generate
+  ephemeral bot accounts per game.
+
+**Acceptance test:**
+1. Create a room with `expected_players=6, agent_count=3`.
+2. Three humans join.
+3. Within ~5s the supervisor spawns 3 bot processes that auto-join.
+4. Lobby shows 6/6 (3 humans + 3 bots with 🤖 badges).
+5. Manager distributes roles → bots confirm automatically.
+6. Game runs to completion with bots playing through all phases.
+7. After game ends, bot processes exit cleanly; supervisor returns to
+   watching for new rooms.
+
+### Out of this plan but obvious next steps
+
+- **P5 (future):** `LlmBrain` implementation. Same `Brain` interface,
+  new factory branch, prompt template under `agents/prompts/`. No
+  engine changes expected.
+- **P6 (future):** scenario YAMLs (`agents/scenarios/2024-12-01-evil-stomp.yaml`)
   that pin RNG seed + bot list + role config for reproducible test runs.
 
 ## 11. Migration of existing scripts
