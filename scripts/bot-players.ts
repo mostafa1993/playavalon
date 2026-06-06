@@ -2,6 +2,18 @@
  * Dev script: Bot players that automatically take actions in the game
  * Usage: npx tsx scripts/bot-players.ts <ROOM_CODE>
  *
+ * ⚠️  DEPRECATED / BROKEN — does NOT work with the current Supabase Auth setup.
+ * Sends an `X-Player-ID` header that no current API route reads, and the auth
+ * middleware (src/middleware.ts) rejects every call with 401 because there's
+ * no Supabase session cookie.
+ *
+ * Fixing it requires programmatically signing each bot in via Supabase Auth,
+ * persisting the resulting session cookies per-bot, and attaching those
+ * cookies on every fetch — a non-trivial rewrite. Until then, use
+ * scripts/add-fake-players.ts to populate rooms; that one just inserts rows
+ * directly and is sufficient for UI/state testing (manually flip game state
+ * via Supabase SQL to drive bots through phases).
+ *
  * Bots will:
  * - Confirm their roles
  * - Propose random teams (when leader)
