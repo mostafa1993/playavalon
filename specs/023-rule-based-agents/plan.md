@@ -178,10 +178,17 @@ The existing top-level `agent/` directory is the post-game **AI Reviewer**
 
 ```yaml
 name: alice                              # must match Supabase Auth user bot_alice@playavalon.local
+order: 1                                 # used by the P4 supervisor to pick which N bots join first
 brain: { type: rule }                    # defaults are sane; nothing else needed for P0
 ```
 
 That's it. Everything below is optional and only matters once later phases ship.
+
+The `order` field is irrelevant for P0–P3 (which spawn agents manually
+via CLI). It becomes load-bearing in P4 when the supervisor needs to
+pick the first N available bots — lower `order` is picked first;
+alphabetical by `name` tie-breaks. If a bot is already in another
+active room, supervisor skips them and uses the next one in order.
 
 **Full example with every field** — `agents/configs/alice-full.yaml`:
 
@@ -189,6 +196,7 @@ That's it. Everything below is optional and only matters once later phases ship.
 # Identity
 name: alice                              # required; maps to bot_<name>@playavalon.local
 display_name: Alice                      # optional; falls back to DB value
+order: 1                                 # supervisor pick-order in P4 (lower = picked first)
 
 # Credentials — any ONE of (default: password_env: BOT_PASSWORD)
 credentials:
@@ -583,15 +591,34 @@ What stays the same:
 - Existing CLI workflows (`cli/run.ts`, `cli/populate.ts`) continue to
   work for dev use.
 
-Open questions to revisit at the start of P4 (not blockers):
-- Bot picker UI: number-only vs let manager pick specific bots by name.
-  Default proposal: number-only.
-- Mid-game crash policy: supervisor auto-restarts the agent vs leaves
-  the seat dormant. Default proposal: auto-restart up to 3 times, then
-  leave dormant with a manager alert.
-- Concurrent games at scale: 9 bot accounts is enough for 1 game with
-  9 bots. For multi-game concurrency, either expand the pool or generate
-  ephemeral bot accounts per game.
+Decided design choices (no longer open):
+
+- **Bot picker — order field in each YAML.** One YAML per agent (10 max
+  for the initial pool, expandable later). Each has an `order: N`
+  field. When a room needs M bots, the supervisor lists all configs,
+  filters to bots not currently in any active room, sorts by `order`
+  ascending (tie-break: alphabetical by `name`), and takes the first M.
+  Manager controls who plays first by editing the YAML files; no UI
+  needed beyond the count input. The order field is added to the YAML
+  schema in §6.
+- **🤖 badge visible to all players** — transparency over surprise.
+  Bots are clearly marked in lobby and game board for everyone, not
+  just the manager.
+- **Mid-game crash policy — auto-restart up to 3 times per bot per
+  game, then dormant + manager alert.** Supervisor watches its spawned
+  child processes; on exit it respawns the bot (same identity, rejoins
+  the same room). Counter resets on game start. After 3 crashes for
+  the same bot in the same game, supervisor stops restarting and
+  surfaces a UI banner to the manager ("Bot Alice has crashed 3 times
+  — consider restarting the game"). Game state on the server is
+  unaffected by restarts because the bot rejoins with the same Supabase
+  identity and reconnects to its same `room_players` row.
+
+Still genuinely open (resolved later):
+- **Concurrent games at scale.** 9–10 bot accounts is enough for one
+  concurrent game with all-bot seats. For multi-game concurrency,
+  either expand the pool (one-line change in `add-fake-players.ts`'s
+  `BOT_NAMES`) or generate ephemeral bot accounts per game.
 
 **Acceptance test:**
 1. Create a room with `expected_players=6, agent_count=3`.
