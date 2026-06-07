@@ -1,0 +1,4 @@
+name: diana
+order: 4
+brain:
+  type: rule

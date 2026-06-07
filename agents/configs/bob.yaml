@@ -1,0 +1,4 @@
+name: bob
+order: 2
+brain:
+  type: rule

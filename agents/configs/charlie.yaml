@@ -1,0 +1,4 @@
+name: charlie
+order: 3
+brain:
+  type: rule

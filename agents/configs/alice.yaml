@@ -1,0 +1,4 @@
+name: alice
+order: 1
+brain:
+  type: rule
