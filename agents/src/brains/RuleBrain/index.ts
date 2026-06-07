@@ -15,6 +15,7 @@ import type { Brain, BrainContext } from '../Brain.js';
 import * as confirmRole from './confirmRole.js';
 import * as teamBuilding from './teamBuilding.js';
 import * as voting from './voting.js';
+import * as quest from './quest.js';
 
 export class RuleBrain implements Brain {
   async decide(ctx: BrainContext): Promise<Action | null> {
@@ -37,14 +38,22 @@ export class RuleBrain implements Brain {
         return teamBuilding.decide(ctx);
       case 'voting':
         return voting.decide(ctx);
-
-      // Phase 2+ — fall through to noop for now.
       case 'quest':
+        return quest.decide(ctx);
       case 'quest_result':
+        // Any agent can fire continue; server is idempotent (first wins,
+        // others get a no-op). No per-phase module needed — just always
+        // advance.
+        return { kind: 'continue' };
+
+      // Phase 3+ — fall through to noop for now.
       case 'lady_of_lake':
       case 'assassin':
-      case 'game_over':
         ctx.logger.trace(`phase=${game.phase} — not implemented yet, waiting`);
+        return null;
+      case 'game_over':
+        // The engine's main loop handles game_over exit; brain returns
+        // noop here so we don't double-act on the exit signal.
         return null;
     }
   }

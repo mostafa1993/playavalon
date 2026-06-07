@@ -162,6 +162,15 @@ export class AgentEngine {
         this.logger.info('room closed; exiting');
         return;
       }
+      if (obs.game?.phase === 'game_over') {
+        // Give realtime broadcast a beat to land + final state to settle,
+        // then exit cleanly. Subsequent phases (assassin/merlin quiz) come
+        // BEFORE game_over in the phase machine, so by the time we see
+        // game_over the game is truly done.
+        this.logger.info('game_over observed; exiting');
+        await sleep(500);
+        return;
+      }
 
       // We can only ask the Brain to decide if we have our identity (post-distribution).
       // Pre-distribution there's nothing to decide anyway — just wait.
@@ -227,7 +236,12 @@ export class AgentEngine {
     if (action.kind === 'propose' && fresh.game?.phase !== 'team_building') return true;
     if (action.kind === 'propose' && fresh.game && !fresh.self.is_leader) return true;
     if (action.kind === 'vote' && (fresh.game?.phase !== 'voting' || fresh.game.has_voted)) return true;
-    // P2+: drop quest_action if has_submitted_action, etc.
+    if (action.kind === 'quest_action') {
+      if (fresh.game?.phase !== 'quest') return true;
+      if (!fresh.game.am_team_member) return true;
+      if (fresh.game.has_submitted_action) return true;
+    }
+    if (action.kind === 'continue' && fresh.game?.phase !== 'quest_result') return true;
     return false;
   }
 

@@ -63,9 +63,17 @@ export class ActionExecutor {
           await this.opts.api.submitVote(gameId, action.choice);
           return true;
         }
-        // P2+ cases would go here.
-        case 'quest_action':
-        case 'continue':
+        case 'quest_action': {
+          const gameId = this.requireGameId(action.kind);
+          await this.opts.api.submitQuestAction(gameId, action.choice);
+          return true;
+        }
+        case 'continue': {
+          const gameId = this.requireGameId(action.kind);
+          await this.opts.api.continueQuest(gameId);
+          return true;
+        }
+        // P3+ cases would go here.
         case 'lady_investigate':
         case 'assassin_guess':
         case 'merlin_quiz':

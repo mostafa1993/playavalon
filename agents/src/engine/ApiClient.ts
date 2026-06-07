@@ -107,6 +107,21 @@ export class ApiClient {
     return this.post(`/api/games/${gameId}/vote`, { vote });
   }
 
+  // ===== Phase 2 endpoints =====
+
+  async submitQuestAction(gameId: string, action: 'success' | 'fail'): Promise<unknown> {
+    return this.post(`/api/games/${gameId}/quest/action`, { action });
+  }
+
+  /**
+   * Any player can call this; the server is idempotent (later callers get
+   * a no-op while the first call advances the phase). We send it from any
+   * agent in 'quest_result' phase — first one wins.
+   */
+  async continueQuest(gameId: string): Promise<unknown> {
+    return this.post(`/api/games/${gameId}/continue`);
+  }
+
   // ===== Internal HTTP helpers =====
 
   private async get<T>(path: string): Promise<T> {
