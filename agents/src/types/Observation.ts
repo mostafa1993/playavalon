@@ -51,13 +51,39 @@ export interface GameObservation {
   phase: GamePhase;
   current_quest: number;
   current_leader_id: string;
+  /** Number of consecutive rejected proposals in the current quest (0-4).
+   *  When it would hit 5, evil wins automatically — Brain MUST always
+   *  approve when vote_track === 4 (covered in voting.ts). */
   vote_track: number;
   in_intro_phase: boolean;
-  // populated in later phases — kept on the type so Brain modules can compile
-  // against it from day one
-  am_team_member?: boolean;
-  has_voted?: boolean;
-  has_submitted_action?: boolean;
+  /** Required team size for the current quest (and required fails). */
+  quest_requirement: { size: number; fails_required: number };
+  /** Players list (with is_leader / is_on_team / has_voted flags). Empty
+   *  in pre-game / not-yet-started states. */
+  players: Array<{
+    id: string;
+    display_name: string;
+    seat_position: number;
+    is_leader: boolean;
+    is_on_team: boolean;
+    has_voted: boolean;
+    is_connected: boolean;
+  }>;
+  /** Active team proposal (null if no proposal yet or not in voting phase). */
+  current_proposal: null | {
+    id: string;
+    leader_id: string;
+    team_member_ids: string[];
+    proposal_number: number;
+  };
+  /** This agent's own vote on the current proposal, if cast. */
+  my_vote: 'approve' | 'reject' | null;
+  am_team_member: boolean;
+  has_voted: boolean;
+  has_submitted_action: boolean;
+  votes_submitted: number;
+  actions_submitted: number;
+  total_team_members: number;
 }
 
 export interface Observation {

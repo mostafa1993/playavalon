@@ -28,6 +28,9 @@ const EXPECTED_4XX_CODES = new Set([
 export interface ActionExecutorOptions {
   api: ApiClient;
   roomCode: string;
+  /** Provider for the current gameId (set by Observer after game starts).
+   *  Lazy because the game doesn't exist when the executor is constructed. */
+  getGameId: () => string | null;
   logger: AgentLogger;
 }
 
@@ -42,7 +45,7 @@ export class ActionExecutor {
   async execute(action: Action): Promise<boolean> {
     if (action.kind === 'noop') return true;
     try {
-      this.opts.logger.info(`-> ${action.kind}`);
+      this.opts.logger.info(`-> ${action.kind}`, this.describeAction(action));
       switch (action.kind) {
         case 'consent_ai':
           await this.opts.api.sendAiConsent(this.opts.roomCode);
@@ -50,15 +53,23 @@ export class ActionExecutor {
         case 'confirm_role':
           await this.opts.api.confirmRole(this.opts.roomCode);
           return true;
-        // P1+ cases would go here.
-        case 'propose':
-        case 'vote':
+        case 'propose': {
+          const gameId = this.requireGameId(action.kind);
+          await this.opts.api.proposeTeam(gameId, action.team);
+          return true;
+        }
+        case 'vote': {
+          const gameId = this.requireGameId(action.kind);
+          await this.opts.api.submitVote(gameId, action.choice);
+          return true;
+        }
+        // P2+ cases would go here.
         case 'quest_action':
         case 'continue':
         case 'lady_investigate':
         case 'assassin_guess':
         case 'merlin_quiz':
-          this.opts.logger.warn(`action kind ${action.kind} not implemented in P0`);
+          this.opts.logger.warn(`action kind ${action.kind} not implemented yet`);
           return true;
       }
     } catch (err) {
@@ -69,5 +80,18 @@ export class ActionExecutor {
       this.opts.logger.error(`unexpected error on ${action.kind}`, err);
       return false;
     }
+  }
+
+  private requireGameId(actionKind: string): string {
+    const id = this.opts.getGameId();
+    if (!id) throw new Error(`cannot execute ${actionKind}: gameId not yet known`);
+    return id;
+  }
+
+  private describeAction(action: Action): Record<string, unknown> {
+    if (action.kind === 'propose') return { team_size: action.team.length };
+    if (action.kind === 'vote') return { choice: action.choice };
+    if (action.kind === 'quest_action') return { choice: action.choice };
+    return {};
   }
 }

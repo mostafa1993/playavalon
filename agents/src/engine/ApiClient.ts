@@ -84,6 +84,29 @@ export class ApiClient {
     return this.post('/api/players/heartbeat');
   }
 
+  // ===== Phase 1 endpoints =====
+
+  /**
+   * Lightweight pointer: which game (if any) is currently live for this room.
+   * Cheaper than getGame(); cache the gameId once and call getGame() directly
+   * on subsequent ticks.
+   */
+  async getRoomGame(code: string): Promise<GameLinkResponse> {
+    return this.get(`/api/rooms/${code}/game`);
+  }
+
+  async getGame(gameId: string): Promise<GameStateResponse> {
+    return this.get(`/api/games/${gameId}`);
+  }
+
+  async proposeTeam(gameId: string, teamMemberIds: string[]): Promise<unknown> {
+    return this.post(`/api/games/${gameId}/propose`, { team_member_ids: teamMemberIds });
+  }
+
+  async submitVote(gameId: string, vote: 'approve' | 'reject'): Promise<unknown> {
+    return this.post(`/api/games/${gameId}/vote`, { vote });
+  }
+
   // ===== Internal HTTP helpers =====
 
   private async get<T>(path: string): Promise<T> {
@@ -199,4 +222,65 @@ export interface RoleResponse {
     has_decoy?: boolean;
     decoy_warning?: string;
   };
+}
+
+export interface GameLinkResponse {
+  data: {
+    has_game: boolean;
+    game_id?: string;
+    phase?: string;
+    current_quest?: number;
+    current_leader_id?: string;
+  };
+}
+
+/**
+ * GET /api/games/[gameId] — the canonical in-game observation.
+ * We type only the fields the agent reads. Anything else is allowed via
+ * the unknown sink; the server adds more over time and we don't want to
+ * have to chase every addition.
+ */
+export interface GameStateResponse {
+  data: {
+    game: {
+      id: string;
+      room_id: string;
+      phase: string;
+      current_quest: number;
+      current_leader_id: string;
+      vote_track: number;
+      in_intro_phase?: boolean;
+      player_count: number;
+      seating_order: string[];
+    };
+    players: Array<{
+      id: string;
+      display_name: string;
+      seat_position: number;
+      is_leader: boolean;
+      is_on_team: boolean;
+      has_voted: boolean;
+      is_connected: boolean;
+    }>;
+    current_proposal: null | {
+      id: string;
+      leader_id: string;
+      team_member_ids: string[];
+      proposal_number: number;
+    };
+    quest_requirement: { size: number; fails_required: number };
+    my_vote: 'approve' | 'reject' | null;
+    am_team_member: boolean;
+    can_submit_action: boolean;
+    has_submitted_action: boolean;
+    votes_submitted: number;
+    total_players: number;
+    actions_submitted: number;
+    total_team_members: number;
+  };
+  current_user_id: string;
+  player_role: 'good' | 'evil';
+  special_role: string | null;
+  room_code: string;
+  is_manager: boolean;
 }

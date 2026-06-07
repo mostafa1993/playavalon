@@ -112,6 +112,7 @@ export class AgentEngine {
     this.executor = new ActionExecutor({
       api: this.api,
       roomCode: this.opts.roomCode,
+      getGameId: () => this.observer.gameId(),
       logger: this.logger,
     });
 
@@ -223,7 +224,10 @@ export class AgentEngine {
   private shouldDropAction(action: Action, fresh: Awaited<ReturnType<Observer['fetch']>>): boolean {
     if (action.kind === 'confirm_role' && fresh.room.is_confirmed) return true;
     if (action.kind === 'consent_ai' && fresh.room.ai_consent_given) return true;
-    // P1+: drop vote/quest_action if has_voted/has_submitted_action true, etc.
+    if (action.kind === 'propose' && fresh.game?.phase !== 'team_building') return true;
+    if (action.kind === 'propose' && fresh.game && !fresh.self.is_leader) return true;
+    if (action.kind === 'vote' && (fresh.game?.phase !== 'voting' || fresh.game.has_voted)) return true;
+    // P2+: drop quest_action if has_submitted_action, etc.
     return false;
   }
 

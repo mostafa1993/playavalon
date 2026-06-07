@@ -15,9 +15,10 @@
  */
 
 import type { ApiClient } from './ApiClient.js';
-import type { Observation, RoomObservation } from '../types/Observation.js';
+import type { Observation, RoomObservation, GameObservation, GamePhase } from '../types/Observation.js';
 import type { Identity, Role, SpecialRole } from '../types/Identity.js';
 import type { AgentLogger } from '../util/logger.js';
+import { ApiError } from './ApiClient.js';
 
 export interface ObserverOptions {
   api: ApiClient;
@@ -32,6 +33,8 @@ export class Observer {
   private tick = 0;
   /** Cached role; null until distribution happens, then populated once. */
   private cachedIdentity: Identity | null = null;
+  /** Cached gameId once the game has started; saves one round-trip per tick. */
+  private cachedGameId: string | null = null;
 
   constructor(opts: ObserverOptions) {
     this.opts = opts;
@@ -104,22 +107,88 @@ export class Observer {
       roles_distributed: rolesDistributed,
     };
 
+    // Fetch in-game state once the game has started.
+    let game: GameObservation | undefined;
+    let isLeader = false;
+    if (room.status === 'started' && isInRoom) {
+      const gameState = await this.fetchGameState();
+      if (gameState) {
+        game = gameState;
+        isLeader = game.current_leader_id === this.opts.userId;
+      }
+    }
+
     return {
       room,
-      // game: undefined in P0 — populated in P1+ when we add the /api/games/[gameId] fetch
+      game,
       self: {
         role: this.cachedIdentity?.role,
         special_role: this.cachedIdentity?.special_role,
         is_in_room: isInRoom,
-        is_leader: false, // populated in P1 from game.current_leader_id === userId
+        is_leader: isLeader,
       },
       tick: this.tick,
       fetched_at: new Date(),
     };
   }
 
+  /**
+   * Resolve gameId on first call, then poll /api/games/[gameId] directly.
+   * Returns undefined if the game record doesn't exist yet (briefly possible
+   * during the auto-start race) or if the fetch fails — caller treats that
+   * the same as "no game info yet, try again next tick."
+   */
+  private async fetchGameState(): Promise<GameObservation | undefined> {
+    try {
+      if (!this.cachedGameId) {
+        const linkRes = await this.opts.api.getRoomGame(this.opts.roomCode);
+        if (!linkRes.data.has_game || !linkRes.data.game_id) return undefined;
+        this.cachedGameId = linkRes.data.game_id;
+      }
+      const res = await this.opts.api.getGame(this.cachedGameId);
+      const d = res.data;
+      return {
+        game_id: d.game.id,
+        phase: d.game.phase as GamePhase,
+        current_quest: d.game.current_quest,
+        current_leader_id: d.game.current_leader_id,
+        vote_track: d.game.vote_track,
+        in_intro_phase: d.game.in_intro_phase ?? false,
+        quest_requirement: d.quest_requirement,
+        players: d.players.map((p) => ({
+          id: p.id,
+          display_name: p.display_name,
+          seat_position: p.seat_position,
+          is_leader: p.is_leader,
+          is_on_team: p.is_on_team,
+          has_voted: p.has_voted,
+          is_connected: p.is_connected,
+        })),
+        current_proposal: d.current_proposal,
+        my_vote: d.my_vote,
+        am_team_member: d.am_team_member,
+        has_voted: d.my_vote !== null,
+        has_submitted_action: d.has_submitted_action,
+        votes_submitted: d.votes_submitted,
+        actions_submitted: d.actions_submitted,
+        total_team_members: d.total_team_members,
+      };
+    } catch (err) {
+      if (err instanceof ApiError) {
+        this.opts.logger.debug(`game state fetch returned ${err.status} ${err.code}; treating as transient`);
+        return undefined;
+      }
+      throw err;
+    }
+  }
+
   /** Returns the cached Identity once role distribution has happened. */
   identity(): Identity | null {
     return this.cachedIdentity;
+  }
+
+  /** Returns the cached gameId once the game has started. */
+  gameId(): string | null {
+    return this.cachedGameId;
   }
 }
