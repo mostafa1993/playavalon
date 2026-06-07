@@ -16,6 +16,9 @@ import * as confirmRole from './confirmRole.js';
 import * as teamBuilding from './teamBuilding.js';
 import * as voting from './voting.js';
 import * as quest from './quest.js';
+import * as ladyOfLake from './ladyOfLake.js';
+import * as assassin from './assassin.js';
+import * as merlinQuiz from './merlinQuiz.js';
 
 export class RuleBrain implements Brain {
   async decide(ctx: BrainContext): Promise<Action | null> {
@@ -45,16 +48,15 @@ export class RuleBrain implements Brain {
         // others get a no-op). No per-phase module needed — just always
         // advance.
         return { kind: 'continue' };
-
-      // Phase 3+ — fall through to noop for now.
       case 'lady_of_lake':
+        return ladyOfLake.decide(ctx);
       case 'assassin':
-        ctx.logger.trace(`phase=${game.phase} — not implemented yet, waiting`);
-        return null;
+        return assassin.decide(ctx);
       case 'game_over':
-        // The engine's main loop handles game_over exit; brain returns
-        // noop here so we don't double-act on the exit signal.
-        return null;
+        // Vote in the Merlin quiz (if active and we're not Merlin). The
+        // engine's exit logic waits for the quiz to wrap before shutting
+        // down, so the brain keeps acting until merlin_quiz.complete.
+        return merlinQuiz.decide(ctx);
     }
   }
 }

@@ -157,18 +157,32 @@ export class AgentEngine {
         continue;
       }
 
-      // Exit conditions.
-      if (obs.room.status === 'closed') {
-        this.logger.info('room closed; exiting');
-        return;
-      }
+      // Exit conditions. Game-over takes priority over room-closed because
+      // the server closes the room IMMEDIATELY on game-end (e.g., the
+      // assassin-guess endpoint sets status='closed'), but the Merlin quiz
+      // is still reachable via the games API and we may still need to vote.
       if (obs.game?.phase === 'game_over') {
-        // Give realtime broadcast a beat to land + final state to settle,
-        // then exit cleanly. Subsequent phases (assassin/merlin quiz) come
-        // BEFORE game_over in the phase machine, so by the time we see
-        // game_over the game is truly done.
-        this.logger.info('game_over observed; exiting');
-        await sleep(500);
+        const quiz = obs.merlin_quiz;
+        const quizDone = !quiz || !quiz.enabled || quiz.complete;
+        const myPart = quiz?.has_voted || quiz?.has_skipped;
+        const iAmMerlin = this.observer.identity()?.special_role === 'merlin';
+        if (quizDone || iAmMerlin || myPart) {
+          this.logger.info('game_over: exit conditions met', {
+            quiz_enabled: quiz?.enabled ?? false,
+            quiz_complete: quiz?.complete ?? null,
+            my_part: myPart ?? false,
+            i_am_merlin: iAmMerlin,
+          });
+          await sleep(500);
+          return;
+        }
+        // else: quiz is open and we haven't voted yet — let the loop
+        // fall through to brain.decide() (which fires merlin_quiz).
+        // Don't return here even if room.status === 'closed'.
+      } else if (obs.room.status === 'closed') {
+        // Room closed WITHOUT a normal game_over (e.g., manager kicked
+        // everyone, or cleanup-cron archived a stale room). Nothing to do.
+        this.logger.info('room closed; exiting');
         return;
       }
 
@@ -242,6 +256,12 @@ export class AgentEngine {
       if (fresh.game.has_submitted_action) return true;
     }
     if (action.kind === 'continue' && fresh.game?.phase !== 'quest_result') return true;
+    if (action.kind === 'lady_investigate' &&
+        (fresh.game?.phase !== 'lady_of_lake' || !fresh.game.lady_of_lake?.can_investigate)) return true;
+    if (action.kind === 'assassin_guess' &&
+        (fresh.game?.phase !== 'assassin' || !fresh.game.assassin_phase?.can_guess)) return true;
+    if (action.kind === 'merlin_quiz' &&
+        (fresh.merlin_quiz?.has_voted || fresh.merlin_quiz?.has_skipped || fresh.merlin_quiz?.complete || !fresh.merlin_quiz?.enabled)) return true;
     return false;
   }
 

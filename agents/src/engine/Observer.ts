@@ -15,7 +15,7 @@
  */
 
 import type { ApiClient } from './ApiClient.js';
-import type { Observation, RoomObservation, GameObservation, GamePhase } from '../types/Observation.js';
+import type { Observation, RoomObservation, GameObservation, GamePhase, MerlinQuizObservation } from '../types/Observation.js';
 import type { Identity, Role, SpecialRole } from '../types/Identity.js';
 import type { AgentLogger } from '../util/logger.js';
 import { ApiError } from './ApiClient.js';
@@ -107,10 +107,14 @@ export class Observer {
       roles_distributed: rolesDistributed,
     };
 
-    // Fetch in-game state once the game has started.
+    // Fetch in-game state once the game has started OR if we've cached a
+    // gameId already (room.status flips to 'closed' immediately on game-end,
+    // but the game record + merlin quiz are still reachable — we need to
+    // keep observing them to drive the post-game flow).
     let game: GameObservation | undefined;
     let isLeader = false;
-    if (room.status === 'started' && isInRoom) {
+    const shouldFetchGame = isInRoom && (room.status === 'started' || this.cachedGameId !== null);
+    if (shouldFetchGame) {
       const gameState = await this.fetchGameState();
       if (gameState) {
         game = gameState;
@@ -118,9 +122,31 @@ export class Observer {
       }
     }
 
+    // Once the game is over, also fetch the Merlin quiz state.
+    let merlin_quiz: MerlinQuizObservation | undefined;
+    if (game?.phase === 'game_over' && this.cachedGameId) {
+      try {
+        const q = await this.opts.api.getMerlinQuiz(this.cachedGameId);
+        merlin_quiz = {
+          enabled: q.data.quiz_enabled,
+          active: q.data.quiz_active,
+          complete: q.data.quiz_complete,
+          has_voted: q.data.has_voted,
+          has_skipped: q.data.has_skipped,
+        };
+      } catch (err) {
+        if (err instanceof ApiError) {
+          this.opts.logger.debug(`merlin-quiz fetch ${err.status} ${err.code} — treating as no quiz`);
+        } else {
+          throw err;
+        }
+      }
+    }
+
     return {
       room,
       game,
+      merlin_quiz,
       self: {
         role: this.cachedIdentity?.role,
         special_role: this.cachedIdentity?.special_role,
@@ -172,6 +198,22 @@ export class Observer {
         votes_submitted: d.votes_submitted,
         actions_submitted: d.actions_submitted,
         total_team_members: d.total_team_members,
+        lady_of_lake: d.lady_of_lake
+          ? {
+              holder_id: d.lady_of_lake.holder_id,
+              investigated_player_ids: d.lady_of_lake.investigated_player_ids,
+              is_holder: d.lady_of_lake.is_holder,
+              can_investigate: d.lady_of_lake.can_investigate,
+            }
+          : null,
+        assassin_phase: d.assassin_phase
+          ? {
+              assassin_id: d.assassin_phase.assassin_id,
+              merlin_id: d.assassin_phase.merlin_id,
+              can_guess: d.assassin_phase.can_guess,
+            }
+          : null,
+        is_assassin: d.is_assassin,
       };
     } catch (err) {
       if (err instanceof ApiError) {

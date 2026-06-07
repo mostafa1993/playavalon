@@ -122,6 +122,25 @@ export class ApiClient {
     return this.post(`/api/games/${gameId}/continue`);
   }
 
+  // ===== Phase 3 endpoints =====
+
+  async ladyInvestigate(gameId: string, targetPlayerId: string): Promise<unknown> {
+    return this.post(`/api/games/${gameId}/lady-investigate`, { target_player_id: targetPlayerId });
+  }
+
+  async assassinGuess(gameId: string, guessedPlayerId: string): Promise<unknown> {
+    return this.post(`/api/games/${gameId}/assassin-guess`, { guessed_player_id: guessedPlayerId });
+  }
+
+  async getMerlinQuiz(gameId: string): Promise<MerlinQuizStateResponse> {
+    return this.get(`/api/games/${gameId}/merlin-quiz`);
+  }
+
+  /** Submit a quiz vote. `suspectedPlayerId = null` means "skip". */
+  async submitMerlinQuiz(gameId: string, suspectedPlayerId: string | null): Promise<unknown> {
+    return this.post(`/api/games/${gameId}/merlin-quiz`, { suspected_player_id: suspectedPlayerId });
+  }
+
   // ===== Internal HTTP helpers =====
 
   private async get<T>(path: string): Promise<T> {
@@ -292,10 +311,50 @@ export interface GameStateResponse {
     total_players: number;
     actions_submitted: number;
     total_team_members: number;
+    /** Populated when lady_of_lake is enabled on the room. */
+    lady_of_lake: null | {
+      enabled: boolean;
+      holder_id: string | null;
+      holder_display_name: string | null;
+      investigated_player_ids: string[];
+      previous_lady_holder_ids: string[];
+      is_holder: boolean;
+      can_investigate: boolean;
+    };
+    /** Populated when game.phase === 'assassin'. */
+    assassin_phase: null | {
+      assassin_id: string;
+      assassin_display_name: string;
+      merlin_id: string;
+      can_guess: boolean;
+    };
+    /** True iff THIS caller is the assassin (regardless of phase). */
+    is_assassin: boolean;
   };
   current_user_id: string;
   player_role: 'good' | 'evil';
   special_role: string | null;
   room_code: string;
   is_manager: boolean;
+}
+
+/**
+ * GET /api/games/[gameId]/merlin-quiz — quiz state. Only meaningful after
+ * the game ends; before that, quiz_enabled may be true (Merlin was in the
+ * game) but quiz_active may be false until the first vote lands.
+ */
+export interface MerlinQuizStateResponse {
+  data: {
+    quiz_enabled: boolean;
+    quiz_active: boolean;
+    quiz_complete: boolean;
+    my_vote: string | null;
+    has_voted: boolean;
+    has_skipped: boolean;
+    votes_submitted: number;
+    total_players: number;
+    connected_players: number;
+    quiz_started_at: string | null;
+    timeout_seconds: number;
+  };
 }

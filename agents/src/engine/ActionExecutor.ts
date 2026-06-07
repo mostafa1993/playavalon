@@ -73,12 +73,21 @@ export class ActionExecutor {
           await this.opts.api.continueQuest(gameId);
           return true;
         }
-        // P3+ cases would go here.
-        case 'lady_investigate':
-        case 'assassin_guess':
-        case 'merlin_quiz':
-          this.opts.logger.warn(`action kind ${action.kind} not implemented yet`);
+        case 'lady_investigate': {
+          const gameId = this.requireGameId(action.kind);
+          await this.opts.api.ladyInvestigate(gameId, action.target_id);
           return true;
+        }
+        case 'assassin_guess': {
+          const gameId = this.requireGameId(action.kind);
+          await this.opts.api.assassinGuess(gameId, action.target_id);
+          return true;
+        }
+        case 'merlin_quiz': {
+          const gameId = this.requireGameId(action.kind);
+          await this.opts.api.submitMerlinQuiz(gameId, action.target_id);
+          return true;
+        }
       }
     } catch (err) {
       if (err instanceof ApiError && EXPECTED_4XX_CODES.has(err.code)) {
@@ -100,6 +109,9 @@ export class ActionExecutor {
     if (action.kind === 'propose') return { team_size: action.team.length };
     if (action.kind === 'vote') return { choice: action.choice };
     if (action.kind === 'quest_action') return { choice: action.choice };
+    if (action.kind === 'lady_investigate') return { target_id: action.target_id };
+    if (action.kind === 'assassin_guess') return { target_id: action.target_id };
+    if (action.kind === 'merlin_quiz') return { target_id: action.target_id };
     return {};
   }
 }

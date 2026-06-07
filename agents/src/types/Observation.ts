@@ -84,6 +84,33 @@ export interface GameObservation {
   votes_submitted: number;
   actions_submitted: number;
   total_team_members: number;
+  /** Lady of the Lake state if the room enabled it. */
+  lady_of_lake: null | {
+    holder_id: string | null;
+    investigated_player_ids: string[];
+    is_holder: boolean;
+    can_investigate: boolean;
+  };
+  /** Assassin phase state — only populated during phase === 'assassin'. */
+  assassin_phase: null | {
+    assassin_id: string;
+    merlin_id: string;
+    can_guess: boolean;
+  };
+  /** True iff THIS agent is the assassin (regardless of current phase). */
+  is_assassin: boolean;
+}
+
+/**
+ * Merlin Quiz state — separate fetch on /api/games/[gameId]/merlin-quiz,
+ * only relevant after game ends. Cached by Observer when game.phase = game_over.
+ */
+export interface MerlinQuizObservation {
+  enabled: boolean;
+  active: boolean;
+  complete: boolean;
+  has_voted: boolean;
+  has_skipped: boolean;
 }
 
 export interface Observation {
@@ -91,6 +118,9 @@ export interface Observation {
   room: RoomObservation;
   /** Present only after the game has been created (status === 'started' or game exists). */
   game?: GameObservation;
+  /** Merlin quiz state — populated only when game.phase === 'game_over' AND
+   *  quiz_enabled is true (i.e., Merlin was in the game). */
+  merlin_quiz?: MerlinQuizObservation;
   /** Convenience snapshots so Brain doesn't need to look up its own row. */
   self: {
     role?: Role;
