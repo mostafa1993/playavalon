@@ -11,7 +11,7 @@
 
 import { createServerClient as createSSRClient } from '@supabase/ssr';
 import { createClient as createServiceRoleClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import type { User } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -64,9 +64,32 @@ export async function createRouteClient() {
 /**
  * Get the currently authenticated user, or null if not signed in.
  *
+ * Accepts auth in two ways, in priority order:
+ *   1. `Authorization: Bearer <jwt>` header — used by non-browser clients
+ *      (the agent engine in `agents/`, mobile apps, CLI tools). The JWT is
+ *      validated against Supabase via a one-off network call.
+ *   2. Session cookies — used by the normal browser flow via @supabase/ssr.
+ *
  * Use at the top of any protected API route / server action.
  */
 export async function getCurrentUser(): Promise<User | null> {
+  // Path 1: Bearer header (non-browser clients).
+  const headersList = await headers();
+  const authHeader = headersList.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length).trim();
+    if (token) {
+      const tokenClient = createServiceRoleClient(supabaseUrl, supabaseAnonKey);
+      const { data: { user }, error } = await tokenClient.auth.getUser(token);
+      if (!error && user) return user;
+      // If the Bearer token is invalid we DO NOT fall through to cookies —
+      // someone explicitly sent a token and it's wrong; that's a 401, not a
+      // chance to retry as an anonymous user.
+      return null;
+    }
+  }
+
+  // Path 2: cookie session (browsers).
   const client = await createRouteClient();
   const { data: { user } } = await client.auth.getUser();
   return user;

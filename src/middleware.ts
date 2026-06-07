@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
 
 const PUBLIC_ROUTES = [
@@ -26,6 +27,37 @@ function isPublicRoute(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+
+  // Bearer-token auth path (non-browser clients like the agent engine).
+  // If a valid token is present, skip the cookie-SSR setup entirely.
+  // An invalid Bearer token is treated as anonymous (no fall-through to
+  // cookies — explicit token + wrong value should not silently degrade).
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length).trim();
+    if (token) {
+      const tokenClient = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+      const { data: { user }, error } = await tokenClient.auth.getUser(token);
+
+      const { pathname } = request.nextUrl;
+      const isApi = pathname.startsWith('/api/');
+      const isPublic = isPublicRoute(pathname);
+
+      if ((error || !user) && !isPublic) {
+        if (isApi) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const loginUrl = request.nextUrl.clone();
+        loginUrl.pathname = '/login';
+        loginUrl.searchParams.set('returnTo', pathname);
+        return NextResponse.redirect(loginUrl);
+      }
+      return response;
+    }
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
