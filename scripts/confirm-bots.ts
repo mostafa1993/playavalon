@@ -2,6 +2,17 @@
  * Dev script: auto-confirm bot players' roles, one by one with random delays.
  * Usage: npx tsx scripts/confirm-bots.ts <ROOM_CODE>
  *
+ * ⚠️  Superseded by the agent engine (Phase 0). For new use, prefer running
+ * actual agents — they hit the real /api/rooms/[code]/confirm endpoint
+ * exactly like a human would:
+ *
+ *   npx tsx agents/src/cli/run.ts agents/configs/alice.yaml --room <CODE>
+ *
+ * This script is kept around for now because it's still the fastest way
+ * to flip many bots' confirmations for a UI-only test of the lobby
+ * dashboard. Will be removed once the agent engine is the default path
+ * for everyone (~1 week after P3 ships and stabilizes).
+ *
  * Useful for visually watching the lobby confirmation dashboard animate
  * (each bot's tile flips from ⏳ waiting → ✓ confirmed in real time via
  * Supabase Realtime). Works by writing player_roles.is_confirmed=true

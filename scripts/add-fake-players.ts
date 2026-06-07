@@ -1,91 +1,41 @@
 /**
- * Dev script: Fill a room with fake players for testing UI/state changes
+ * Dev script: Fill a room with fake players for testing UI/state changes.
  * Usage: npx tsx scripts/add-fake-players.ts <ROOM_CODE>
  *
  * What it does:
- *   - For each missing slot, creates (or reuses) a Supabase Auth user
- *     with a stable username like "bot_alice", "bot_bob", …
- *   - Inserts the matching `players` row (Supabase Auth schema:
- *     id = auth UID, username, display_name)
- *   - Adds them to `room_players`
+ *   - For each missing slot, ensures a Supabase Auth user + players row
+ *     exist for `bot_alice` … `bot_iris`.
+ *   - Adds them to `room_players`.
  *
- * The bots never log in or click anything themselves — they're just rows in
- * the DB, so they show up in the lobby and let the manager hit "Distribute"
- * at the right player count. To simulate state transitions (e.g. confirming
- * a role), run SQL in the Supabase dashboard, e.g.:
+ * These bot accounts are the SAME ones the agent engine (under /agents)
+ * uses to sign in. The actual ensureBot() helper now lives at
+ * agents/src/util/credentials.ts and is imported here so the two stay
+ * perfectly in sync.
  *
- *   UPDATE player_roles SET is_confirmed = true
- *   WHERE room_id = (SELECT id FROM rooms WHERE code = 'XXXXXX')
- *     AND player_id = (SELECT id FROM players WHERE username = 'bot_alice');
+ * The bots created by this script DO NOT play the game — they're just
+ * rows in the DB so the manager can hit "Distribute" at the right player
+ * count. To have a bot actually play a turn, run the agent engine:
  *
- * Bot credentials (if you want to actually log in as one in another browser):
+ *   npx tsx agents/src/cli/run.ts agents/configs/alice.yaml --room <CODE>
+ *
+ * Bot credentials (also used by the agent engine):
  *   email:    bot_<name>@playavalon.local
- *   password: bot_password_dev_only
+ *   password: bot_password_dev_only        (override via BOT_PASSWORD env var)
  */
 
 import { readFileSync } from 'fs';
-import { createClient } from '@supabase/supabase-js';
+import { ensureBot, serviceClientFromEnv } from '../agents/src/util/credentials.js';
+
+const BOT_NAMES = ['alice', 'bob', 'charlie', 'diana', 'erin', 'frank', 'grace', 'henry', 'iris'];
 
 // Load .env.local
 const envFile = readFileSync('.env.local', 'utf-8');
 for (const line of envFile.split('\n')) {
   const match = line.match(/^([^=]+)=(.*)$/);
-  if (match && !process.env[match[1]]) process.env[match[1]] = match[2];
+  if (match && !process.env[match[1]!]) process.env[match[1]!] = match[2]!;
 }
 
-const BOT_NAMES = ['alice', 'bob', 'charlie', 'diana', 'erin', 'frank', 'grace', 'henry', 'iris'];
-const BOT_PASSWORD = 'bot_password_dev_only';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-async function ensureBot(index: number): Promise<{ id: string; username: string; display_name: string }> {
-  const username = `bot_${BOT_NAMES[index] ?? `bot${index + 1}`}`;
-  const displayName = (BOT_NAMES[index] ?? `Bot${index + 1}`).replace(/^\w/, (c) => c.toUpperCase());
-  const email = `${username}@playavalon.local`;
-
-  // Already in players? Reuse.
-  const { data: existing } = await supabase
-    .from('players')
-    .select('id, username, display_name')
-    .eq('username', username)
-    .maybeSingle();
-  if (existing) return existing;
-
-  // Try to create the auth user. If they already exist in auth (from a
-  // previous run that lost the players row somehow), look up + insert players.
-  const { data: created, error: createErr } = await supabase.auth.admin.createUser({
-    email,
-    password: BOT_PASSWORD,
-    email_confirm: true,
-    user_metadata: { username, display_name: displayName },
-  });
-
-  let authId: string;
-  if (created?.user) {
-    authId = created.user.id;
-  } else if (createErr && /already/i.test(createErr.message)) {
-    // Auth user exists; find it. listUsers' typed return is a discriminated
-    // union and TS gets confused, so we narrow manually.
-    const result = await supabase.auth.admin.listUsers();
-    const users = (result.data?.users ?? []) as Array<{ id: string; email?: string }>;
-    const found = users.find((u) => u.email?.toLowerCase() === email);
-    if (!found) throw new Error(`Auth user exists for ${email} but listUsers couldn't find it`);
-    authId = found.id;
-  } else {
-    throw createErr ?? new Error('createUser returned no user');
-  }
-
-  const { data: inserted, error: insertErr } = await supabase
-    .from('players')
-    .insert({ id: authId, username, display_name: displayName })
-    .select('id, username, display_name')
-    .single();
-  if (insertErr) throw insertErr;
-  return inserted;
-}
+const supabase = serviceClientFromEnv();
 
 async function main() {
   const roomCode = process.argv[2]?.toUpperCase();
@@ -117,7 +67,7 @@ async function main() {
 
   console.log(`Room ${roomCode}: ${count}/${room.expected_players}. Adding ${needed} bot(s)…\n`);
 
-  // Which bot slots are already taken (so we don't try to re-add the same bot)?
+  // Which bot slots are already taken?
   const { data: alreadyIn } = await supabase
     .from('room_players')
     .select('player_id, players!inner(username)')
@@ -131,11 +81,11 @@ async function main() {
   );
 
   let added = 0;
-  for (let i = 0; added < needed && i < BOT_NAMES.length + 10; i++) {
-    const candidateUsername = `bot_${BOT_NAMES[i] ?? `bot${i + 1}`}`;
+  for (let i = 0; added < needed && i < BOT_NAMES.length; i++) {
+    const candidateUsername = `bot_${BOT_NAMES[i]}`;
     if (takenUsernames.has(candidateUsername)) continue;
 
-    const bot = await ensureBot(i);
+    const bot = await ensureBot(supabase, { name: BOT_NAMES[i]! });
     const { error: joinErr } = await supabase
       .from('room_players')
       .insert({ room_id: room.id, player_id: bot.id, is_connected: true });
@@ -143,7 +93,7 @@ async function main() {
       console.error(`  ✗ ${bot.display_name}: ${joinErr.message}`);
       continue;
     }
-    console.log(`  ✓ Added ${bot.display_name}  (login: ${bot.username}@playavalon.local / ${BOT_PASSWORD})`);
+    console.log(`  ✓ Added ${bot.display_name}  (login: ${bot.email} / ${bot.password})`);
     added += 1;
   }
 

@@ -9,6 +9,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 
 const BOT_PASSWORD_DEFAULT = 'bot_password_dev_only';
 
@@ -39,7 +40,13 @@ export function serviceClientFromEnv(
       'serviceClientFromEnv: missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in env',
     );
   }
-  return createClient(url, serviceKey);
+  // Pass the `ws` package as realtime transport. supabase-js >=2.47
+  // refuses to construct in Node <22 otherwise (see SessionManager.ts
+  // for the same reason). We don't use realtime; this just lets the
+  // client be instantiated.
+  return createClient(url, serviceKey, {
+    realtime: { transport: WebSocket as unknown as never },
+  });
 }
 
 export async function ensureBot(
