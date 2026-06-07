@@ -13,6 +13,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 import type { AgentLogger } from '../util/logger.js';
 
 const REFRESH_LEAD_MS = 5 * 60 * 1000; // refresh 5min before expiry
@@ -35,8 +36,14 @@ export class SessionManager {
 
   constructor(opts: SessionManagerOptions) {
     this.opts = opts;
+    // Node < 22 has no global WebSocket; supabase-js refuses to construct
+    // without one. We pass `ws` explicitly so the client can be created.
+    // (We don't actually use realtime in the agent — see verification #2
+    // in specs/023-rule-based-agents/plan.md — but the client constructor
+    // initializes a RealtimeClient regardless.)
     this.supabase = createClient(opts.supabaseUrl, opts.supabaseAnonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
+      realtime: { transport: WebSocket as unknown as never },
     });
   }
 
