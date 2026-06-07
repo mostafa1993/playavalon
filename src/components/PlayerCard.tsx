@@ -61,6 +61,15 @@ export function PlayerCard({ player, isCurrentPlayer = false }: PlayerCardProps)
             </span>
           )}
 
+          {player.is_bot && (
+            <span
+              className="badge bg-avalon-navy/60 text-avalon-silver text-sm font-medium border border-avalon-silver/30"
+              title="This seat is held by an automated agent (bot)"
+            >
+              🤖 Bot
+            </span>
+          )}
+
           {!player.is_connected && (
             <span className="badge bg-avalon-silver/20 text-avalon-silver text-sm font-medium">
               Disconnected

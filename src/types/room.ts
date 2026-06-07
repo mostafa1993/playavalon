@@ -90,6 +90,8 @@ export interface RoomPlayerInfo {
   // Phase 6: Connection status details
   last_activity_at?: string;
   seconds_since_activity?: number;
+  // Feature 024: true if this seat is held by an agent (bot)
+  is_bot?: boolean;
 }
 
 /**
@@ -101,6 +103,9 @@ export interface CreateRoomPayload {
   role_config?: RoleConfig;
   // Feature 023: opt into a one-time intro round at game start
   intro_phase_enabled?: boolean;
+  // Feature 024: number of bot players to auto-fill with the agent engine.
+  // Default 0 = no bots. Must be < expected_players (need at least 1 human).
+  agent_count?: number;
 }
 
 /**

@@ -16,6 +16,7 @@ interface CreateRoomModalProps {
     expectedPlayers: number,
     roleConfig: RoleConfig,
     introPhaseEnabled: boolean,
+    agentCount: number,
   ) => Promise<void>;
   isLoading?: boolean;
 }
@@ -33,11 +34,12 @@ export function CreateRoomModal({
   const [expectedPlayers, setExpectedPlayers] = useState(5);
   const [roleConfig, setRoleConfig] = useState<RoleConfig>({});
   const [introPhaseEnabled, setIntroPhaseEnabled] = useState(false);
+  const [agentCount, setAgentCount] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onCreateRoom(expectedPlayers, roleConfig, introPhaseEnabled);
+    await onCreateRoom(expectedPlayers, roleConfig, introPhaseEnabled, agentCount);
   };
 
   // T029b: Reset invalid options when player count changes
@@ -49,7 +51,14 @@ export function CreateRoomModal({
       // Reset to default config if current is invalid
       setRoleConfig({});
     }
+    // Feature 024: agent_count must be < expected_players (at least 1 human seat)
+    if (agentCount >= count) {
+      setAgentCount(Math.max(0, count - 1));
+    }
   };
+
+  // Max bots = expected_players - 1 (always need at least one human as manager)
+  const maxBots = Math.max(0, expectedPlayers - 1);
 
   const playerOptions = Array.from(
     { length: MAX_PLAYERS - MIN_PLAYERS + 1 },
@@ -196,6 +205,38 @@ export function CreateRoomModal({
                     this round. After the manager ends it, the same leader
                     proposes Quest 1 normally.
                   </div>
+                </div>
+              </label>
+            </div>
+
+            {/* Feature 024: Bot fill-in */}
+            <div className="mt-4 pt-4 border-t border-avalon-silver/10">
+              <label className="block cursor-pointer">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-display text-avalon-parchment text-base font-bold">
+                      🤖 Bots (auto-fill empty seats)
+                    </div>
+                    <div className="text-sm text-avalon-silver/80 mt-1">
+                      Number of agent players that will automatically join this room.
+                      {maxBots > 0
+                        ? ` 0 = humans only. Max ${maxBots} (need at least 1 human).`
+                        : ' Increase the player count to enable bots.'}
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    max={maxBots}
+                    value={agentCount}
+                    disabled={maxBots === 0}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (Number.isNaN(v)) setAgentCount(0);
+                      else setAgentCount(Math.min(maxBots, Math.max(0, v)));
+                    }}
+                    className="w-16 px-3 py-2 text-center text-lg font-display font-bold bg-avalon-midnight border border-avalon-silver/30 text-avalon-gold rounded-md focus:border-avalon-gold focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                  />
                 </div>
               </label>
             </div>

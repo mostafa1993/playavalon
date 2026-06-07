@@ -106,6 +106,31 @@ services:
     stop_grace_period: 120s
     restart: unless-stopped
 
+  # Feature 024 (P4): bot supervisor — watches for rooms with agent_count > 0
+  # and spawns one agent process per bot seat. Agents play full games via the
+  # public HTTP API. Only meaningful in production (where humans are creating
+  # rooms); for local testing, devs run cli/run.ts or cli/populate.ts directly.
+  bot-supervisor:
+    profiles: [prod]
+    build:
+      context: ./agents
+    env_file: ${ENV_FILE:-.env.local}
+    environment:
+      # Override the agent's default base_url to talk to the in-network app
+      # service rather than the public URL. Saves the round-trip through
+      # traefik+TLS for every poll.
+      AGENT_BASE_URL: http://app:3000
+      AGENTS_CONFIGS_DIR: /app/configs
+    volumes:
+      # Live-mount configs from the repo so edits don't need a rebuild.
+      - ./agents/configs:/app/configs:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+    # Spawned child agents may be in active games; give them time to wrap
+    # cleanly on SIGTERM (game_over detection + quiz vote) before SIGKILL.
+    stop_grace_period: 60s
+
   # Daily keepalive — hits /api/cleanup so Supabase sees activity and doesn't
   # auto-pause after 7 days of idle (free tier). The endpoint also archives
   # stale rooms, so this doubles as the room-cleanup cron.

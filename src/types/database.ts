@@ -53,6 +53,8 @@ export interface Database {
           ai_review_enabled: boolean;
           // Feature 023: one-time intro round at game start
           intro_phase_enabled: boolean;
+          // Feature 024: number of bot players that should auto-fill seats
+          agent_count: number;
         };
         Insert: {
           id?: string;
@@ -70,6 +72,8 @@ export interface Database {
           ai_review_enabled?: boolean;
           // Feature 023
           intro_phase_enabled?: boolean;
+          // Feature 024
+          agent_count?: number;
         };
         Update: {
           id?: string;
@@ -87,6 +91,8 @@ export interface Database {
           ai_review_enabled?: boolean;
           // Feature 023
           intro_phase_enabled?: boolean;
+          // Feature 024
+          agent_count?: number;
         };
       };
       room_ai_consents: {
@@ -146,6 +152,8 @@ export interface Database {
           joined_at: string;
           is_connected: boolean;
           disconnected_at: string | null;
+          // Feature 024: true if this row is a bot (agent process)
+          is_bot: boolean;
         };
         Insert: {
           id?: string;
@@ -154,6 +162,8 @@ export interface Database {
           joined_at?: string;
           is_connected?: boolean;
           disconnected_at?: string | null;
+          // Feature 024
+          is_bot?: boolean;
         };
         Update: {
           id?: string;
@@ -162,6 +172,8 @@ export interface Database {
           joined_at?: string;
           is_connected?: boolean;
           disconnected_at?: string | null;
+          // Feature 024
+          is_bot?: boolean;
         };
       };
       player_roles: {

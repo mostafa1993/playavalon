@@ -90,8 +90,19 @@ export async function POST(request: Request, { params }: RouteParams) {
       return errors.roomNotWaiting();
     }
 
+    // Feature 024: detect bot accounts so the lobby UI can show a 🤖 badge.
+    // Bot accounts are managed by the agent engine and have usernames
+    // prefixed with `bot_` (see scripts/add-fake-players.ts + agents/
+    // ensureBot). For everyone else, is_bot stays false.
+    const { data: profile } = await supabase
+      .from('players')
+      .select('username')
+      .eq('id', user.id)
+      .single();
+    const isBot = profile?.username?.startsWith('bot_') ?? false;
+
     // Add player to room (usernames are globally unique, so no in-room nickname collision check needed)
-    const roomPlayer = await addPlayerToRoom(supabase, room.id, user.id);
+    const roomPlayer = await addPlayerToRoom(supabase, room.id, user.id, isBot);
 
     return NextResponse.json({
       data: {

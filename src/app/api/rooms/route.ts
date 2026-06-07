@@ -81,6 +81,21 @@ export async function POST(request: Request) {
       return errors.internalError('Failed to generate unique room code');
     }
 
+    // Feature 024: validate agent_count (must be <= expected_players - 1 so
+    // there's at least one human seat). Defaults to 0 if not provided.
+    const agentCount = Math.max(0, Math.floor(body.agent_count ?? 0));
+    if (agentCount >= body.expected_players) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'INVALID_AGENT_COUNT',
+            message: `agent_count (${agentCount}) must be less than expected_players (${body.expected_players}) — at least one human seat required`,
+          },
+        },
+        { status: 400 }
+      );
+    }
+
     // Create room with role_config
     const room = await createRoom(supabase, {
       code,
@@ -91,6 +106,8 @@ export async function POST(request: Request) {
       lady_of_lake_enabled: roleConfig.ladyOfLake || false,
       // Feature 023: opt-in intro round at game start
       intro_phase_enabled: body.intro_phase_enabled === true,
+      // Feature 024: bot count to auto-fill via the agent supervisor
+      agent_count: agentCount,
     });
 
     // Add creator to room

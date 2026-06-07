@@ -238,6 +238,7 @@ export async function getRoomDetails(
       player_id,
       joined_at,
       is_connected,
+      is_bot,
       players!inner (
         id,
         display_name,
@@ -308,6 +309,7 @@ export async function getRoomDetails(
     player_id: string;
     joined_at: string;
     is_connected: boolean;
+    is_bot?: boolean;
     players: { id: string; display_name: string; last_activity_at?: string } | { id: string; display_name: string; last_activity_at?: string }[];
   }) => {
     // Handle both single object (correct) and array (defensive) cases
@@ -329,6 +331,8 @@ export async function getRoomDetails(
       joined_at: rp.joined_at,
       last_activity_at: lastActivityAt,
       seconds_since_activity: connectionStatus.seconds_since_activity,
+      // Feature 024
+      is_bot: rp.is_bot === true,
     };
   });
 
@@ -357,13 +361,15 @@ export async function getRoomDetails(
 export async function addPlayerToRoom(
   client: SupabaseClient,
   roomId: string,
-  playerId: string
+  playerId: string,
+  isBot: boolean = false,
 ): Promise<RoomPlayer> {
   const { data, error } = await client
     .from('room_players')
     .insert({
       room_id: roomId,
       player_id: playerId,
+      is_bot: isBot,
     })
     .select()
     .single();

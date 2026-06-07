@@ -26,6 +26,7 @@ export default function Home() {
     expectedPlayers: number,
     roleConfig: RoleConfig,
     introPhaseEnabled: boolean,
+    agentCount: number,
   ) => {
     setGeneralError(null);
     setIsCreatingRoom(true);
@@ -37,6 +38,7 @@ export default function Home() {
           expected_players: expectedPlayers,
           role_config: roleConfig,
           intro_phase_enabled: introPhaseEnabled,
+          agent_count: agentCount,
         }),
       });
       if (!response.ok) {
