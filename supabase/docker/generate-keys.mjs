@@ -110,7 +110,7 @@ PGRST_DB_EXTRA_SEARCH_PATH=public
 
 writeFileSync(envPath, env, { mode: 0o600 });
 console.log(`Wrote ${envPath}`);
-console.log(`\n--- App-side values for ${PROD ? '.env.production (the VM)' : 'local testing (.env.local)'} ---`);
+console.log(`\n--- App-side values for ${PROD ? "the app's .env on the VM" : 'local testing (.env.local)'} ---`);
 console.log(`NEXT_PUBLIC_SUPABASE_URL=${PUBLIC_URL}`);
 console.log(`NEXT_PUBLIC_SUPABASE_ANON_KEY=${ANON_KEY}`);
 console.log(`SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}`);
