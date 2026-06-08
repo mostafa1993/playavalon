@@ -123,19 +123,22 @@ export class AgentEngine {
   }
 
   private async joinRoomIfNeeded(): Promise<void> {
-    // We can't know membership until we observe — peek once.
-    const obs = await this.observer.fetch();
-    if (obs.self.is_in_room) {
-      this.logger.info(`already in room ${this.opts.roomCode}`);
-      return;
-    }
+    // Call POST /api/rooms/[code]/join unconditionally. The endpoint is
+    // idempotent: if we're already a member of this room it returns
+    // is_rejoin=true with 200 (and bumps our is_connected flag), so a
+    // "peek first" Observer.fetch() is redundant. Critically, that peek
+    // ALSO 403s with NOT_ROOM_MEMBER when the bot isn't yet in the room
+    // (Observer.fetch → GET /api/rooms/[code], which requires membership)
+    // — so we have to join before we can observe.
     this.logger.info(`joining room ${this.opts.roomCode}`);
     try {
       await this.api.joinRoom(this.opts.roomCode);
-      this.logger.info('joined');
+      this.logger.info('joined (or already a member)');
     } catch (err) {
       if (err instanceof ApiError && err.code === 'PLAYER_ALREADY_IN_ROOM') {
-        // Edge case: we're in a different room. Treat as fatal — manual cleanup needed.
+        // Server says we're in a DIFFERENT room (the join endpoint checks
+        // getPlayerCurrentRoom and rejects if it returns another room).
+        // Treat as fatal — manual cleanup needed.
         throw new Error(`agent is already in another room; clean up before retrying. (${err.message})`);
       }
       throw err;
