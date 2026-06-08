@@ -37,6 +37,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
       - ./traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks:
+      - default
+      - avalon-shared
     restart: unless-stopped
 
   app:
@@ -57,6 +60,11 @@ services:
     volumes:
       # Read-only mount of the agent's data so the review API can serve summary files.
       - game_reviews_data:/data/games:ro
+    # GCP can't hairpin the VM's own public IP, so resolve the Supabase subdomain to
+    # the host (→ Traefik → Kong). Server-side calls stay on the box; browser still
+    # uses the real public DNS. Keeps NEXT_PUBLIC_SUPABASE_URL identical everywhere.
+    extra_hosts:
+      - "supabase.playavalon.fun:host-gateway"
     labels:
       - traefik.enable=true
       - traefik.http.routers.app.rule=Host(`playavalon.fun`)
@@ -124,6 +132,10 @@ services:
     volumes:
       # Live-mount configs from the repo so edits don't need a rebuild.
       - ./agents/configs:/app/configs:ro
+    extra_hosts:
+      # Same GCP hairpin workaround as the app — bots sign in to Supabase by the
+      # public URL, which must resolve to the host (→ Traefik → Kong) on the VM.
+      - "supabase.playavalon.fun:host-gateway"
     depends_on:
       - app
     restart: unless-stopped
@@ -154,6 +166,12 @@ services:
             || echo "[$$(date -u +%FT%TZ)] cleanup keepalive FAILED"
           sleep 86400
         done
+
+networks:
+  # Shared with the self-hosted Supabase stack so Traefik can route to Kong.
+  # Create once on the VM: docker network create avalon-shared
+  avalon-shared:
+    external: true
 
 volumes:
   letsencrypt:

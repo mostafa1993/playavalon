@@ -36,6 +36,11 @@ function signJwt(payload, secret) {
 const iat = Math.floor(Date.now() / 1000);
 const exp = iat + 60 * 60 * 24 * 365 * 10; // 10 years
 
+// `--prod` targets the VM (public subdomain); default targets local testing.
+const PROD = process.argv.includes('--prod');
+const PUBLIC_URL = PROD ? 'https://supabase.playavalon.fun' : 'http://localhost:54321';
+const SITE = PROD ? 'https://playavalon.fun' : 'http://localhost:3000';
+
 const JWT_SECRET = randomBytes(32).toString('hex'); // 64 hex chars (>= 32 required)
 const POSTGRES_PASSWORD = randomBytes(24).toString('hex'); // hex → safe in connection strings
 const SECRET_KEY_BASE = randomBytes(48).toString('hex');
@@ -74,12 +79,12 @@ POSTGRES_HOST=db
 POSTGRES_DB=postgres
 POSTGRES_PORT=5432
 
-############ API / URLs (LOCAL TEST) ############
+############ API / URLs (${PROD ? 'PROD' : 'LOCAL TEST'}) ############
 # Host ports 8000/5432 are commonly taken; use 54321/54322 (Supabase defaults).
 KONG_HTTP_PORT=54321
-API_EXTERNAL_URL=http://localhost:54321
-SUPABASE_PUBLIC_URL=http://localhost:54321
-SITE_URL=http://localhost:3000
+API_EXTERNAL_URL=${PUBLIC_URL}
+SUPABASE_PUBLIC_URL=${PUBLIC_URL}
+SITE_URL=${SITE}
 ADDITIONAL_REDIRECT_URLS=
 
 ############ Auth ############
@@ -105,7 +110,7 @@ PGRST_DB_EXTRA_SEARCH_PATH=public
 
 writeFileSync(envPath, env, { mode: 0o600 });
 console.log(`Wrote ${envPath}`);
-console.log('\n--- App-side values for local testing (.env.local) ---');
-console.log('NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321');
+console.log(`\n--- App-side values for ${PROD ? '.env.production (the VM)' : 'local testing (.env.local)'} ---`);
+console.log(`NEXT_PUBLIC_SUPABASE_URL=${PUBLIC_URL}`);
 console.log(`NEXT_PUBLIC_SUPABASE_ANON_KEY=${ANON_KEY}`);
 console.log(`SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}`);

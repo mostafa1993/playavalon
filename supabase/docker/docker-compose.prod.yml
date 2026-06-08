@@ -1,0 +1,29 @@
+# Production override for the self-hosted Supabase stack.
+# Fronts Kong with the app's existing Traefik at https://supabase.playavalon.fun.
+#
+# On the VM (after `docker network create avalon-shared`):
+#   docker compose -f supabase/docker/docker-compose.yml \
+#                  -f supabase/docker/docker-compose.prod.yml \
+#                  --env-file supabase/docker/.env up -d
+#
+# The app stack's Traefik must also join `avalon-shared` (see root docker-compose.yml),
+# so it can route to Kong. db/kong host-port binds from the base file stay on
+# 127.0.0.1 (harmless on the VM, and the db port is handy for the data migration).
+services:
+  kong:
+    networks:
+      default:
+        aliases:
+          - api-gw
+      avalon-shared:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.supabase.rule=Host(`supabase.playavalon.fun`)
+      - traefik.http.routers.supabase.entrypoints=websecure
+      - traefik.http.routers.supabase.tls.certresolver=letsencrypt
+      - traefik.http.services.supabase.loadbalancer.server.port=8000
+      - traefik.docker.network=avalon-shared
+
+networks:
+  avalon-shared:
+    external: true
