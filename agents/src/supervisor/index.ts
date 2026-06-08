@@ -104,7 +104,16 @@ function loadConfigSummaries(): AgentConfigSummary[] {
 
 function spawnAgent(roomCode: string, cfg: AgentConfigSummary, restartCount: number): SpawnedAgent {
   log.info(`spawning agent ${cfg.username} for room ${roomCode}` + (restartCount > 0 ? ` (restart ${restartCount})` : ''));
-  const args = ['tsx', RUN_CLI_PATH, cfg.path, '--room', roomCode, '--env-file', ENV_FILE];
+  // Children inherit the supervisor's full env via spawn's `env: process.env`.
+  // We do NOT pass `--env-file` here:
+  //   - In Docker, no .env file exists on disk (docker-compose populates env
+  //     vars at startup; the supervisor inherits, children inherit again).
+  //   - In local dev, the supervisor's own loadEnvFile() at startup populates
+  //     process.env, which children inherit.
+  // We DID pass --env-file before, and it broke in Docker because Node 20.6+
+  // treats `--env-file <path>` as a native fatal flag — exit code 9 when the
+  // path doesn't exist.
+  const args = ['tsx', RUN_CLI_PATH, cfg.path, '--room', roomCode];
   // Forward AGENT_BASE_URL if set (used in docker-compose to point children
   // at the in-network http://app:3000 instead of the public URL).
   if (process.env.AGENT_BASE_URL) {
