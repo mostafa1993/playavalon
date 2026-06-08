@@ -43,6 +43,43 @@ export function Lobby({
   const [copied, setCopied] = useState(false);
   const [showRulebook, setShowRulebook] = useState(false);
   const [confirmationsExpanded, setConfirmationsExpanded] = useState(false);
+  // Track which player a force-confirm request is currently in-flight for
+  // (per-player loading state so multiple force-confirms in a row don't
+  // stomp each other's spinners).
+  const [forcingPlayerId, setForcingPlayerId] = useState<string | null>(null);
+  const [forceConfirmError, setForceConfirmError] = useState<string | null>(null);
+
+  /**
+   * Force-confirm a stuck player's role. Manager-only escape hatch:
+   * when a player insists they've confirmed but the dashboard shows
+   * them as ⏳ waiting, the manager can override. The endpoint is
+   * idempotent — if the player has actually confirmed since the
+   * dashboard last refreshed, the call returns success with no-op.
+   */
+  const handleForceConfirm = async (playerId: string, displayName: string) => {
+    if (forcingPlayerId) return; // simple guard — only one at a time
+    if (!confirm(`Force-confirm ${displayName}? Use only if they say they've already confirmed but the system still shows them as waiting.`)) {
+      return;
+    }
+    setForcingPlayerId(playerId);
+    setForceConfirmError(null);
+    try {
+      const res = await fetch(
+        `/api/rooms/${room.room.code}/players/${playerId}/force-confirm`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setForceConfirmError(data?.error?.message ?? 'Force-confirm failed');
+      }
+      // Realtime broadcast on player_roles UPDATE will refresh the
+      // dashboard; no manual refetch needed.
+    } catch {
+      setForceConfirmError('Network error');
+    } finally {
+      setForcingPlayerId(null);
+    }
+  };
 
   const isManager = room.current_player.is_manager;
   const isFull = room.players.length >= room.room.expected_players;
@@ -214,33 +251,54 @@ export function Lobby({
 
                 {/* Per-player breakdown — sorted: pending first, then orphans, then confirmed */}
                 <ul className="mt-2 space-y-1 text-xs">
-                  {[...pending, ...orphans, ...confirmed].map((p) => (
-                    <li
-                      key={p.player_id}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <span className="truncate text-avalon-silver">
-                        {p.display_name}
-                      </span>
-                      {!p.in_room ? (
-                        <span
-                          className="badge bg-evil/20 text-evil whitespace-nowrap"
-                          title="This player left the room after roles were distributed. Their orphan role row is blocking the count — see the docs / leave route handling."
-                        >
-                          ⚠ left
+                  {[...pending, ...orphans, ...confirmed].map((p) => {
+                    const isForcing = forcingPlayerId === p.player_id;
+                    return (
+                      <li
+                        key={p.player_id}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="truncate text-avalon-silver">
+                          {p.display_name}
                         </span>
-                      ) : p.is_confirmed ? (
-                        <span className="badge bg-good/20 text-good whitespace-nowrap">
-                          ✓ confirmed
-                        </span>
-                      ) : (
-                        <span className="badge bg-avalon-gold/20 text-avalon-gold whitespace-nowrap">
-                          ⏳ waiting
-                        </span>
-                      )}
-                    </li>
-                  ))}
+                        <div className="flex items-center gap-1.5">
+                          {!p.in_room ? (
+                            <span
+                              className="badge bg-evil/20 text-evil whitespace-nowrap"
+                              title="This player left the room after roles were distributed. Their orphan role row is blocking the count — see the docs / leave route handling."
+                            >
+                              ⚠ left
+                            </span>
+                          ) : p.is_confirmed ? (
+                            <span className="badge bg-good/20 text-good whitespace-nowrap">
+                              ✓ confirmed
+                            </span>
+                          ) : (
+                            <>
+                              <span className="badge bg-avalon-gold/20 text-avalon-gold whitespace-nowrap">
+                                ⏳ waiting
+                              </span>
+                              {/* Manager escape hatch — only for in-room, not-yet-confirmed players. */}
+                              <button
+                                type="button"
+                                onClick={() => handleForceConfirm(p.player_id, p.display_name)}
+                                disabled={isForcing || forcingPlayerId !== null}
+                                className="text-[10px] px-1.5 py-0.5 rounded border border-avalon-silver/30 text-avalon-silver hover:text-avalon-gold hover:border-avalon-gold/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                                title="Force-confirm this player's role (manager override)"
+                              >
+                                {isForcing ? '…' : 'Force ✓'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
+
+                {forceConfirmError && (
+                  <p className="mt-2 text-evil text-xs">{forceConfirmError}</p>
+                )}
 
                 {orphans.length > 0 && (
                   <p className="mt-2 text-evil text-xs">
