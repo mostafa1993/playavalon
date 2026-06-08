@@ -31,6 +31,7 @@ import yaml from 'js-yaml';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 import { makeLogger } from '../util/logger.js';
+import { ensureBot } from '../util/credentials.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUN_CLI_PATH = resolve(__dirname, '..', 'cli', 'run.ts');
@@ -245,6 +246,20 @@ async function main(): Promise<void> {
     config_pool_size: configs.length,
     configs: configs.map((c) => c.name).join(','),
   });
+
+  // Self-bootstrap: ensure every config has a Supabase Auth account + players
+  // row. ensureBot() is idempotent — for existing accounts it's a no-op lookup;
+  // for new YAMLs the supervisor self-provisions on startup. Failures here are
+  // logged but non-fatal so a single broken account doesn't keep the
+  // supervisor from doing its job for the rest.
+  for (const cfg of configs) {
+    try {
+      const identity = await ensureBot(supabase, { name: cfg.name });
+      log.info(`bot account ready: ${identity.username} (${identity.id})`);
+    } catch (err) {
+      log.error(`ensureBot(${cfg.name}) failed — agent will not be spawnable until fixed`, err);
+    }
+  }
 
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
