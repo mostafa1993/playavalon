@@ -19,4 +19,9 @@ export function makeBrain(brainCfg: AgentConfig['brain']): Brain {
     // case 'llm':
     //   return new LlmBrain(brainCfg.options);
   }
+  // Should be unreachable — the switch above covers every discriminator.
+  // The throw is defensive against future additions to AgentConfig['brain']
+  // that forget to update this factory, and it also satisfies TypeScript's
+  // "function may not return" check in some stricter configs.
+  throw new Error(`makeBrain: unknown brain.type=${(brainCfg as { type: string }).type}`);
 }
