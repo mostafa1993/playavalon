@@ -163,7 +163,28 @@ We **migrate**, not start fresh. Approach:
 
 **Credential handling:** the dump needs read access to the cloud DB. I'll provide the exact `pg_dump` command; **you** paste in the connection string from the Supabase dashboard so the credential never leaves your hands.
 
-**Exact `pg_dump`/restore flags get finalized in Phase 3** (test migration into the local stack), where we can iterate safely — 31 MB makes this fast and forgiving.
+**Proven procedure (rehearsed in Phase 3 — use verbatim at cutover):**
+
+Target DB must be **PG17** with migrations applied + GoTrue up (so the `auth` schema exists). Then:
+
+```bash
+# 1. Dump cloud (data-only). PG17 pg_dump required (cloud=17.6); --network host gives IPv6.
+CLOUD=db.<ref>.supabase.co
+docker run --rm --network host -e PGPASSWORD='<db-password>' --entrypoint pg_dump supabase/postgres:17.6.1.084 \
+  -h $CLOUD -U postgres -d postgres --data-only --disable-triggers --no-owner --no-privileges \
+  --schema=public > cloud_public.sql
+docker run --rm --network host -e PGPASSWORD='<db-password>' --entrypoint pg_dump supabase/postgres:17.6.1.084 \
+  -h $CLOUD -U postgres -d postgres --data-only --disable-triggers --no-owner --no-privileges \
+  -t auth.users -t auth.identities > cloud_auth.sql
+
+# 2. Restore as supabase_admin — the superuser. `postgres` is locked down in the Supabase
+#    image (not superuser), so --disable-triggers fails as postgres. Auth first (players.id
+#    FKs auth.users), then public.
+docker exec -i supabase-db psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < cloud_auth.sql
+docker exec -i supabase-db psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < cloud_public.sql
+```
+
+Gotchas confirmed in rehearsal: restore as **`supabase_admin`** (not `postgres`); target must be **PG17** (host `pg_dump` 16 can't dump a 17 server, and 17→15 would be a downgrade); the cloud `db.<ref>.supabase.co` host is **IPv6-only** on free tier. Original bcrypt passwords carry over, so everyone keeps their login — just one re-login after cutover (old session cookies were signed with the cloud JWT secret). Dumps contain PII (emails + password hashes) — keep them out of git, delete after.
 
 ---
 
@@ -191,10 +212,11 @@ We **migrate**, not start fresh. Approach:
 - [x] Added `npm run bots` local helper (prod runs the `bot-supervisor` service automatically)
 - [ ] Not separately spot-checked (only incidentally exercised): Lady of the Lake / Assassin / Merlin-quiz endgame, AI reviewer agent
 
-### Phase 3 — Test the data migration locally
-- [ ] You run the provided `pg_dump` against cloud → produce dump file
-- [ ] Restore into local self-hosted DB
-- [ ] Confirm: accounts present, **existing password logs in**, game history intact, RLS still correct
+### Phase 3 — Test the data migration locally ✅
+- [x] Switched stack to **PG17** (`supabase/postgres:17.6.1.084`) to match cloud (17.6) — no downgrade
+- [x] Dumped cloud (data-only, PG17 `pg_dump` via `--network host` for IPv6) → restored into local
+- [x] **Counts match cloud exactly** (34 users / 34 players / 20 rooms / 18 games / 138 proposals / 1097 votes / 173 quests / 351 events)
+- [x] Accounts functional: 34/34 with passwords + email-confirmed; **a migrated user logged in end-to-end**; 0 orphan players
 
 ### Phase 4 — Deploy the stack to the VM
 - [ ] You add DNS **A-record**: `supabase.playavalon.fun` → VM IP
@@ -270,7 +292,8 @@ Keep the cloud project alive until we've played several real games on self-hoste
 
 ## 13. Decisions log
 - **Self-host full Supabase stack** (not vanilla Postgres) — preserves all code + migrations; avoids auth rewrite.
-- **Migrate data** (not start fresh) — keep accounts + history; passwords preserved via bcrypt.
+- **Migrate data** (not start fresh) — keep accounts + history; passwords preserved via bcrypt. Verified in Phase 3: counts match exactly, a migrated user logs in.
+- **Postgres 17** (`supabase/postgres:17.6.1.084`) — match cloud's 17.6; no major-version downgrade.
 - **Drop** storage/imgproxy/functions/analytics/vector/supavisor — unused.
 - **No HA / no automated backups** — accepted risk at our scale.
 - **Option A (polling reduction) is OUT of scope** — self-hosting makes the polling traffic free (internal Docker network), so there's no need to slow polls or risk a laggier game. The current 3s (browser) / 2s (bots) polling stays exactly as-is.

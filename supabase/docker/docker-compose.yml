@@ -168,7 +168,9 @@ services:
 
   db:
     container_name: supabase-db
-    image: supabase/postgres:15.8.1.085
+    # PG17 to match cloud (server_version 17.6). supabase/postgres ships the
+    # auth/realtime/roles scaffolding our migrations depend on.
+    image: supabase/postgres:17.6.1.084
     restart: unless-stopped
     # supavisor (the usual port-publisher) is dropped, so expose Postgres directly
     # for migrations + pg_dump/restore. Bound to localhost only.
