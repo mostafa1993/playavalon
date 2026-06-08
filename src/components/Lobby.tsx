@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { PlayerList } from './PlayerList';
 import { RolesInPlay } from './RolesInPlay';
 import { LadyOfLakeBadge } from './LadyOfLakeBadge';
@@ -42,6 +42,7 @@ export function Lobby({
 }: LobbyProps) {
   const [copied, setCopied] = useState(false);
   const [showRulebook, setShowRulebook] = useState(false);
+  const [confirmationsExpanded, setConfirmationsExpanded] = useState(false);
 
   const isManager = room.current_player.is_manager;
   const isFull = room.players.length >= room.room.expected_players;
@@ -167,19 +168,33 @@ export function Lobby({
         />
       )}
 
-      {/* Confirmation Progress (when roles distributed) — per-player dashboard
-          so it's obvious who hasn't confirmed (and who has silently left). */}
-      {room.room.status === 'roles_distributed' && room.confirmations && (
+      {/* Confirmation Progress (when roles distributed). Manager-only and
+          collapsed by default — manager clicks the header to expand the
+          per-player breakdown. Non-managers don't need the operational view;
+          they have their own role card on the page. */}
+      {isManager && room.room.status === 'roles_distributed' && room.confirmations && (
         <div className="card py-2 px-3">
-          <div className="flex items-center justify-between">
-            <p className="text-avalon-silver text-sm font-semibold">Confirmations</p>
+          <button
+            type="button"
+            onClick={() => setConfirmationsExpanded((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 text-left"
+            aria-expanded={confirmationsExpanded}
+          >
+            <div className="flex items-center gap-2">
+              {confirmationsExpanded ? (
+                <ChevronDown size={16} className="text-avalon-silver/80" />
+              ) : (
+                <ChevronRight size={16} className="text-avalon-silver/80" />
+              )}
+              <p className="text-avalon-silver text-sm font-semibold">Confirmations</p>
+            </div>
             <p className="text-lg font-display font-bold text-avalon-gold">
               {room.confirmations.confirmed} / {room.confirmations.total}
             </p>
-          </div>
+          </button>
 
-          {(() => {
-            const details = room.confirmations.details ?? [];
+          {confirmationsExpanded && (() => {
+            const details = room.confirmations!.details ?? [];
             const orphans = details.filter((d) => !d.in_room);
             const pending = details.filter((d) => d.in_room && !d.is_confirmed);
             const confirmed = details.filter((d) => d.in_room && d.is_confirmed);

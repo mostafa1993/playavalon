@@ -2,3 +2,9 @@ name: diana
 order: 4
 brain:
   type: rule
+# Deliberately slow on role confirmation so the manager has time to
+# inspect the per-player confirmation dashboard in the lobby. The other
+# bots confirm within the default 2-8s; diana waits 25-30s, so the
+# panel shows everyone else as ✓ confirmed with diana still ⏳ waiting.
+timing:
+  confirm_role_ms: [25000, 30000]
