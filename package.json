@@ -11,7 +11,8 @@
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
     "reset-db": "tsx scripts/reset-db.ts",
-    "dev:fresh": "tsx scripts/reset-db.ts && next dev"
+    "dev:fresh": "tsx scripts/reset-db.ts && next dev",
+    "bots": "set -a; . ./.env.local; set +a; env -C agents AGENT_BASE_URL=http://localhost:3000 npx tsx src/supervisor/index.ts"
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.20",

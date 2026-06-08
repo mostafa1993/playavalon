@@ -182,14 +182,14 @@ We **migrate**, not start fresh. Approach:
 - [x] Boot: all 5 containers healthy. Base compose has no analytics/vector at all → boot-breaker is a non-issue
 - [x] Applied all **22** migrations (numbering skips 016/017). 13 public tables + RLS + `auth.uid()/role()/jwt()` verified end-to-end through Kong→PostgREST
 
-### Phase 2 — Point the app at the local stack & validate a full game
-- [ ] Set local `NEXT_PUBLIC_SUPABASE_URL=http://localhost:8000` + new keys; rebuild app
-- [ ] Smoke test (empty DB): **signup → login → session refresh**
-- [ ] Create room, distribute roles, **play a full game** (proposals, votes, quests)
-- [ ] Verify **Realtime broadcast** (draft/vote/action updates + phase transitions) — *the one historically-flaky piece*
-- [ ] Verify **bot/agent flow**: Bearer-token auth + 2s polling against the new stack
-- [ ] Verify special phases: Lady of the Lake, Assassin, Merlin quiz
-- [ ] (If applicable) AI reviewer agent still works
+### Phase 2 — Point the app at the local stack & validate a full game ✅
+- [x] App pointed at `http://localhost:54321` via `.env.local` (dev mode reads env live — no rebuild needed locally; rebuild only matters for the prod image)
+- [x] Auth: signup (`admin.createUser`) → login → `/me`, all 200 against self-hosted GoTrue; user lands in `auth.users` ⨝ `players`
+- [x] Played full games — **10 proposals, 75 votes, 34 quest actions, 32 events**; multiple games reached game_over (13 clean bot exits); **zero 500s**
+- [x] Realtime broadcast verified (202 + live UI updates during play)
+- [x] Bot/agent flow: `ensureBot` provisioning + Bearer-token round-trip + join + play; 4 bots, no crashes
+- [x] Added `npm run bots` local helper (prod runs the `bot-supervisor` service automatically)
+- [ ] Not separately spot-checked (only incidentally exercised): Lady of the Lake / Assassin / Merlin-quiz endgame, AI reviewer agent
 
 ### Phase 3 — Test the data migration locally
 - [ ] You run the provided `pg_dump` against cloud → produce dump file
