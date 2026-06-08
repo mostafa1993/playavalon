@@ -45,6 +45,7 @@ const JWT_SECRET = randomBytes(32).toString('hex'); // 64 hex chars (>= 32 requi
 const POSTGRES_PASSWORD = randomBytes(24).toString('hex'); // hex → safe in connection strings
 const SECRET_KEY_BASE = randomBytes(48).toString('hex');
 const DASHBOARD_PASSWORD = randomBytes(12).toString('hex');
+const PG_META_CRYPTO_KEY = randomBytes(16).toString('hex');
 
 const ANON_KEY = signJwt({ role: 'anon', iss: 'supabase', iat, exp }, JWT_SECRET);
 const SERVICE_ROLE_KEY = signJwt({ role: 'service_role', iss: 'supabase', iat, exp }, JWT_SECRET);
@@ -73,6 +74,7 @@ SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}
 SECRET_KEY_BASE=${SECRET_KEY_BASE}
 DASHBOARD_USERNAME=supabase
 DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD}
+PG_META_CRYPTO_KEY=${PG_META_CRYPTO_KEY}
 
 ############ Database ############
 POSTGRES_HOST=db

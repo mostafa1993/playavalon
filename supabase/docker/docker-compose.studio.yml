@@ -1,0 +1,65 @@
+# Optional add-on: Supabase Studio (the web dashboard) + postgres-meta.
+#
+# Studio is served by Kong at the gateway root (`/`), behind the
+# DASHBOARD_USERNAME / DASHBOARD_PASSWORD basic-auth from .env — so it shows up at
+# whatever host fronts Kong:
+#   local : http://localhost:54321
+#   prod  : https://supabase.playavalon.fun
+#
+# Enable by adding this file to the up command. Prod example:
+#   docker compose -f supabase/docker/docker-compose.yml \
+#                  -f supabase/docker/docker-compose.prod.yml \
+#                  -f supabase/docker/docker-compose.studio.yml \
+#                  --env-file supabase/docker/.env up -d
+#
+# It's a pure add-on: Studio talks to Kong/db only, so if it ever misbehaves it
+# can't affect the app or the API routes.
+services:
+  meta:
+    container_name: supabase-meta
+    image: supabase/postgres-meta:v0.96.6
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: ${POSTGRES_HOST}
+      PG_META_DB_PORT: ${POSTGRES_PORT}
+      PG_META_DB_NAME: ${POSTGRES_DB}
+      PG_META_DB_USER: supabase_admin
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      CRYPTO_KEY: ${PG_META_CRYPTO_KEY:-playavalon-pg-meta-crypto-key-rotate-me}
+
+  studio:
+    container_name: supabase-studio
+    image: supabase/studio:2026.06.03-sha-0bca601
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://localhost:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})\""
+        ]
+      timeout: 10s
+      interval: 5s
+      retries: 3
+      start_period: 20s
+    environment:
+      HOSTNAME: "0.0.0.0"
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION:-playavalon}
+      DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT:-playavalon}
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      AUTH_JWT_SECRET: ${JWT_SECRET}
+      PG_META_CRYPTO_KEY: ${PG_META_CRYPTO_KEY:-playavalon-pg-meta-crypto-key-rotate-me}
+      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public,graphql_public}
+      # No analytics container in this stack — keep Studio from expecting it.
+      ENABLED_FEATURES_LOGS_ALL: "false"
