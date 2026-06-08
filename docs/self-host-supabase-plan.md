@@ -174,13 +174,13 @@ We **migrate**, not start fresh. Approach:
 ### Phase 0 — Branch & plan ✅
 - [x] Create `feat/self-host-supabase`
 - [x] Write this plan
-- [ ] You review & approve the plan
+- [x] You review & approve the plan
 
-### Phase 1 — Build the local stack (no DNS, no DB access needed)
-- [ ] Add trimmed Supabase services to `docker-compose.yml` (local-test mode, Kong on `localhost:8000`)
-- [ ] Generate `JWT_SECRET`, anon/service keys, passwords → `.env.local`
-- [ ] Boot the stack; confirm all containers healthy (watch for the dropped-`analytics` boot trap)
-- [ ] Apply the 24 migrations to the local DB; confirm schema + RLS + functions present
+### Phase 1 — Build the local stack (no DNS, no DB access needed) ✅
+- [x] Trimmed Supabase stack at `supabase/docker/` (db, auth, rest, realtime, kong). Kong on `localhost:54321`, Postgres on `localhost:54322` (8000/5432 were taken by other docker projects on this box)
+- [x] `generate-keys.mjs` → `JWT_SECRET`, HS256 anon/service keys, passwords in `supabase/docker/.env` (gitignored)
+- [x] Boot: all 5 containers healthy. Base compose has no analytics/vector at all → boot-breaker is a non-issue
+- [x] Applied all **22** migrations (numbering skips 016/017). 13 public tables + RLS + `auth.uid()/role()/jwt()` verified end-to-end through Kong→PostgREST
 
 ### Phase 2 — Point the app at the local stack & validate a full game
 - [ ] Set local `NEXT_PUBLIC_SUPABASE_URL=http://localhost:8000` + new keys; rebuild app

@@ -1,0 +1,5 @@
+# Secrets — never commit
+.env
+
+# Postgres data (only if a bind mount is used instead of the named volume)
+volumes/db/data/
