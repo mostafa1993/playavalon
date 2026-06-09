@@ -7,16 +7,16 @@
  *     exist for `bot_alice` … `bot_iris`.
  *   - Adds them to `room_players`.
  *
- * These bot accounts are the SAME ones the agent engine (under /agents)
+ * These bot accounts are the SAME ones the agent engine (under /agents/bot-supervisor)
  * uses to sign in. The actual ensureBot() helper now lives at
- * agents/src/util/credentials.ts and is imported here so the two stay
+ * agents/bot-supervisor/src/util/credentials.ts and is imported here so the two stay
  * perfectly in sync.
  *
  * The bots created by this script DO NOT play the game — they're just
  * rows in the DB so the manager can hit "Distribute" at the right player
  * count. To have a bot actually play a turn, run the agent engine:
  *
- *   npx tsx agents/src/cli/run.ts agents/configs/alice.yaml --room <CODE>
+ *   npx tsx agents/bot-supervisor/src/cli/run.ts agents/bot-supervisor/configs/alice.yaml --room <CODE>
  *
  * Bot credentials (also used by the agent engine):
  *   email:    bot_<name>@playavalon.local
@@ -24,7 +24,7 @@
  */
 
 import { readFileSync } from 'fs';
-import { ensureBot, serviceClientFromEnv } from '../agents/src/util/credentials.js';
+import { ensureBot, serviceClientFromEnv } from '../agents/bot-supervisor/src/util/credentials.js';
 
 const BOT_NAMES = ['alice', 'bob', 'charlie', 'diana', 'erin', 'frank', 'grace', 'henry', 'iris'];
 

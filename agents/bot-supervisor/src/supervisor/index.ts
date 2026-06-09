@@ -9,7 +9,7 @@
  *     enough bot processes are already spawned. If not, spawns more.
  *   - Spawned children use the existing cli/run.ts (one process per agent,
  *     per plan §4 — supabase-js auth is global per client).
- *   - Picks bots by the `order` field in each agents/configs/<name>.yaml.
+ *   - Picks bots by the `order` field in each agents/bot-supervisor/configs/<name>.yaml.
  *     Lower order = picked first; alphabetical name tie-breaks.
  *   - On room transition out of 'waiting' (game starts, room closes, etc.)
  *     the supervisor doesn't kill the bots — they're playing the game and
@@ -36,7 +36,7 @@ import { ensureBot } from '../util/credentials.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUN_CLI_PATH = resolve(__dirname, '..', 'cli', 'run.ts');
 const CONFIGS_DIR = process.env.AGENTS_CONFIGS_DIR || resolve(__dirname, '..', '..', 'configs');
-const ENV_FILE = process.env.AGENTS_ENV_FILE || resolve(__dirname, '..', '..', '..', '.env');
+const ENV_FILE = process.env.AGENTS_ENV_FILE || resolve(__dirname, '..', '..', '..', '..', '.env');
 const POLL_INTERVAL_MS = Number(process.env.SUPERVISOR_POLL_MS || 5000);
 const MAX_RESTARTS_PER_AGENT = Number(process.env.SUPERVISOR_MAX_RESTARTS || 3);
 

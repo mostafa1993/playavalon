@@ -2,7 +2,7 @@
 /**
  * CLI: run a single agent against a room.
  *
- *   npx tsx agents/src/cli/run.ts <config.yaml> --room <CODE>
+ *   npx tsx agents/bot-supervisor/src/cli/run.ts <config.yaml> --room <CODE>
  *
  * The agent will:
  *   1. Load + validate the YAML config.
