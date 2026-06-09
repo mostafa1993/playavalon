@@ -20,6 +20,12 @@ export interface ParticipantResolver {
 }
 
 export type QuestChangeHandler = (fromQuest: number, toQuest: number) => void;
+/** Fired when a round of talk completes — a proposal was voted, so either the
+ *  leader rotates (rejected → new round) or the quest advances (approved + the
+ *  mission resolved). Args are the (quest, round) that just ENDED. The final
+ *  round is flushed by the caller at end-of-game (getLastSeenQuest +
+ *  getCurrentRoundIndex). */
+export type RoundChangeHandler = (completedQuest: number, completedRound: number) => void;
 
 export class TimerListener {
   private segmenter: TurnSegmenter;
@@ -27,6 +33,7 @@ export class TimerListener {
   private activeSpeaker: string | null = null;
   private lastQuestNumber = 0;
   private onQuestChanged: QuestChangeHandler;
+  private onRoundChanged: RoundChangeHandler;
   // Round-detection state. The proposal-round counter within the current
   // quest. Bumps when the leader rotates within the same quest (= a proposal
   // got rejected and a new round starts). Resets to 0 when the quest advances.
@@ -39,11 +46,13 @@ export class TimerListener {
   constructor(
     segmenter: TurnSegmenter,
     resolver: ParticipantResolver,
-    onQuestChanged: QuestChangeHandler = () => {}
+    onQuestChanged: QuestChangeHandler = () => {},
+    onRoundChanged: RoundChangeHandler = () => {}
   ) {
     this.segmenter = segmenter;
     this.resolver = resolver;
     this.onQuestChanged = onQuestChanged;
+    this.onRoundChanged = onRoundChanged;
   }
 
   /** Swap the display-name resolver (used once the bot is ready). */
@@ -78,6 +87,10 @@ export class TimerListener {
     const questAdvanced = state.questNumber > this.lastQuestNumber;
     if (questAdvanced) {
       const previous = this.lastQuestNumber;
+      // The round in progress under the old quest just ended (mission resolved).
+      if (previous > 0) {
+        this.emitRoundChanged(previous, this.currentRoundIndex);
+      }
       this.lastQuestNumber = state.questNumber;
       // A new quest is by definition round 0; the new leader starts fresh.
       this.currentRoundIndex = 0;
@@ -99,6 +112,10 @@ export class TimerListener {
     const currentLeader = state.speakingOrder?.[0] ?? null;
     if (!questAdvanced && currentLeader && this.lastLeaderIdentity !== null
         && currentLeader !== this.lastLeaderIdentity) {
+      // The current round's proposal was rejected → that round just ended.
+      if (this.lastQuestNumber > 0) {
+        this.emitRoundChanged(this.lastQuestNumber, this.currentRoundIndex);
+      }
       this.currentRoundIndex += 1;
     }
     if (currentLeader) {
@@ -136,6 +153,14 @@ export class TimerListener {
   finalize(): void {
     this.segmenter.clearActiveSpeaker();
     this.activeSpeaker = null;
+  }
+
+  private emitRoundChanged(quest: number, round: number): void {
+    try {
+      this.onRoundChanged(quest, round);
+    } catch (err) {
+      console.error('[timer] onRoundChanged handler threw:', err);
+    }
   }
 
   private deriveActiveSpeaker(state: SpeakingTimerState): string | null {

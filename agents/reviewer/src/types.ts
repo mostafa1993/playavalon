@@ -197,3 +197,33 @@ export interface RecordedTurn {
   sampleRate: number;
   pcm: Int16Array;
 }
+
+// ── Blind-mode role guessing ────────────────────────────────────────────────
+
+/** One role guess for a player at a point in the game (blind mode). */
+export interface RoleGuess {
+  /** Exact display name from the roster. */
+  player: string;
+  /** Best-guess Avalon role label, e.g. "Merlin", "Assassin", "Loyal Servant". */
+  guessed_role: string;
+  confidence: 'low' | 'med' | 'high';
+  /** 1–2 sentence base-language (fa) explanation for this round's read. */
+  reasoning: string;
+}
+
+/** One entry in the incremental guess memory — per completed round of talk. */
+export interface GuessRound {
+  /** Global discussion-phase index (1-based). */
+  round: number;
+  quest: number;
+  /** Proposal round within the quest (0-based). */
+  proposal_round: number;
+  guesses: RoleGuess[];
+}
+
+/** Written incrementally to guess_log.json during a blind-mode game. */
+export interface GuessLog {
+  gameId: string;
+  updatedAt: string;
+  rounds: GuessRound[];
+}

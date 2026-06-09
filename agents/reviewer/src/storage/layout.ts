@@ -59,3 +59,8 @@ export function summaryPath(
 export function discussionPath(dataDir: string, gameId: string): string {
   return path.join(gameDir(dataDir, gameId), 'discussion.json');
 }
+
+/** Blind-mode incremental role-guess memory (written each round of talk). */
+export function guessLogPath(dataDir: string, gameId: string): string {
+  return path.join(gameDir(dataDir, gameId), 'guess_log.json');
+}
