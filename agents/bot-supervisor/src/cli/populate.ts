@@ -2,7 +2,7 @@
 /**
  * CLI: spawn multiple agents in one command.
  *
- *   npx tsx agents/src/cli/populate.ts --room <CODE> --bots alice,bob,charlie,diana
+ *   npx tsx agents/bot-supervisor/src/cli/populate.ts --room <CODE> --bots alice,bob,charlie,diana
  *
  * Spawns one subprocess per bot (each running cli/run.ts). Their stdout is
  * piped through a labeled multiplexer so you see all agents' logs in one

@@ -1,7 +1,7 @@
 /**
  * YAML prompt loader + template filler.
  *
- * Each prompt file under `agent/prompts/` has the shape:
+ * Each prompt file under `agents/reviewer/prompts/` has the shape:
  *
  *   name: <id>
  *   model: <optional override; falls back to agent default>

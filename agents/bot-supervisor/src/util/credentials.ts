@@ -1,6 +1,6 @@
 /**
  * Shared helper to ensure a bot's Supabase Auth user + players row exist.
- * Used by both `agents/src/cli/run.ts` (so a fresh config can self-bootstrap)
+ * Used by both `agents/bot-supervisor/src/cli/run.ts` (so a fresh config can self-bootstrap)
  * and `scripts/add-fake-players.ts` (so the dev convenience script populates
  * rooms with the same accounts the agent engine signs in as).
  *

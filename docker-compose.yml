@@ -92,10 +92,10 @@ services:
       - "127.0.0.1:6379:6379"
     restart: unless-stopped
 
-  agent:
+  reviewer:
     profiles: [prod]
     build:
-      context: ./agent
+      context: ./agents/reviewer
     env_file: ${ENV_FILE:-.env.local}
     environment:
       # Agent talks to LiveKit on the same host — skip Traefik/TLS, which
@@ -105,7 +105,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - game_reviews_data:/data/games
-      - ./agent/prompts:/app/prompts:ro
+      - ./agents/reviewer/prompts:/app/prompts:ro
       - ./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro
     depends_on:
       - livekit
@@ -121,7 +121,7 @@ services:
   bot-supervisor:
     profiles: [prod]
     build:
-      context: ./agents
+      context: ./agents/bot-supervisor
     env_file: ${ENV_FILE:-.env.local}
     environment:
       # Override the agent's default base_url to talk to the in-network app
@@ -131,7 +131,7 @@ services:
       AGENTS_CONFIGS_DIR: /app/configs
     volumes:
       # Live-mount configs from the repo so edits don't need a rebuild.
-      - ./agents/configs:/app/configs:ro
+      - ./agents/bot-supervisor/configs:/app/configs:ro
     extra_hosts:
       # Same GCP hairpin workaround as the app — bots sign in to Supabase by the
       # public URL, which must resolve to the host (→ Traefik → Kong) on the VM.

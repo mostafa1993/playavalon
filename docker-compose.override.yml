@@ -13,7 +13,7 @@ services:
     logging: { driver: local, options: { max-size: "25m", max-file: "2" } }   # ~50 MB
   livekit:
     logging: { driver: local, options: { max-size: "25m", max-file: "2" } }   # ~50 MB
-  agent:
+  reviewer:
     logging: { driver: local, options: { max-size: "25m", max-file: "2" } }   # ~50 MB
   redis:
     logging: { driver: local, options: { max-size: "10m", max-file: "2" } }   # ~20 MB

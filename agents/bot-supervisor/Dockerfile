@@ -1,7 +1,7 @@
 # Dockerfile for the rule-based agentic players workspace.
 #
 # Produces an image whose default command runs the bot supervisor
-# (agents/src/supervisor/index.ts). The supervisor watches the rooms
+# (agents/bot-supervisor/src/supervisor/index.ts). The supervisor watches the rooms
 # table and spawns one agent process per bot seat via cli/run.ts.
 #
 # Configs are NOT baked in — they're mounted from the host (or another
