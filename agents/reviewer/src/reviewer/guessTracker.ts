@@ -29,12 +29,29 @@ interface GuessUpdateOutput {
 export class GuessTracker {
   private rounds: GuessRound[] = [];
   private globalRound = 0;
+  /** Serializes guess-updates so they apply in order, each building on the last. */
+  private chain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly llm: LLMClient,
     private readonly dataDir: string,
     private readonly meta: GameMetaSnapshot
-  ) {}
+  ) {
+    // Resume from a persisted log if the reviewer restarted mid-game, so the
+    // evolving memory + round numbering continue rather than starting over.
+    try {
+      const existing = JSON.parse(
+        readFileSync(guessLogPath(dataDir, meta.gameId), 'utf8')
+      ) as GuessLog;
+      if (Array.isArray(existing.rounds) && existing.rounds.length > 0) {
+        this.rounds = existing.rounds;
+        this.globalRound =
+          existing.rounds[existing.rounds.length - 1]?.round ?? existing.rounds.length;
+      }
+    } catch {
+      // No prior log (fresh game) — start empty.
+    }
+  }
 
   private seatTable(): string {
     return this.meta.players
@@ -93,10 +110,28 @@ export class GuessTracker {
       .join('\n\n');
   }
 
-  /** Run a guess-update for a completed round of talk. Non-fatal on error. */
-  async updateForRound(quest: number, proposalRound: number): Promise<void> {
+  /** Run a guess-update for a completed round of talk. Serialized (so updates
+   *  apply in order, each building on the previous round) and non-fatal — a
+   *  failure is swallowed so it never poisons the chain or interrupts recording. */
+  updateForRound(quest: number, proposalRound: number): Promise<void> {
+    this.chain = this.chain.then(() => this.doUpdate(quest, proposalRound)).catch(() => {});
+    return this.chain;
+  }
+
+  private async doUpdate(quest: number, proposalRound: number): Promise<void> {
     const turns = this.roundTurns(quest, proposalRound);
     this.globalRound += 1;
+    const roundNo = this.globalRound; // capture before any await
+    const prior = this.rounds[this.rounds.length - 1]?.guesses ?? [];
+
+    // A round with no recorded talk carries prior guesses forward unchanged —
+    // nothing new to reason about, so skip the LLM call.
+    if (turns.length === 0 && prior.length > 0) {
+      this.rounds.push({ round: roundNo, quest, proposal_round: proposalRound, guesses: prior });
+      await this.persist();
+      return;
+    }
+
     let guesses: RoleGuess[];
     try {
       const out = await this.llm.runJson<GuessUpdateOutput>('role-guess-update.yml', {
@@ -108,10 +143,10 @@ export class GuessTracker {
       });
       guesses = Array.isArray(out.guesses) ? out.guesses : [];
     } catch {
-      // Non-fatal: carry prior guesses forward unchanged; never interrupt recording.
-      guesses = this.rounds[this.rounds.length - 1]?.guesses ?? [];
+      // Non-fatal: carry prior guesses forward unchanged.
+      guesses = prior;
     }
-    this.rounds.push({ round: this.globalRound, quest, proposal_round: proposalRound, guesses });
+    this.rounds.push({ round: roundNo, quest, proposal_round: proposalRound, guesses });
     await this.persist();
   }
 
