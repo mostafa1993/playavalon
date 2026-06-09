@@ -5,9 +5,13 @@ A real-time multiplayer web application for playing the social deduction game "A
 ## Tech Stack
 
 - **Frontend**: Next.js 14+ (App Router), React 18+, TypeScript 5.x, Tailwind CSS 3.x
-- **Backend**: Next.js API Routes, Supabase (Postgres + Realtime)
-- **Hosting**: Vercel
+- **Backend**: Next.js API Routes, self-hosted Supabase (Postgres 17 + GoTrue Auth + Realtime)
+- **Hosting**: Self-hosted — Docker + Traefik on a GCP VM
 - **Testing**: Vitest (unit), Playwright (E2E)
+
+> **Deploying / self-hosting:** the production stack (Next.js app + self-hosted Supabase) runs via Docker.
+> See [`docs/deploy-from-scratch.md`](docs/deploy-from-scratch.md) and [`docs/self-host-supabase-plan.md`](docs/self-host-supabase-plan.md).
+> The cloud-Supabase steps in "Getting Started" below are from the original setup and are now superseded.
 
 ## Getting Started
 
