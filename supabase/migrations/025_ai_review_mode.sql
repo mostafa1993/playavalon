@@ -1,6 +1,6 @@
 -- AI Reviewer mode: blind vs god
 -- Migration: 025_ai_review_mode.sql
--- Feature: blind/god reviewer modes (see docs/ai-reviewer-modes-plan.md)
+-- Feature: blind/god reviewer modes (see docs/2026-06-09-ai-reviewer-modes-plan.md)
 
 BEGIN;
 

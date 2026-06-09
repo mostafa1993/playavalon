@@ -1,6 +1,7 @@
 # AI Reviewer — Blind vs God mode (implementation plan)
 
-**Status:** aligned — ready to implement (decisions locked, see §9)
+**Date:** 2026-06-09
+**Status:** implemented (decisions locked in §9)
 
 ## Goal
 
@@ -47,10 +48,13 @@ query selects it when it claims the game):
     touching `player_roles`** — sourced from `room_players` + `players` + `seating_order`.
     `session.meta.players[].role` is **absent/unknown**. The process literally never reads
     roles for that game → every guess is honest by construction.
-  - **Live, per discussion phase** (hooks the existing `onDiscussionFinished`): run a
-    *guess-update* pass and append a structured entry to a **running guess memory**,
-    persisted incrementally to `<gameId>/guess_log.json` (so a reviewer crash/restart
-    mid-game resumes from the last round, not from scratch). Each update is fed a **compact
+  - **Live, per proposal round** — a **new `onRoundChanged`** callback on `TimerListener`
+    (which already detects proposal-round bumps + quest advances internally; note
+    `onDiscussionFinished` is the *assassin* phase, not per-round). When a round of talk
+    completes, **wait for that round's turn summaries** (same pattern as quest synthesis),
+    then run a *guess-update* pass and append a structured entry to a **running guess
+    memory**, persisted incrementally to `<gameId>/guess_log.json` (so a reviewer
+    crash/restart mid-game resumes from the last round, not from scratch). Each update is fed a **compact
     prior memory** (current guesses + recent deltas — *not* the full transcript, to bound
     tokens) + that round's discussion summary + **public** votes/quest state → updated
     per-player guesses + brief reasoning. The memory carries forward, so guesses **evolve
