@@ -55,7 +55,27 @@ export interface ReviewDiscussion {
   speakers: ReviewDiscussionSpeaker[];
 }
 
-export interface ReviewSummary {
+export interface ReviewRoleGuess {
+  player: string;
+  guessed_role: string;
+  confidence: 'low' | 'med' | 'high';
+  reasoning: string;
+}
+
+export interface ReviewGuessRound {
+  round: number;
+  quest: number;
+  proposal_round: number;
+  guesses: ReviewRoleGuess[];
+}
+
+export interface ReviewPlayerPerformance {
+  player: string;
+  role: string;
+  assessment: string;
+}
+
+interface ReviewSummaryCommon {
   language: 'fa' | 'en';
   gameId: string;
   roomCode: string;
@@ -65,6 +85,13 @@ export interface ReviewSummary {
     win_reason: string | null;
     ended_at: string | null;
   };
+  quests: ReviewQuest[];
+  discussion?: ReviewDiscussion | null;
+}
+
+/** God mode: roles revealed + per-player performance. */
+export interface GodReviewSummary extends ReviewSummaryCommon {
+  mode: 'god';
   players: Array<{
     id: string;
     display_name: string;
@@ -74,9 +101,29 @@ export interface ReviewSummary {
   }>;
   role_reveal: string;
   narrative: string;
-  quests: ReviewQuest[];
-  discussion?: ReviewDiscussion | null;
+  /** Optional: absent on reports generated before god performance shipped. */
+  performance?: ReviewPlayerPerformance[];
 }
+
+/** Blind mode: evolving guesses + reasoning, never the role truth. */
+export interface BlindReviewSummary extends ReviewSummaryCommon {
+  mode: 'blind';
+  players: Array<{
+    id: string;
+    display_name: string;
+    seat_number: number | null;
+  }>;
+  guess_timeline: ReviewGuessRound[];
+  final_guesses: ReviewRoleGuess[];
+  final_summary: string;
+}
+
+/**
+ * The review report. Discriminated by `mode`. Reports generated before this
+ * feature have no `mode` field → they render through the god branch (they carry
+ * role_reveal/narrative), which is correct since the old reviewer was god-only.
+ */
+export type ReviewSummary = GodReviewSummary | BlindReviewSummary;
 
 export type ReviewApiResponse =
   | { data: { enabled: false; status: null } }

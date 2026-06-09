@@ -30,11 +30,23 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const body = await request.json().catch(() => null) as { enabled?: unknown } | null;
+    const body = await request.json().catch(() => null) as {
+      enabled?: unknown;
+      mode?: unknown;
+    } | null;
     if (!body || typeof body.enabled !== 'boolean') {
-      return errors.invalidRequest('Expected { enabled: boolean }');
+      return errors.invalidRequest('Expected { enabled: boolean, mode?: "blind" | "god" }');
     }
     const enabled = body.enabled;
+    // Mode defaults to 'blind' (the privacy-respecting detective). Only meaningful
+    // when enabled; harmless to set when disabling.
+    let mode: 'blind' | 'god' = 'blind';
+    if (body.mode !== undefined) {
+      if (body.mode !== 'blind' && body.mode !== 'god') {
+        return errors.invalidRequest('mode must be "blind" or "god"');
+      }
+      mode = body.mode;
+    }
 
     const supabase = createServiceClient();
 
@@ -47,17 +59,22 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { error: updateErr } = await supabase
       .from('rooms')
-      .update({ ai_review_enabled: enabled })
+      .update({ ai_review_enabled: enabled, ai_review_mode: mode })
       .eq('id', room.id);
     if (updateErr) throw updateErr;
 
-    const { error: clearErr } = await supabase
-      .from('room_ai_consents')
-      .delete()
-      .eq('room_id', room.id);
-    if (clearErr) throw clearErr;
+    // Clear consents only when the enabled state actually flips. A mode-only
+    // change (blind ↔ god while still enabled) keeps existing consents, since
+    // consent is about audio recording, not the review mode.
+    if (enabled !== room.ai_review_enabled) {
+      const { error: clearErr } = await supabase
+        .from('room_ai_consents')
+        .delete()
+        .eq('room_id', room.id);
+      if (clearErr) throw clearErr;
+    }
 
-    return NextResponse.json({ data: { ai_review_enabled: enabled } });
+    return NextResponse.json({ data: { ai_review_enabled: enabled, ai_review_mode: mode } });
   } catch (error) {
     return handleError(error);
   }

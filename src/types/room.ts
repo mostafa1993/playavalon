@@ -71,6 +71,7 @@ export interface RoomDetails {
   // Feature 022: AI Game Reviewer
   ai_review?: {
     enabled: boolean;
+    mode: 'blind' | 'god';
     caller_consented: boolean;
     consented_count: number;
     total_players: number;

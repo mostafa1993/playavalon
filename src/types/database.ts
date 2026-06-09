@@ -51,6 +51,7 @@ export interface Database {
           lady_of_lake_holder_id: string | null;
           // Feature 022
           ai_review_enabled: boolean;
+          ai_review_mode: 'blind' | 'god';
           // Feature 023: one-time intro round at game start
           intro_phase_enabled: boolean;
           // Feature 024: number of bot players that should auto-fill seats
@@ -70,6 +71,7 @@ export interface Database {
           lady_of_lake_holder_id?: string | null;
           // Feature 022
           ai_review_enabled?: boolean;
+          ai_review_mode?: 'blind' | 'god';
           // Feature 023
           intro_phase_enabled?: boolean;
           // Feature 024
@@ -89,6 +91,7 @@ export interface Database {
           lady_of_lake_holder_id?: string | null;
           // Feature 022
           ai_review_enabled?: boolean;
+          ai_review_mode?: 'blind' | 'god';
           // Feature 023
           intro_phase_enabled?: boolean;
           // Feature 024

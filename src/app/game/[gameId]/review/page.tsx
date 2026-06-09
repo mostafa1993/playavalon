@@ -4,7 +4,13 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Sparkles, ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import type { ReviewApiResponse, ReviewDiscussion, ReviewSummary } from '@/types/review';
+import type {
+  ReviewApiResponse,
+  ReviewDiscussion,
+  ReviewSummary,
+  GodReviewSummary,
+  BlindReviewSummary,
+} from '@/types/review';
 
 type Language = 'fa' | 'en';
 
@@ -143,17 +149,11 @@ export default function GameReviewPage() {
       <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-5">
         <OutcomeHeader summary={summary} />
 
-        <Section
-          title={isRtl ? 'بازیکنان و نقش‌ها' : 'Players & Roles'}
-          body={summary.role_reveal}
-          isRtl={isRtl}
-        />
-
-        <Section
-          title={isRtl ? 'روایت بازی' : 'Game Narrative'}
-          body={summary.narrative}
-          isRtl={isRtl}
-        />
+        {summary.mode === 'blind' ? (
+          <BlindSections summary={summary} isRtl={isRtl} />
+        ) : (
+          <GodSections summary={summary} isRtl={isRtl} />
+        )}
 
         <div>
           <h2 className="text-avalon-gold font-display text-lg mb-2">
@@ -177,6 +177,123 @@ export default function GameReviewPage() {
       </div>
     </ReviewShell>
   );
+}
+
+function GodSections({ summary, isRtl }: { summary: GodReviewSummary; isRtl: boolean }) {
+  return (
+    <>
+      <Section
+        title={isRtl ? 'بازیکنان و نقش‌ها' : 'Players & Roles'}
+        body={summary.role_reveal}
+        isRtl={isRtl}
+      />
+      <Section
+        title={isRtl ? 'روایت بازی' : 'Game Narrative'}
+        body={summary.narrative}
+        isRtl={isRtl}
+      />
+      {summary.performance && summary.performance.length > 0 && (
+        <div>
+          <h2 className="text-avalon-gold font-display text-lg mb-2">
+            {isRtl ? 'ارزیابی عملکرد بازیکنان' : 'Player Performance'}
+          </h2>
+          <div className="space-y-2">
+            {summary.performance.map((p) => (
+              <div key={p.player} className="card p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-avalon-text font-medium">{p.player}</span>
+                  <span className="text-avalon-silver text-xs">{p.role}</span>
+                </div>
+                <p className="text-avalon-silver text-sm mt-1 whitespace-pre-wrap">{p.assessment}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function BlindSections({ summary, isRtl }: { summary: BlindReviewSummary; isRtl: boolean }) {
+  return (
+    <>
+      <Section
+        title={isRtl ? 'خلاصه و حدس‌های کارآگاه' : "Detective's Summary & Guesses"}
+        body={summary.final_summary}
+        isRtl={isRtl}
+      />
+      <div>
+        <h2 className="text-avalon-gold font-display text-lg mb-2">
+          {isRtl ? 'حدس‌های نهایی نقش‌ها' : 'Final Role Guesses'}
+        </h2>
+        <p className="text-avalon-silver/70 text-xs mb-2">
+          {isRtl
+            ? 'این‌ها فقط حدس‌اند — کارآگاه هرگز نقش واقعی را ندیده است.'
+            : 'These are guesses only — the detective never saw the true roles.'}
+        </p>
+        <div className="space-y-2">
+          {summary.final_guesses.map((g) => (
+            <div key={g.player} className="card p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-avalon-text font-medium">{g.player}</span>
+                <span className="text-avalon-gold text-sm flex items-center gap-1">
+                  {g.guessed_role}
+                  <ConfidenceBadge confidence={g.confidence} isRtl={isRtl} />
+                </span>
+              </div>
+              <p className="text-avalon-silver text-sm mt-1 whitespace-pre-wrap">{g.reasoning}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      {summary.guess_timeline.length > 1 && (
+        <details className="card p-3">
+          <summary className="cursor-pointer text-avalon-gold font-display">
+            {isRtl ? 'سیر تکامل حدس‌ها (دور به دور)' : 'How the guesses evolved (round by round)'}
+          </summary>
+          <div className="mt-3 space-y-3">
+            {summary.guess_timeline.map((r) => (
+              <div key={r.round} className="border-l-2 border-avalon-gold/30 pl-3">
+                <div className="text-avalon-silver text-xs mb-1">
+                  {isRtl
+                    ? `دور ${r.round} — ماموریت ${r.quest}`
+                    : `Round ${r.round} — Quest ${r.quest}`}
+                </div>
+                <ul className="space-y-0.5">
+                  {r.guesses.map((g) => (
+                    <li key={g.player} className="text-sm">
+                      <span className="text-avalon-text">{g.player}</span>
+                      {' → '}
+                      <span className="text-avalon-gold">{g.guessed_role}</span>
+                      <span className="text-avalon-silver/60"> ({g.confidence})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </>
+  );
+}
+
+function ConfidenceBadge({
+  confidence,
+  isRtl,
+}: {
+  confidence: 'low' | 'med' | 'high';
+  isRtl: boolean;
+}) {
+  const labels = isRtl
+    ? { low: 'کم', med: 'متوسط', high: 'زیاد' }
+    : { low: 'low', med: 'med', high: 'high' };
+  const colors = {
+    low: 'text-avalon-silver/60',
+    med: 'text-avalon-silver',
+    high: 'text-avalon-gold',
+  };
+  return <span className={`text-xs shrink-0 ${colors[confidence]}`}>[{labels[confidence]}]</span>;
 }
 
 function ReviewShell({

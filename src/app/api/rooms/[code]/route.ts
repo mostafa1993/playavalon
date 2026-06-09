@@ -72,6 +72,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Feature 022: AI Game Reviewer state
     let aiReview: {
       enabled: boolean;
+      mode: 'blind' | 'god';
       caller_consented: boolean;
       consented_count: number;
       total_players: number;
@@ -95,6 +96,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
       aiReview = {
         enabled: true,
+        mode: room.ai_review_mode,
         caller_consented: acceptedIds.has(user.id) && currentPlayerIds.has(user.id),
         consented_count: consentedCurrent,
         total_players: details.players.length,
@@ -102,6 +104,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     } else {
       aiReview = {
         enabled: false,
+        mode: room.ai_review_mode,
         caller_consented: false,
         consented_count: 0,
         total_players: details.players.length,

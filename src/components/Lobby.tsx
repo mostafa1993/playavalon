@@ -20,7 +20,7 @@ interface LobbyProps {
   isStarting?: boolean;
   isConnected?: boolean;
   // Feature 022
-  onToggleAIReview?: (enabled: boolean) => Promise<void>;
+  onToggleAIReview?: (enabled: boolean, mode?: 'blind' | 'god') => Promise<void>;
   isTogglingAIReview?: boolean;
 }
 
@@ -87,6 +87,7 @@ export function Lobby({
   const allConfirmed = room.confirmations?.confirmed === room.confirmations?.total;
   const canStart = isManager && room.room.status === 'roles_distributed' && allConfirmed;
   const aiReviewEnabled = !!room.ai_review?.enabled;
+  const aiReviewMode = room.ai_review?.mode ?? 'blind';
   const aiConsented = room.ai_review?.consented_count ?? 0;
   const aiTotal = room.ai_review?.total_players ?? room.players.length;
   const aiConsentsComplete = !aiReviewEnabled || aiConsented >= aiTotal;
@@ -317,10 +318,11 @@ export function Lobby({
       {isManager && room.room.status === 'waiting' && onToggleAIReview && (
         <AIReviewToggle
           enabled={aiReviewEnabled}
+          mode={aiReviewMode}
           consentedCount={aiConsented}
           totalPlayers={aiTotal}
           isToggling={isTogglingAIReview}
-          onToggle={(enabled) => { void onToggleAIReview(enabled); }}
+          onToggle={(enabled, mode) => { void onToggleAIReview(enabled, mode); }}
         />
       )}
 

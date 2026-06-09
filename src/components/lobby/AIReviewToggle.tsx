@@ -4,10 +4,11 @@ import { Sparkles } from 'lucide-react';
 
 interface AIReviewToggleProps {
   enabled: boolean;
+  mode: 'blind' | 'god';
   consentedCount: number;
   totalPlayers: number;
   isToggling: boolean;
-  onToggle: (enabled: boolean) => void;
+  onToggle: (enabled: boolean, mode: 'blind' | 'god') => void;
 }
 
 /**
@@ -17,6 +18,7 @@ interface AIReviewToggleProps {
  */
 export function AIReviewToggle({
   enabled,
+  mode,
   consentedCount,
   totalPlayers,
   isToggling,
@@ -47,7 +49,7 @@ export function AIReviewToggle({
           role="switch"
           aria-checked={enabled}
           disabled={isToggling}
-          onClick={() => onToggle(!enabled)}
+          onClick={() => onToggle(!enabled, mode)}
           className={`
             relative inline-flex h-6 w-11 flex-shrink-0 rounded-full transition-colors
             focus:outline-none focus:ring-2 focus:ring-avalon-gold focus:ring-offset-2 focus:ring-offset-avalon-midnight
@@ -67,6 +69,32 @@ export function AIReviewToggle({
 
       {enabled && (
         <div className="mt-2 pt-2 border-t border-avalon-dark-border/60">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-avalon-silver/80">Mode</p>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                disabled={isToggling}
+                onClick={() => onToggle(true, 'blind')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors disabled:opacity-50 ${mode === 'blind' ? 'bg-avalon-gold text-avalon-midnight' : 'bg-avalon-dark-lighter text-avalon-silver border border-avalon-dark-border'}`}
+              >
+                Blind
+              </button>
+              <button
+                type="button"
+                disabled={isToggling}
+                onClick={() => onToggle(true, 'god')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors disabled:opacity-50 ${mode === 'god' ? 'bg-avalon-gold text-avalon-midnight' : 'bg-avalon-dark-lighter text-avalon-silver border border-avalon-dark-border'}`}
+              >
+                God
+              </button>
+            </div>
+          </div>
+          <p className="text-[11px] text-avalon-silver/70 mb-2">
+            {mode === 'blind'
+              ? 'Detective — never sees roles; guesses them from play.'
+              : 'Coach — knows roles; reveals + grades performance.'}
+          </p>
           <div className="flex items-center justify-between">
             <p className="text-xs text-avalon-silver/80">
               Consents
