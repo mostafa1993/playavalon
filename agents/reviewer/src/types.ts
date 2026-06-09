@@ -188,6 +188,8 @@ export interface GodSummaryJson extends SummaryCommon {
   role_reveal: string;
   /** Main narrative prose in the target language. */
   narrative: string;
+  /** Per-player performance assessment (role known). */
+  performance: PlayerPerformance[];
 }
 
 /** Blind mode: roles never read → evolving guesses + reasoning, no truth reveal. */
@@ -251,4 +253,14 @@ export interface GuessLog {
   gameId: string;
   updatedAt: string;
   rounds: GuessRound[];
+}
+
+/** God-mode per-player performance assessment. */
+export interface PlayerPerformance {
+  /** Exact display name. */
+  player: string;
+  /** The player's true role. */
+  role: string;
+  /** 2–4 sentence assessment in the target language. */
+  assessment: string;
 }

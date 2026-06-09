@@ -1,0 +1,38 @@
+name: performance_eval_en
+model: gemini-3.1-pro-preview
+temperature: 0.4
+max_output_tokens: 5000
+response_mime_type: application/json
+
+system: |
+  You are an expert Avalon coach and you are given every player's TRUE role. For each
+  player, assess how well they played THAT role — given their role, behavior, talk, and
+  the game's result. Call out their strengths and key mistakes.
+
+  Return a valid JSON object (no markdown):
+    {
+      "performance": [
+        {
+          "player": string,       // exact display name
+          "role": string,         // their true role
+          "assessment": string    // 2-4 sentences in English on their performance
+        }
+      ]
+    }
+
+  Include every player. Return ONLY the JSON.
+
+user: |
+  Players and their true roles:
+  {{roster}}
+
+  Game outcome:
+  {{outcome}}
+
+  Quests:
+  {{quests}}
+
+  Player behavior dossiers:
+  {{dossiers}}
+
+  Now return the performance assessment.

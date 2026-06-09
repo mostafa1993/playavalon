@@ -48,12 +48,14 @@ import {
   loadDiscussion,
 } from './reviewer/finalNarrative.js';
 import { generateBlindSummary } from './reviewer/finalNarrativeBlind.js';
+import { generatePerformanceEval } from './reviewer/performanceEval.js';
 import { GuessTracker } from './reviewer/guessTracker.js';
 import type {
   BlindSummaryJson,
   GameMetaSnapshot,
   GodSummaryJson,
   MetaJson,
+  PlayerPerformance,
   RecordedTurn,
   TurnJson,
   TurnSummary,
@@ -390,18 +392,28 @@ async function generateFinalReport(
     ]);
   } else {
     // GOD: role reveal + narrative (roles known).
-    log.info('invoking role-reveal + final-narrative prompts (fa + en)');
+    log.info('invoking role-reveal + narrative + performance prompts (fa + en)');
     const narrativeCtx = { meta: session.meta, outcome, dossiers, quests, discussion };
-    const [roleRevealFa, roleRevealEn, narrativeFa, narrativeEn] = await Promise.all([
+    const [
+      roleRevealFa,
+      roleRevealEn,
+      narrativeFa,
+      narrativeEn,
+      performanceFa,
+      performanceEn,
+    ] = await Promise.all([
       renderRoleReveal(llm, session.meta, 'fa'),
       renderRoleReveal(llm, session.meta, 'en'),
       generateFinalNarrative(llm, narrativeCtx, 'fa'),
       generateFinalNarrative(llm, narrativeCtx, 'en'),
+      generatePerformanceEval(llm, session.meta, outcome, quests, dossiers, 'fa'),
+      generatePerformanceEval(llm, session.meta, outcome, quests, dossiers, 'en'),
     ]);
     const buildGod = (
       language: 'fa' | 'en',
       roleReveal: string,
-      narrative: string
+      narrative: string,
+      performance: PlayerPerformance[]
     ): GodSummaryJson => ({
       mode: 'god',
       language,
@@ -418,12 +430,13 @@ async function generateFinalReport(
       })),
       role_reveal: roleReveal,
       narrative,
+      performance,
       quests,
       discussion,
     });
     await Promise.all([
-      writeJsonAtomic(faPath, buildGod('fa', roleRevealFa, narrativeFa)),
-      writeJsonAtomic(enPath, buildGod('en', roleRevealEn, narrativeEn)),
+      writeJsonAtomic(faPath, buildGod('fa', roleRevealFa, narrativeFa, performanceFa)),
+      writeJsonAtomic(enPath, buildGod('en', roleRevealEn, narrativeEn, performanceEn)),
     ]);
   }
 
