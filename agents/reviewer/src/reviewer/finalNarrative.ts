@@ -119,8 +119,8 @@ export async function generateFinalNarrative(
     players: ctx.meta.players.map((p) => ({
       display_name: p.display_name,
       seat_number: p.seat_number,
-      role: p.role,
-      special_role: p.special_role,
+      role: p.role ?? 'good',
+      special_role: p.special_role ?? null,
     })),
   };
 

@@ -19,6 +19,7 @@ export interface ActiveGameRow {
   room_id: string;
   room_code: string;
   ai_review_enabled: boolean;
+  ai_review_mode: 'blind' | 'god';
 }
 
 /**
@@ -30,7 +31,7 @@ export async function findActiveReviewGame(
 ): Promise<ActiveGameRow | null> {
   const { data, error } = await db
     .from('games')
-    .select('id, room_id, phase, rooms!inner(code, ai_review_enabled)')
+    .select('id, room_id, phase, rooms!inner(code, ai_review_enabled, ai_review_mode)')
     .eq('rooms.ai_review_enabled', true)
     .is('ended_at', null)
     .neq('phase', 'game_over')
@@ -39,10 +40,11 @@ export async function findActiveReviewGame(
   if (error) throw error;
   if (!data || data.length === 0) return null;
 
+  type RoomField = { code: string; ai_review_enabled: boolean; ai_review_mode: string };
   const row = data[0] as unknown as {
     id: string;
     room_id: string;
-    rooms: { code: string; ai_review_enabled: boolean } | Array<{ code: string; ai_review_enabled: boolean }>;
+    rooms: RoomField | RoomField[];
   };
   const roomField = Array.isArray(row.rooms) ? row.rooms[0] : row.rooms;
   if (!roomField) return null;
@@ -52,6 +54,7 @@ export async function findActiveReviewGame(
     room_id: row.room_id,
     room_code: roomField.code,
     ai_review_enabled: roomField.ai_review_enabled,
+    ai_review_mode: roomField.ai_review_mode === 'god' ? 'god' : 'blind',
   };
 }
 
@@ -73,7 +76,8 @@ export async function hasGameEnded(db: SupabaseClient, gameId: string): Promise<
  */
 export async function loadMetaSnapshot(
   db: SupabaseClient,
-  gameId: string
+  gameId: string,
+  mode: 'blind' | 'god'
 ): Promise<GameMetaSnapshot> {
   const { data: game, error: gameErr } = await db
     .from('games')
@@ -91,23 +95,10 @@ export async function loadMetaSnapshot(
   if (roomErr) throw roomErr;
   if (!room) throw new Error(`Room for game ${gameId} not found`);
 
-  const { data: roleRows, error: roleErr } = await db
-    .from('player_roles')
-    .select('player_id, role, special_role, players!inner(id, display_name)')
-    .eq('room_id', game.room_id);
-  if (roleErr) throw roleErr;
-
-  type RoleRow = {
-    player_id: string;
-    role: string;
-    special_role: string | null;
-    players: { id: string; display_name: string } | Array<{ id: string; display_name: string }>;
-  };
-
-  // Build seat-number map from seating_order + leader_index
+  // Build seat-number map from seating_order + leader_index (role-free).
+  const order = Array.isArray(game.seating_order) ? (game.seating_order as string[]) : [];
   const seatMap = new Map<string, number>();
-  if (Array.isArray(game.seating_order)) {
-    const order = game.seating_order as string[];
+  {
     const leaderIdx = typeof game.leader_index === 'number' ? game.leader_index : 0;
     const count = order.length;
     for (let i = 0; i < count; i += 1) {
@@ -117,16 +108,50 @@ export async function loadMetaSnapshot(
     }
   }
 
-  const players = (roleRows as RoleRow[] || []).map((r) => {
-    const pdata = Array.isArray(r.players) ? r.players[0] : r.players;
-    return {
-      id: r.player_id,
-      display_name: pdata?.display_name ?? 'Unknown',
-      role: (r.role === 'evil' ? 'evil' : 'good') as 'good' | 'evil',
-      special_role: r.special_role,
-      seat_number: seatMap.get(r.player_id) ?? null,
+  let players: GameMetaSnapshot['players'];
+  if (mode === 'blind') {
+    // BLIND: never touch player_roles. Build the roster (names + seats) from the
+    // public players table, keyed off the game's seating_order. role/special_role
+    // are intentionally omitted — the reviewer deduces them from public play.
+    const { data: roster, error: rosterErr } = await db
+      .from('players')
+      .select('id, display_name')
+      .in('id', order);
+    if (rosterErr) throw rosterErr;
+    const nameById = new Map(
+      (roster ?? []).map((r) => [r.id as string, r.display_name as string])
+    );
+    players = order.map((pid) => ({
+      id: pid,
+      display_name: nameById.get(pid) ?? 'Unknown',
+      seat_number: seatMap.get(pid) ?? null,
+    }));
+  } else {
+    // GOD: read the real roles.
+    const { data: roleRows, error: roleErr } = await db
+      .from('player_roles')
+      .select('player_id, role, special_role, players!inner(id, display_name)')
+      .eq('room_id', game.room_id);
+    if (roleErr) throw roleErr;
+
+    type RoleRow = {
+      player_id: string;
+      role: string;
+      special_role: string | null;
+      players: { id: string; display_name: string } | Array<{ id: string; display_name: string }>;
     };
-  });
+
+    players = (roleRows as RoleRow[] || []).map((r) => {
+      const pdata = Array.isArray(r.players) ? r.players[0] : r.players;
+      return {
+        id: r.player_id,
+        display_name: pdata?.display_name ?? 'Unknown',
+        role: (r.role === 'evil' ? 'evil' : 'good') as 'good' | 'evil',
+        special_role: r.special_role,
+        seat_number: seatMap.get(r.player_id) ?? null,
+      };
+    });
+  }
 
   return {
     gameId: game.id,

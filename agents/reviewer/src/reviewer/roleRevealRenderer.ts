@@ -10,14 +10,14 @@ import type { GameMetaSnapshot } from '../types.js';
 function buildRoster(meta: GameMetaSnapshot): string {
   // Stable ordering: good players first by seat, then evil by seat.
   const sorted = [...meta.players].sort((a, b) => {
-    if (a.role !== b.role) return a.role === 'good' ? -1 : 1;
+    if ((a.role ?? 'good') !== (b.role ?? 'good')) return (a.role ?? 'good') === 'good' ? -1 : 1;
     return (a.seat_number ?? 0) - (b.seat_number ?? 0);
   });
   return sorted
     .map((p) => {
       const seat = p.seat_number !== null ? `seat ${p.seat_number}` : 'no seat';
       const special = p.special_role ? `, special: ${p.special_role}` : '';
-      return `- ${p.display_name} (${seat}) — ${p.role}${special}`;
+      return `- ${p.display_name} (${seat}) — ${p.role ?? 'good'}${special}`;
     })
     .join('\n');
 }

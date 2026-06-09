@@ -24,8 +24,9 @@ export interface GameMetaSnapshot {
   players: Array<{
     id: string;
     display_name: string;
-    role: 'good' | 'evil';
-    special_role: string | null;
+    /** Omitted in blind mode — the reviewer never reads player_roles there. */
+    role?: 'good' | 'evil';
+    special_role?: string | null;
     seat_number: number | null;
   }>;
 }

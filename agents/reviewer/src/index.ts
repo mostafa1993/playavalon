@@ -108,7 +108,7 @@ async function startSession(
   await insertGameReviewRecording(db, game.id);
 
   // 2. Snapshot players/roles and write meta.json.
-  const meta = await loadMetaSnapshot(db, game.id);
+  const meta = await loadMetaSnapshot(db, game.id, game.ai_review_mode);
   const metaJson: MetaJson = {
     ...meta,
     agentStartedAt: new Date().toISOString(),
@@ -330,8 +330,8 @@ async function generateFinalReport(
       id: p.id,
       display_name: p.display_name,
       seat_number: p.seat_number,
-      role: p.role,
-      special_role: p.special_role,
+      role: p.role ?? 'good',
+      special_role: p.special_role ?? null,
     })),
     role_reveal: roleReveal,
     narrative,
