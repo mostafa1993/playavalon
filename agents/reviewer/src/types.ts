@@ -153,10 +153,11 @@ export interface DiscussionJson {
 }
 
 /**
- * Written to summary.<lang>.json after the game ends and the final narrative
- * is generated. Each language gets its own file; same structured data.
+ * Written to summary.<lang>.json after the game ends. Each language gets its own
+ * file. The shape is discriminated by `mode`: god reveals roles + performance;
+ * blind shows the evolving guesses, never the truth.
  */
-export interface SummaryJson {
+interface SummaryCommon {
   language: 'fa' | 'en';
   gameId: string;
   roomCode: string;
@@ -166,7 +167,16 @@ export interface SummaryJson {
     win_reason: string | null;
     ended_at: string | null;
   };
-  /** Language-agnostic roster (for the UI to render a table). */
+  /** Per-quest structured data from quest_<n>.json files (order preserved). */
+  quests: QuestJson[];
+  /** The assassin-phase discussion, if one happened. Null otherwise. */
+  discussion: DiscussionJson | null;
+}
+
+/** God mode: roles are known → reveal + (later) performance. */
+export interface GodSummaryJson extends SummaryCommon {
+  mode: 'god';
+  /** Roster including the true roles. */
   players: Array<{
     id: string;
     display_name: string;
@@ -178,11 +188,26 @@ export interface SummaryJson {
   role_reveal: string;
   /** Main narrative prose in the target language. */
   narrative: string;
-  /** Per-quest structured data from quest_<n>.json files (order preserved). */
-  quests: QuestJson[];
-  /** The assassin-phase discussion, if one happened. Null otherwise. */
-  discussion: DiscussionJson | null;
 }
+
+/** Blind mode: roles never read → evolving guesses + reasoning, no truth reveal. */
+export interface BlindSummaryJson extends SummaryCommon {
+  mode: 'blind';
+  /** Role-free roster. */
+  players: Array<{
+    id: string;
+    display_name: string;
+    seat_number: number | null;
+  }>;
+  /** The incremental memory: guesses after each round of talk. */
+  guess_timeline: GuessRound[];
+  /** End-state guesses (= the last timeline entry's guesses). */
+  final_guesses: RoleGuess[];
+  /** Freeform game recap + final guesses in the target language. */
+  final_summary: string;
+}
+
+export type SummaryJson = GodSummaryJson | BlindSummaryJson;
 
 /** One completed turn before STT has been applied. */
 export interface RecordedTurn {

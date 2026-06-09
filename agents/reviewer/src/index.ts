@@ -47,11 +47,14 @@ import {
   loadAllQuestJsons,
   loadDiscussion,
 } from './reviewer/finalNarrative.js';
+import { generateBlindSummary } from './reviewer/finalNarrativeBlind.js';
+import { GuessTracker } from './reviewer/guessTracker.js';
 import type {
+  BlindSummaryJson,
   GameMetaSnapshot,
+  GodSummaryJson,
   MetaJson,
   RecordedTurn,
-  SummaryJson,
   TurnJson,
   TurnSummary,
 } from './types.js';
@@ -71,6 +74,12 @@ interface Session {
   pendingQuests: Set<Promise<void>>;
   /** Tracks in-flight discussion processing (0 or 1 at a time). */
   pendingDiscussion: Set<Promise<void>>;
+  /** Review mode for this game. */
+  mode: 'blind' | 'god';
+  /** Blind-mode active detective (null in god mode). */
+  guessTracker: GuessTracker | null;
+  /** Tracks in-flight per-round guess-updates (blind only). */
+  pendingGuesses: Set<Promise<void>>;
 }
 
 function buildSessionLogger(gameId: string) {
@@ -119,6 +128,12 @@ async function startSession(
   const pendingTurns = new Set<Promise<void>>();
   const pendingQuests = new Set<Promise<void>>();
   const pendingDiscussion = new Set<Promise<void>>();
+  const pendingGuesses = new Set<Promise<void>>();
+  // Blind mode only: the active detective that re-guesses each round of talk.
+  const guessTracker =
+    game.ai_review_mode === 'blind'
+      ? new GuessTracker(llm, config.storage.dataDir, meta)
+      : null;
 
   const onTurnFinished = (turn: RecordedTurn) => {
     const task = processTurn(config, db, llm, game.id, meta, turn).catch((err) => {
@@ -159,10 +174,22 @@ async function startSession(
     void task.finally(() => pendingQuests.delete(task));
   };
 
+  const onRoundChanged = (quest: number, round: number) => {
+    if (!guessTracker) return;
+    const task = (async () => {
+      // Wait for this round's turn pipelines to flush to disk, then re-guess.
+      await Promise.allSettled(Array.from(pendingTurns));
+      await guessTracker.updateForRound(quest, round);
+    })().catch((err) => log.error(`guess-update Q${quest}/R${round} failed`, err));
+    pendingGuesses.add(task);
+    void task.finally(() => pendingGuesses.delete(task));
+  };
+
   const timerListener = new TimerListener(
     segmenter,
     { displayName: (identity) => metaByIdentity.get(identity) ?? identity },
-    onQuestChanged
+    onQuestChanged,
+    onRoundChanged
   );
   const discussionListener = new DiscussionListener(
     discussionRecorder,
@@ -217,6 +244,9 @@ async function startSession(
     pendingTurns,
     pendingQuests,
     pendingDiscussion,
+    mode: game.ai_review_mode,
+    guessTracker,
+    pendingGuesses,
   };
 }
 
@@ -272,6 +302,23 @@ async function endSession(
     await Promise.allSettled(Array.from(session.pendingQuests));
   }
 
+  // Blind mode: drain in-flight per-round guess-updates, then add the FINAL round
+  // (the one in progress at end-of-game that never triggered onRoundChanged).
+  if (session.guessTracker) {
+    if (session.pendingGuesses.size > 0) {
+      log.info(`waiting for ${session.pendingGuesses.size} pending guess-update(s)`);
+      await Promise.allSettled(Array.from(session.pendingGuesses));
+    }
+    if (finalQuest > 0) {
+      const finalRound = session.timerListener.getCurrentRoundIndex();
+      try {
+        await session.guessTracker.updateForRound(finalQuest, finalRound);
+      } catch (err) {
+        log.error('final guess-update failed', err);
+      }
+    }
+  }
+
   // Leave LiveKit as soon as recording is fully wrapped up — no reason to
   // stay connected during LLM work.
   await session.bot.leave().catch((err) => log.error('bot.leave failed', err));
@@ -306,46 +353,79 @@ async function generateFinalReport(
     loadDiscussion(config.storage.dataDir, session.gameId),
   ]);
 
-  // All four LLM calls in parallel — they're independent.
-  log.info('invoking role-reveal + final-narrative prompts (fa + en)');
-  const narrativeCtx = { meta: session.meta, outcome, dossiers, quests, discussion };
-  const [roleRevealFa, roleRevealEn, narrativeFa, narrativeEn] = await Promise.all([
-    renderRoleReveal(llm, session.meta, 'fa'),
-    renderRoleReveal(llm, session.meta, 'en'),
-    generateFinalNarrative(llm, narrativeCtx, 'fa'),
-    generateFinalNarrative(llm, narrativeCtx, 'en'),
-  ]);
-
-  const build = (
-    language: 'fa' | 'en',
-    roleReveal: string,
-    narrative: string
-  ): SummaryJson => ({
-    language,
-    gameId: session.gameId,
-    roomCode: session.roomCode,
-    generatedAt: new Date().toISOString(),
-    outcome,
-    players: session.meta.players.map((p) => ({
-      id: p.id,
-      display_name: p.display_name,
-      seat_number: p.seat_number,
-      role: p.role ?? 'good',
-      special_role: p.special_role ?? null,
-    })),
-    role_reveal: roleReveal,
-    narrative,
-    quests,
-    discussion,
-  });
-
   const faPath = summaryPath(config.storage.dataDir, session.gameId, 'fa');
   const enPath = summaryPath(config.storage.dataDir, session.gameId, 'en');
 
-  await Promise.all([
-    writeJsonAtomic(faPath, build('fa', roleRevealFa, narrativeFa)),
-    writeJsonAtomic(enPath, build('en', roleRevealEn, narrativeEn)),
-  ]);
+  if (session.mode === 'blind') {
+    // BLIND: freeform end summary + the evolving guess timeline. No roles.
+    const timeline = session.guessTracker?.getTimeline() ?? [];
+    const finalGuesses = session.guessTracker?.getFinalGuesses() ?? [];
+    log.info('invoking blind end-summary (fa + en)');
+    const blindCtx = { meta: session.meta, outcome, quests, dossiers, timeline, finalGuesses };
+    const [summaryFa, summaryEn] = await Promise.all([
+      generateBlindSummary(llm, blindCtx, 'fa'),
+      generateBlindSummary(llm, blindCtx, 'en'),
+    ]);
+    const buildBlind = (language: 'fa' | 'en', finalSummary: string): BlindSummaryJson => ({
+      mode: 'blind',
+      language,
+      gameId: session.gameId,
+      roomCode: session.roomCode,
+      generatedAt: new Date().toISOString(),
+      outcome,
+      players: session.meta.players.map((p) => ({
+        id: p.id,
+        display_name: p.display_name,
+        seat_number: p.seat_number,
+      })),
+      guess_timeline: timeline,
+      final_guesses: finalGuesses,
+      final_summary: finalSummary,
+      quests,
+      discussion,
+    });
+    await Promise.all([
+      writeJsonAtomic(faPath, buildBlind('fa', summaryFa)),
+      writeJsonAtomic(enPath, buildBlind('en', summaryEn)),
+    ]);
+  } else {
+    // GOD: role reveal + narrative (roles known).
+    log.info('invoking role-reveal + final-narrative prompts (fa + en)');
+    const narrativeCtx = { meta: session.meta, outcome, dossiers, quests, discussion };
+    const [roleRevealFa, roleRevealEn, narrativeFa, narrativeEn] = await Promise.all([
+      renderRoleReveal(llm, session.meta, 'fa'),
+      renderRoleReveal(llm, session.meta, 'en'),
+      generateFinalNarrative(llm, narrativeCtx, 'fa'),
+      generateFinalNarrative(llm, narrativeCtx, 'en'),
+    ]);
+    const buildGod = (
+      language: 'fa' | 'en',
+      roleReveal: string,
+      narrative: string
+    ): GodSummaryJson => ({
+      mode: 'god',
+      language,
+      gameId: session.gameId,
+      roomCode: session.roomCode,
+      generatedAt: new Date().toISOString(),
+      outcome,
+      players: session.meta.players.map((p) => ({
+        id: p.id,
+        display_name: p.display_name,
+        seat_number: p.seat_number,
+        role: p.role ?? 'good',
+        special_role: p.special_role ?? null,
+      })),
+      role_reveal: roleReveal,
+      narrative,
+      quests,
+      discussion,
+    });
+    await Promise.all([
+      writeJsonAtomic(faPath, buildGod('fa', roleRevealFa, narrativeFa)),
+      writeJsonAtomic(enPath, buildGod('en', roleRevealEn, narrativeEn)),
+    ]);
+  }
 
   await updateGameReview(db, session.gameId, {
     status: 'ready',
