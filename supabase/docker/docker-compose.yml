@@ -17,6 +17,7 @@ services:
   kong:
     container_name: supabase-kong
     image: kong/kong:3.9.1
+    logging: { driver: local, options: { max-size: "50m", max-file: "6" } }   # ~300 MB (chattiest)
     restart: unless-stopped
     networks:
       default:
@@ -63,6 +64,7 @@ services:
   auth:
     container_name: supabase-auth
     image: supabase/gotrue:v2.189.0
+    logging: { driver: local, options: { max-size: "25m", max-file: "2" } }   # ~50 MB
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
@@ -112,6 +114,7 @@ services:
   rest:
     container_name: supabase-rest
     image: postgrest/postgrest:v14.12
+    logging: { driver: local, options: { max-size: "10m", max-file: "2" } }   # ~20 MB
     restart: unless-stopped
     depends_on:
       db:
@@ -132,6 +135,7 @@ services:
     # Name is intentional: realtime derives the tenant id from the subdomain.
     container_name: realtime-dev.supabase-realtime
     image: supabase/realtime:v2.102.3
+    logging: { driver: local, options: { max-size: "50m", max-file: "2" } }   # ~100 MB
     restart: unless-stopped
     depends_on:
       db:
@@ -171,6 +175,7 @@ services:
     # PG17 to match cloud (server_version 17.6). supabase/postgres ships the
     # auth/realtime/roles scaffolding our migrations depend on.
     image: supabase/postgres:17.6.1.084
+    logging: { driver: local, options: { max-size: "10m", max-file: "2" } }   # ~20 MB
     restart: unless-stopped
     # supavisor (the usual port-publisher) is dropped, so expose Postgres directly
     # for migrations + pg_dump/restore. Bound to localhost only.

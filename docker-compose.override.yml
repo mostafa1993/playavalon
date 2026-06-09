@@ -1,0 +1,21 @@
+# Auto-loaded by `docker compose` (no -f needed) on top of docker-compose.yml.
+#
+# Caps each app container's logs with the `local` driver — compressed + rotated —
+# so logs can never fill the disk. Sizes are tiered by how chatty each service is.
+# Per-container ceiling = max-size x max-file (uncompressed; on disk it's smaller
+# thanks to gzip). Read logs as usual: `docker logs <c>` / `./deploy/app.sh logs`.
+services:
+  app:
+    logging: { driver: local, options: { max-size: "50m", max-file: "6" } }   # ~300 MB
+  bot-supervisor:
+    logging: { driver: local, options: { max-size: "50m", max-file: "4" } }   # ~200 MB
+  traefik:
+    logging: { driver: local, options: { max-size: "25m", max-file: "2" } }   # ~50 MB
+  livekit:
+    logging: { driver: local, options: { max-size: "25m", max-file: "2" } }   # ~50 MB
+  agent:
+    logging: { driver: local, options: { max-size: "25m", max-file: "2" } }   # ~50 MB
+  redis:
+    logging: { driver: local, options: { max-size: "10m", max-file: "2" } }   # ~20 MB
+  cleanup-cron:
+    logging: { driver: local, options: { max-size: "10m", max-file: "2" } }   # ~20 MB
