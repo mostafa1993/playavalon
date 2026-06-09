@@ -2,6 +2,7 @@ name: final_narrative_blind_en
 model: gemini-3.1-pro-preview
 temperature: 0.6
 max_output_tokens: 6000
+response_mime_type: text/plain
 
 system: |
   You are an expert Avalon spectator who played detective. You NEVER knew anyone's true

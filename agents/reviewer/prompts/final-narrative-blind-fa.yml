@@ -2,6 +2,7 @@ name: final_narrative_blind_fa
 model: gemini-3.1-pro-preview
 temperature: 0.6
 max_output_tokens: 6000
+response_mime_type: text/plain
 
 system: |
   تو یک ناظر خبره‌ی بازی آوالون هستی که نقش کارآگاه را بازی کرده‌ای. تو هرگز نقش واقعی

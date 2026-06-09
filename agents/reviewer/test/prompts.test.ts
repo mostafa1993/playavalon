@@ -80,6 +80,31 @@ const prompts: Array<{
     mime: 'text/plain',
     expectedVars: ['meta', 'outcome', 'dossiers', 'quests', 'discussion'],
   },
+  {
+    file: 'role-guess-update.yml',
+    mime: 'application/json',
+    expectedVars: ['seat_table', 'prior_guesses', 'quest_number', 'proposal_round', 'round_talk'],
+  },
+  {
+    file: 'final-narrative-blind-fa.yml',
+    mime: 'text/plain',
+    expectedVars: ['roster', 'outcome', 'quests', 'dossiers', 'timeline', 'final_guesses'],
+  },
+  {
+    file: 'final-narrative-blind-en.yml',
+    mime: 'text/plain',
+    expectedVars: ['roster', 'outcome', 'quests', 'dossiers', 'timeline', 'final_guesses'],
+  },
+  {
+    file: 'performance-eval-fa.yml',
+    mime: 'application/json',
+    expectedVars: ['roster', 'outcome', 'quests', 'dossiers'],
+  },
+  {
+    file: 'performance-eval-en.yml',
+    mime: 'application/json',
+    expectedVars: ['roster', 'outcome', 'quests', 'dossiers'],
+  },
 ];
 
 function collectPlaceholders(p: PromptFile): Set<string> {
