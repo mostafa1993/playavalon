@@ -16,6 +16,10 @@ backup of these from a working VM, or be ready to recreate them:
 
 `supabase/docker/.env` is **generated fresh** each time, not backed up.
 
+> **Just run `./deploy/backup-creds.sh`** on the live VM — it copies the files
+> above into `~/creds_bkp/` (preserving paths). Then move/encrypt that folder
+> somewhere off the VM.
+
 ---
 
 ## Steps
@@ -64,6 +68,10 @@ CLEANUP_API_KEY=<any random string>
 # AZURE_SPEECH_KEY=...   GCP_PROJECT_ID=...   GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/vertex-sa.json
 ```
 Also drop in the secret files referenced above: `secrets/vertex-sa.json`, `livekit.yaml`.
+
+> **Shortcut:** once steps 0–3 are done, run **`./deploy/up.sh`** to do steps 4–6
+> (network → Supabase + migrations → app) in one go. It only applies migrations
+> to a fresh DB, so it's safe to re-run. The manual steps below are the same thing.
 
 ### 4. Create the shared network (once)
 ```bash
