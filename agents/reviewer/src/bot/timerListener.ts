@@ -31,7 +31,8 @@ export class TimerListener {
   private segmenter: TurnSegmenter;
   private resolver: ParticipantResolver;
   private activeSpeaker: string | null = null;
-  private lastQuestNumber = 0;
+  // -1 = no quest seen yet; 0 = the one-time intro round; 1+ = real quests.
+  private lastQuestNumber = -1;
   private onQuestChanged: QuestChangeHandler;
   private onRoundChanged: RoundChangeHandler;
   // Round-detection state. The proposal-round counter within the current
@@ -84,20 +85,26 @@ export class TimerListener {
     // Detect quest increment BEFORE driving speaker transitions, so the
     // previous quest's active speaker (if any) is flushed under the old
     // quest number by the setActiveSpeaker/clearActiveSpeaker call below.
-    const questAdvanced = state.questNumber > this.lastQuestNumber;
+    // The intro round is filed under "quest 0" so it never collides with Quest 1.
+    const effectiveQuest = state.isIntro ? 0 : state.questNumber;
+
+    const questAdvanced = effectiveQuest > this.lastQuestNumber;
     if (questAdvanced) {
       const previous = this.lastQuestNumber;
-      // The round in progress under the old quest just ended (mission resolved).
-      if (previous > 0) {
+      // The round in progress just ended (mission resolved, or the intro closed).
+      // previous >= 0 also flushes the intro round (quest 0) → the detective's
+      // opening guess-update; previous = -1 (first quest ever) emits nothing.
+      if (previous >= 0) {
         this.emitRoundChanged(previous, this.currentRoundIndex);
       }
-      this.lastQuestNumber = state.questNumber;
+      this.lastQuestNumber = effectiveQuest;
       // A new quest is by definition round 0; the new leader starts fresh.
       this.currentRoundIndex = 0;
       this.lastLeaderIdentity = null;
+      // Quest synthesis runs for real quests only — never the intro (quest 0).
       if (previous > 0) {
         try {
-          this.onQuestChanged(previous, state.questNumber);
+          this.onQuestChanged(previous, effectiveQuest);
         } catch (err) {
           console.error('[timer] onQuestChanged handler threw:', err);
         }
@@ -133,7 +140,7 @@ export class TimerListener {
       this.segmenter.setActiveSpeaker({
         identity: newSpeaker,
         displayName: this.resolver.displayName(newSpeaker),
-        questNumber: state.questNumber,
+        questNumber: effectiveQuest,
         // Proposal round within the quest — bumps on leader rotation so
         // each round's transcripts get unique file names.
         roundIndex: this.currentRoundIndex,

@@ -255,9 +255,13 @@ function BlindSections({ summary, isRtl }: { summary: BlindReviewSummary; isRtl:
             {summary.guess_timeline.map((r) => (
               <div key={r.round} className="border-l-2 border-avalon-gold/30 pl-3">
                 <div className="text-avalon-silver text-xs mb-1">
-                  {isRtl
-                    ? `دور ${r.round} — ماموریت ${r.quest}`
-                    : `Round ${r.round} — Quest ${r.quest}`}
+                  {r.quest === 0
+                    ? isRtl
+                      ? `دور ${r.round} — معارفه`
+                      : `Round ${r.round} — Intro`
+                    : isRtl
+                      ? `دور ${r.round} — ماموریت ${r.quest}`
+                      : `Round ${r.round} — Quest ${r.quest}`}
                 </div>
                 <ul className="space-y-0.5">
                   {r.guesses.map((g) => (
