@@ -10,6 +10,9 @@ export interface SpeakingTimerState {
   timerStartTime: number | null;
   timerDuration: number;
   questNumber: number;
+  /** True during the one-time intro round — these turns are filed under the
+   *  "intro" quest so they don't collide with Quest 1. Absent = normal round. */
+  isIntro?: boolean;
 }
 
 /** Minimal view of the game + players + roles pulled from Supabase. */

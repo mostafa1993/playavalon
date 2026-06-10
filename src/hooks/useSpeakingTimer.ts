@@ -28,6 +28,10 @@ export interface SpeakingTimerState {
   timerStartTime: number | null;
   timerDuration: number;
   questNumber: number;
+  /** True during the one-time intro round (Feature 023). Lets the reviewer file
+   *  these turns separately so they don't collide with Quest 1's turns. Optional:
+   *  absent/false = a normal proposal round. */
+  isIntro?: boolean;
 }
 
 interface UseSpeakingTimerOptions {
@@ -35,6 +39,8 @@ interface UseSpeakingTimerOptions {
   seatNumbers?: Map<string, number>;
   leaderIdentity?: string;
   questNumber: number;
+  /** Feature 023: true while the game is in the one-time intro round. */
+  inIntroPhase?: boolean;
 }
 
 interface UseSpeakingTimerReturn {
@@ -89,6 +95,7 @@ export function useSpeakingTimer({
   seatNumbers,
   leaderIdentity,
   questNumber,
+  inIntroPhase = false,
 }: UseSpeakingTimerOptions): UseSpeakingTimerReturn {
   const { room } = useLiveKit();
   const [state, setState] = useState<SpeakingTimerState>({
@@ -101,10 +108,11 @@ export function useSpeakingTimer({
   });
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const advancedRef = useRef(false);
-  // Track which leader we last generated the speaking order for.
-  // Regenerating on leader change (instead of quest change) correctly handles
-  // ALL rotation triggers: rejected proposal, new quest, Lady investigation.
-  const generatedForLeaderRef = useRef<string | null>(null);
+  // Track the (leader + intro-flag) we last generated the order for.
+  // Regenerating on leader change handles all rotation triggers (rejected
+  // proposal, new quest, Lady investigation); adding the intro-flag also gives
+  // the intro round and Quest 1's first proposal each their own fresh order.
+  const generatedKeyRef = useRef<string | null>(null);
 
   // Broadcast helper
   const broadcast = useCallback(
@@ -123,9 +131,11 @@ export function useSpeakingTimer({
   useEffect(() => {
     if (!isManager || !seatNumbers || !leaderIdentity || seatNumbers.size === 0) return;
     if (questNumber === 0) return;
-    // Skip if we already generated for this leader AND have an order (avoid re-generating on unrelated re-renders)
-    if (leaderIdentity === generatedForLeaderRef.current && state.speakingOrder.length > 0) return;
-    generatedForLeaderRef.current = leaderIdentity;
+    // Regenerate when the leader changes OR when we cross the intro→play boundary
+    // (same leader, but a fresh pass). Skip otherwise to avoid re-gen on re-renders.
+    const genKey = `${leaderIdentity}:${inIntroPhase ? 'intro' : 'play'}`;
+    if (genKey === generatedKeyRef.current && state.speakingOrder.length > 0) return;
+    generatedKeyRef.current = genKey;
 
     const order = generateSpeakingOrder(seatNumbers, leaderIdentity);
     const newState: SpeakingTimerState = {
@@ -135,10 +145,11 @@ export function useSpeakingTimer({
       timerStartTime: null,
       timerDuration: TIMER_DURATION,
       questNumber,
+      isIntro: inIntroPhase,
     };
     setState(newState);
     broadcast(newState);
-  }, [isManager, seatNumbers, leaderIdentity, questNumber, broadcast]);
+  }, [isManager, seatNumbers, leaderIdentity, questNumber, inIntroPhase, broadcast]);
 
   // Listen for state updates from manager
   useEffect(() => {

@@ -97,6 +97,7 @@ export default function GamePage() {
     seatNumbers,
     leaderIdentity,
     questNumber: gameState?.game?.current_quest ?? 0,
+    inIntroPhase: gameState?.game?.in_intro_phase ?? false,
   });
 
   // Assassin identity → LiveKit identity, via display_name.
