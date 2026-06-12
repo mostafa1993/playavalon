@@ -1,7 +1,12 @@
 # LLM Voice Player — a bot that plays *and speaks*
 
 **Date:** 2026-06-10
-**Status:** planned — for review
+**Status:** Phase 0 ✅ PROVEN (2026-06-12) — bot spoke Persian into a prod room, heard by a human.
+Findings: (1) the rtc-node FFI needs each AudioFrame's PCM **copied** into a fresh Int16Array —
+subarray views transmit silence; (2) `SOURCE_MICROPHONE` plays through the app's RemoteAudioSink
+with **zero app changes**; (3) Azure `raw-48khz-16bit-mono-pcm` → AudioSource(48000, 1) works
+as-is. Reference implementation: `agents/reviewer/spike-tts.ts` (keep until Phase 1 lands
+`shared/` publish helpers, then delete).
 
 ## Goal
 Turn the bots from silent rule-based players into an **LLM voice player**: a bot that
