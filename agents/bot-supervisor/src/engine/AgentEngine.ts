@@ -116,7 +116,7 @@ export class AgentEngine {
       logger: this.logger,
     });
 
-    this.brain = this.opts.brain ?? makeBrain(cfg.brain);
+    this.brain = this.opts.brain ?? makeBrain(cfg);
 
     // Heartbeat — fire once immediately + on an interval.
     this.startHeartbeat();

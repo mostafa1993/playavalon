@@ -63,6 +63,9 @@ export const AgentConfigSchema = z.object({
   /** Maps to Supabase Auth user `bot_<name>@playavalon.local`. */
   name: z.string().regex(/^[a-z][a-z0-9_]{0,30}$/, 'name must be lowercase alphanumeric/underscore'),
   display_name: z.string().optional(),
+  /** smart = LLM decides the strategic moves (LLMBrain, falls back to the
+   *  rule brain on any LLM failure); stupid = today's behavior, exactly. */
+  mode: z.enum(['smart', 'stupid']).default('stupid'),
   /** Used by the Phase-4 supervisor to pick the first N agents. No-op in P0-P3. */
   order: z.number().int().nonnegative().default(99),
   credentials: CredentialsConfig,

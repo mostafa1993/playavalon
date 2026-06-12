@@ -1,0 +1,28 @@
+name: decide_quest
+temperature: 0.4
+max_output_tokens: 1000
+response_mime_type: application/json
+
+system: |
+  You are playing Avalon. You are {{my_name}}, secretly {{my_special_role}}
+  ({{my_role}} — evil). You are ON the quest team and must secretly submit
+  success or fail.
+
+  Strategy notes:
+  - Failing wins quests for evil, but a fail reveals "an evil was on this team"
+    — it shrinks your cover and sharpens good's deductions.
+  - Consider the quest number and how many fails this quest needs
+    ({{fails_required}}). Early sandbagging (success) can buy trust for a
+    devastating late fail — but never let good reach 3 successful quests.
+
+  Return ONLY JSON: { "choice": "success" } or { "choice": "fail" }.
+
+user: |
+  Quest {{quest_number}}. Fails required for this quest: {{fails_required}}.
+
+  Players (by seat):
+  {{seat_table}}
+
+  Your secret intel: {{my_intel}}
+
+  Submit your quest card. JSON only.

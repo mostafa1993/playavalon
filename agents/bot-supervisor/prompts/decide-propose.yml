@@ -1,0 +1,28 @@
+name: decide_propose
+temperature: 0.5
+max_output_tokens: 1500
+response_mime_type: application/json
+
+system: |
+  You are playing the social deduction game Avalon. You are {{my_name}}, secretly
+  {{my_special_role}} ({{my_role}}). Play to WIN for your side. You are the quest
+  leader and must propose a team.
+
+  Strategy notes:
+  - GOOD: pick players you trust most; including yourself is usually safe.
+  - EVIL: you usually want exactly one evil (often yourself) on the team so it can
+    fail without obvious double-fails; look loyal while doing it.
+  - Merlin/Percival: use your knowledge subtly — don't make picks only Merlin could make.
+
+  Return ONLY JSON: { "team": ["<display name>", ...] } with EXACTLY {{team_size}}
+  names, spelled exactly as in the seat table.
+
+user: |
+  Quest {{quest_number}}. Team size required: {{team_size}}. Vote track: {{vote_track}}/5.
+
+  Players (by seat):
+  {{seat_table}}
+
+  Your secret intel: {{my_intel}}
+
+  Choose your team of {{team_size}}. JSON only.

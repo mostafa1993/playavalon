@@ -1,7 +1,9 @@
 # LLM Voice Player — a bot that plays *and speaks*
 
 **Date:** 2026-06-10
-**Status:** Phase 0 ✅ PROVEN (2026-06-12) — bot spoke Persian into a prod room, heard by a human.
+**Status:** Phase 0 ✅ proven · Phase 1 ✅ (`agents/shared/`) · Phase 2 ✅ (LLMBrain, `mode: smart|stupid`)
+— next: Phase 3 (ears).
+Phase 0 (2026-06-12): bot spoke Persian into a prod room, heard by a human.
 Findings: (1) the rtc-node FFI needs each AudioFrame's PCM **copied** into a fresh Int16Array —
 subarray views transmit silence; (2) `SOURCE_MICROPHONE` plays through the app's RemoteAudioSink
 with **zero app changes**; (3) Azure `raw-48khz-16bit-mono-pcm` → AudioSource(48000, 1) works

@@ -1,14 +1,15 @@
 {
-  "name": "playavalon-agents",
+  "name": "playavalon-bots",
   "version": "0.1.0",
   "private": true,
-  "description": "Rule-based agentic players for playavalon — independent Node processes that sign into Supabase as real users and play the game via the public HTTP API",
+  "description": "Agentic players for playavalon — independent Node processes that sign into Supabase as real users and play the game via the public HTTP API (mode: stupid = rule-based, smart = LLM)",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "run-agent": "tsx src/cli/run.ts"
   },
   "dependencies": {
+    "@avalon/shared": "*",
     "@supabase/supabase-js": "^2.47.12",
     "@types/ws": "^8.18.1",
     "commander": "^12.1.0",

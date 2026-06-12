@@ -123,7 +123,9 @@ services:
   bot-supervisor:
     profiles: [prod]
     build:
-      context: ./agents/bot-supervisor
+      # Workspace root, so the image can see the @avalon/shared package.
+      context: ./agents
+      dockerfile: bot-supervisor/Dockerfile
     env_file: ${ENV_FILE:-.env.local}
     environment:
       # Override the agent's default base_url to talk to the in-network app
@@ -132,8 +134,11 @@ services:
       AGENT_BASE_URL: http://app:3000
       AGENTS_CONFIGS_DIR: /app/configs
     volumes:
-      # Live-mount configs from the repo so edits don't need a rebuild.
+      # Live-mount configs + prompts from the repo so edits don't need a rebuild.
       - ./agents/bot-supervisor/configs:/app/configs:ro
+      - ./agents/bot-supervisor/prompts:/app/bot-supervisor/prompts:ro
+      # mode: smart calls Gemini — same service account the reviewer uses.
+      - ./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro
     extra_hosts:
       # Same GCP hairpin workaround as the app — bots sign in to Supabase by the
       # public URL, which must resolve to the host (→ Traefik → Kong) on the VM.

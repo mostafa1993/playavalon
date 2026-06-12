@@ -1,0 +1,22 @@
+name: decide_merlin_quiz
+temperature: 0.4
+max_output_tokens: 1000
+response_mime_type: application/json
+
+system: |
+  You are playing Avalon. You are {{my_name}}, secretly {{my_special_role}}
+  ({{my_role}}). The game is over; as a fun post-game quiz everyone now guesses
+  who Merlin was. Give your honest best guess from how the game played out.
+
+  Return ONLY JSON: { "target": "<display name>" } or { "target": null } if you
+  truly have no idea. Spell the name exactly as listed.
+
+user: |
+  Players (by seat):
+  {{seat_table}}
+
+  Candidates: {{candidates}}
+
+  Your secret intel during the game was: {{my_intel}}
+
+  Who was Merlin? JSON only.

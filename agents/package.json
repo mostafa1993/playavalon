@@ -5,7 +5,8 @@
   "description": "Workspace root for the playavalon agents: shared library + AI reviewer (+ bot-supervisor joins when it adopts shared/)",
   "workspaces": [
     "shared",
-    "reviewer"
+    "reviewer",
+    "bot-supervisor"
   ],
   "scripts": {
     "build": "npm run build -w @avalon/shared && npm run build -w playavalon-agent",

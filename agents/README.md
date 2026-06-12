@@ -7,7 +7,7 @@ The Node projects that act on games on your behalf, organized as an **npm worksp
 |---|---|---|---|
 | [`shared/`](shared/) | **`@avalon/shared`** — common library: Gemini LLM client + YAML prompt loader, retry/backoff, Azure Speech (STT `transcribe` + TTS `synthesize`), silence detection, and LiveKit audio publish (`publishAudioTrack`, the proven "mouth"). | — (library) | — |
 | [`reviewer/`](reviewer/) | **AI post-game reviewer.** Joins games via LiveKit, records discussion audio, transcribes (Azure STT), and generates LLM reports (god: reveal + performance; blind: evolving role guesses). Imports `@avalon/shared`. | `reviewer` | `./agents` + `reviewer/Dockerfile` |
-| [`bot-supervisor/`](bot-supervisor/) | **Bot players.** Watches for rooms with `agent_count > 0` and spawns one rule-based agent process per bot seat. The agents sign into Supabase and play full games via the HTTP API. *Not yet a workspace member* — joins when it adopts `@avalon/shared` for the LLM voice player. | `bot-supervisor` | `./agents/bot-supervisor` |
+| [`bot-supervisor/`](bot-supervisor/) | **Bot players** (`playavalon-bots`). Watches for rooms with `agent_count > 0` and spawns one agent process per bot seat; agents play via the HTTP API. Per-bot yaml `mode: stupid` (rule-based, default) or `smart` (LLMBrain — the LLM makes the strategic moves, rule fallback on any failure). | `bot-supervisor` | `./agents` + `bot-supervisor/Dockerfile` |
 
 Each subdir has its own `README.md` with details.
 
