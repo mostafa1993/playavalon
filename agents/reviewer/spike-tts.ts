@@ -71,18 +71,36 @@ async function synthesize(text: string, voice: string): Promise<Int16Array> {
     throw new Error(`Azure TTS failed: ${res.status} ${res.statusText} — ${await res.text()}`);
   }
   const buf = Buffer.from(await res.arrayBuffer());
-  console.log(`TTS ok: ${buf.length} bytes (${(buf.length / 2 / SAMPLE_RATE).toFixed(1)}s of audio)`);
-  return new Int16Array(buf.buffer, buf.byteOffset, buf.length / 2);
+  const pcm = new Int16Array(buf.buffer, buf.byteOffset, buf.length / 2);
+  // Sanity: is the synthesized audio actually non-silent?
+  let sumSq = 0;
+  for (let i = 0; i < pcm.length; i += 1) sumSq += pcm[i]! * pcm[i]!;
+  const rms = Math.sqrt(sumSq / pcm.length) | 0;
+  console.log(
+    `TTS ok: ${buf.length} bytes (${(buf.length / 2 / SAMPLE_RATE).toFixed(1)}s of audio), ` +
+    `PCM RMS=${rms} ${rms > 100 ? '(real sound)' : '(SILENT — Azure problem!)'}`
+  );
+  return pcm;
 }
 
-/** Push PCM into the AudioSource in 100ms frames. */
+/** Push PCM into the AudioSource in 100ms frames (copied, not subarray views —
+ *  defensive: the FFI may not honor a view's byteOffset). */
 async function speak(source: AudioSource, pcm: Int16Array): Promise<void> {
   const samplesPerFrame = SAMPLE_RATE / 10;
+  let framesSent = 0;
   for (let off = 0; off < pcm.length; off += samplesPerFrame) {
-    const chunk = pcm.subarray(off, Math.min(off + samplesPerFrame, pcm.length));
+    const end = Math.min(off + samplesPerFrame, pcm.length);
+    const chunk = new Int16Array(end - off);
+    chunk.set(pcm.subarray(off, end));
     await source.captureFrame(new AudioFrame(chunk, SAMPLE_RATE, CHANNELS, chunk.length));
+    framesSent += 1;
+    if (framesSent % 20 === 0) {
+      console.log(`    [capture] ${framesSent} frames pushed, queuedDuration=${source.queuedDuration.toFixed(0)}ms`);
+    }
   }
+  console.log(`    [capture] done (${framesSent} frames), draining queue ...`);
   await source.waitForPlayout();
+  console.log(`    [capture] playout complete (queuedDuration=${source.queuedDuration.toFixed(0)}ms)`);
 }
 
 /**
@@ -102,7 +120,8 @@ async function listen(roomName: string): Promise<void> {
   room.on(
     RoomEvent.TrackPublished,
     (pub: RemoteTrackPublication, p: RemoteParticipant) => {
-      console.log(`[pub]   ${p.identity}: kind=${pub.kind} source=${pub.source} sid=${pub.sid}`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      console.log(`[pub]   ${p.identity}: kind=${pub.kind} source=${pub.source} muted=${(pub as any).muted} sid=${pub.sid}`);
     }
   );
   room.on(
@@ -171,10 +190,20 @@ async function main(): Promise<void> {
   // 3. Publish a mic-like audio track fed from our PCM source.
   const source = new AudioSource(SAMPLE_RATE, CHANNELS);
   const track = LocalAudioTrack.createAudioTrack('spike-voice', source);
-  await room.localParticipant?.publishTrack(
+  const pub = await room.localParticipant?.publishTrack(
     track,
     new TrackPublishOptions({ source: TrackSource.SOURCE_MICROPHONE })
   );
+  // Inspect what the server thinks of our publication — the muted state is the
+  // prime suspect (the app showed a muted-mic icon on the spike's tile).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pubAny = pub as any;
+  console.log(`published: sid=${pubAny?.sid} muted=${pubAny?.muted} name=${pubAny?.name}`);
+  if (pubAny?.muted && typeof pubAny.unmute === 'function') {
+    console.log('publication is MUTED — calling unmute()');
+    await pubAny.unmute();
+    console.log(`after unmute: muted=${pubAny.muted}`);
+  }
   console.log('audio track published — waiting 3s for subscribers, then speaking 3× ...');
   await new Promise((r) => setTimeout(r, 3000));
 
