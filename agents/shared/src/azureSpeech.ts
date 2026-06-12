@@ -1,24 +1,22 @@
 /**
- * Azure Speech-to-Text client (conversation/single-shot REST endpoint).
+ * Azure Speech client — STT (speech→text) and TTS (text→speech) over REST.
  *
- * Input: PCM16 mono @ `sampleRate` Hz (no header).
- * Output: transcript string + optional confidence.
+ * STT: conversation/single-shot endpoint.
+ *   Input: PCM16 mono @ `sampleRate` Hz (no header) — wrapped in a 44-byte
+ *   RIFF/WAV header. Output: transcript string + optional confidence.
+ *   Handles audio up to ~60s; the Avalon speaking timer caps turns at 55s
+ *   (TIMER_DURATION=50 + AUTO_MUTE_DELAY=5), so this fits.
  *
- * Endpoint reference:
- *   POST https://<region>.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1
- *   ?language=fa-IR&format=detailed
+ * TTS: cognitiveservices/v1 synthesis endpoint.
+ *   Input: text + a neural voice name (SSML built + escaped here).
+ *   Output: raw PCM16 mono Int16Array at the requested sample rate —
+ *   ready for LiveKit's AudioSource (see livekitAudio.ts).
  *
- * Request body must be a valid WAV (RIFF) container. We wrap the raw PCM16
- * samples with a 44-byte WAV header.
- *
- * The single-shot endpoint handles audio up to ~60s. The Avalon speaking timer
- * caps turns at 55s (TIMER_DURATION=50 + AUTO_MUTE_DELAY=5), so this fits.
- *
- * Retries transient failures (network, 429, 5xx) with exponential backoff;
+ * Both retry transient failures (network, 429, 5xx) with exponential backoff;
  * auth/4xx errors are treated as permanent and surfaced immediately.
  */
 
-import { isNetworkError, isTransientHttpStatus, retry } from '../util/retry.js';
+import { isNetworkError, isTransientHttpStatus, retry } from './retry.js';
 
 export interface AzureSpeechConfig {
   key: string;
@@ -174,4 +172,85 @@ function pcmToWav(pcm: Int16Array, sampleRate: number, channels: number): Uint8A
 
 function writeAscii(view: DataView, offset: number, s: string): void {
   for (let i = 0; i < s.length; i += 1) view.setUint8(offset + i, s.charCodeAt(i));
+}
+
+// ── TTS ─────────────────────────────────────────────────────────────────────
+
+export interface SynthesizeOptions {
+  /** Azure neural voice, e.g. 'fa-IR-DilaraNeural' (female) / 'fa-IR-FaridNeural' (male). */
+  voice: string;
+  /** Output PCM sample rate. 48000 matches LiveKit/WebRTC natively. */
+  sampleRate?: 16000 | 24000 | 48000;
+  /** xml:lang for the SSML envelope; defaults to the config language. */
+  language?: string;
+  retry?: {
+    maxAttempts?: number;
+    baseDelayMs?: number;
+  };
+}
+
+/**
+ * Synthesize speech: text → raw PCM16 mono Int16Array.
+ * Proven in the Phase-0 spike (docs/2026-06-10-llm-voice-player-plan.md).
+ */
+export async function synthesize(
+  config: AzureSpeechConfig,
+  text: string,
+  options: SynthesizeOptions
+): Promise<Int16Array> {
+  const sampleRate = options.sampleRate ?? 48000;
+  const lang = options.language ?? config.language;
+  const format = `raw-${sampleRate / 1000}khz-16bit-mono-pcm`;
+  const ssml =
+    `<speak version='1.0' xml:lang='${escapeXml(lang)}'>` +
+    `<voice name='${escapeXml(options.voice)}'>${escapeXml(text)}</voice></speak>`;
+
+  const url = `https://${config.region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+
+  const attempt = async (): Promise<Int16Array> => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': config.key,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': format,
+        'User-Agent': 'playavalon-agents',
+      },
+      body: ssml,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new AzureSpeechError(
+        { httpStatus: res.status },
+        `Azure TTS ${res.status}: ${body.slice(0, 300)}`
+      );
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    return new Int16Array(buf.buffer, buf.byteOffset, buf.length / 2);
+  };
+
+  return retry(attempt, {
+    maxAttempts: options.retry?.maxAttempts,
+    baseDelayMs: options.retry?.baseDelayMs,
+    shouldRetry: (err) => {
+      if (err instanceof AzureSpeechError) {
+        return err.httpStatus !== null && isTransientHttpStatus(err.httpStatus);
+      }
+      return isNetworkError(err);
+    },
+    onRetry: (err, attempt, delayMs) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[tts] retry ${attempt} after ${delayMs}ms — ${msg}`);
+    },
+  });
+}
+
+/** Escape the five XML special characters for safe SSML embedding. */
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&apos;')
+    .replace(/"/g, '&quot;');
 }

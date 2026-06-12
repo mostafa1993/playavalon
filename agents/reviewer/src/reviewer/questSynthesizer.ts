@@ -12,7 +12,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { LLMClient } from './llm.js';
+import type { LLMClient } from '@avalon/shared';
 import { loadQuestStructuredData } from '../gamestate/db.js';
 import { writeJsonAtomic } from '../storage/atomicWrite.js';
 import { gameDir, questPath } from '../storage/layout.js';

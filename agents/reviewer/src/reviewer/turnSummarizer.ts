@@ -5,7 +5,7 @@
  * Output: structured TurnSummary (key_points, claims, suspicions, etc.).
  */
 
-import type { LLMClient } from './llm.js';
+import type { LLMClient } from '@avalon/shared';
 import type { TurnSummary } from '../types.js';
 
 export interface TurnSummarizerContext {

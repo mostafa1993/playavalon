@@ -10,9 +10,11 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
+    "pretest": "npm --prefix ../shared run build",
     "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
+    "@avalon/shared": "*",
     "@google/genai": "^1.0.0",
     "@livekit/rtc-node": "^0.13.25",
     "@supabase/supabase-js": "^2.47.12",

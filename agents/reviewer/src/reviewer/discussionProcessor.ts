@@ -16,11 +16,11 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentConfig } from '../config.js';
-import { transcribe } from '../stt/azureSpeech.js';
-import { isSilent } from '../stt/silence.js';
+import { transcribe } from '@avalon/shared';
+import { isSilent } from '@avalon/shared';
 import { writeJsonAtomic } from '../storage/atomicWrite.js';
 import { discussionPath } from '../storage/layout.js';
-import type { LLMClient } from './llm.js';
+import type { LLMClient } from '@avalon/shared';
 import { correctTranscript } from './transcriptCorrector.js';
 import { summarizeTurn } from './turnSummarizer.js';
 import type {

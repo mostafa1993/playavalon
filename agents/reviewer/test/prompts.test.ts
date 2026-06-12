@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import url from 'node:url';
-import { loadPrompt, fill, type PromptFile } from '../src/reviewer/prompts.js';
+import { loadPrompt, fill, type PromptFile } from '@avalon/shared';
 
 const promptsDir = path.resolve(
   path.dirname(url.fileURLToPath(import.meta.url)),

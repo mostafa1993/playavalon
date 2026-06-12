@@ -5,7 +5,7 @@
  * each player played their actual role. Structured per-player output.
  */
 
-import type { LLMClient } from './llm.js';
+import type { LLMClient } from '@avalon/shared';
 import type {
   DossierJson,
   GameMetaSnapshot,

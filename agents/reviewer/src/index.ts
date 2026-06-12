@@ -31,11 +31,11 @@ import { TimerListener } from './bot/timerListener.js';
 import { DiscussionRecorder, type RecordedDiscussion } from './bot/discussionRecorder.js';
 import { DiscussionListener } from './bot/discussionListener.js';
 import { processDiscussion } from './reviewer/discussionProcessor.js';
-import { transcribe } from './stt/azureSpeech.js';
-import { isSilent } from './stt/silence.js';
+import { transcribe } from '@avalon/shared';
+import { isSilent } from '@avalon/shared';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
 import { metaPath, summaryPath, turnPath } from './storage/layout.js';
-import { createLLMClient, type LLMClient } from './reviewer/llm.js';
+import { createLLMClient, type LLMClient } from '@avalon/shared';
 import { correctTranscript } from './reviewer/transcriptCorrector.js';
 import { summarizeTurn } from './reviewer/turnSummarizer.js';
 import { updateDossier } from './reviewer/playerDossier.js';
@@ -615,7 +615,13 @@ async function main(): Promise<void> {
   console.log('[agent] booting; data dir:', config.storage.dataDir);
 
   const db = createDbClient(config.supabase.url, config.supabase.serviceRoleKey);
-  const llm = createLLMClient(config);
+  const llm = createLLMClient({
+    project: config.gemini.project,
+    location: config.gemini.location,
+    model: config.gemini.model,
+    promptsDir: config.storage.promptsDir,
+    retry: config.retry,
+  });
   let session: Session | null = null;
 
   const watcher = startWatcher(db, config.polling.gameWatcherMs, {

@@ -1,0 +1,14 @@
+{
+  "name": "playavalon-agents",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Workspace root for the playavalon agents: shared library + AI reviewer (+ bot-supervisor joins when it adopts shared/)",
+  "workspaces": [
+    "shared",
+    "reviewer"
+  ],
+  "scripts": {
+    "build": "npm run build -w @avalon/shared && npm run build -w playavalon-agent",
+    "test": "npm run build -w @avalon/shared && npm test -w playavalon-agent"
+  }
+}

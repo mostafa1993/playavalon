@@ -10,7 +10,7 @@
  */
 
 import fs from 'node:fs/promises';
-import type { LLMClient } from './llm.js';
+import type { LLMClient } from '@avalon/shared';
 import { writeJsonAtomic } from '../storage/atomicWrite.js';
 import { dossierPath } from '../storage/layout.js';
 import type { DossierJson, TurnSummary } from '../types.js';

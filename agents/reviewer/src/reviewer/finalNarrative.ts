@@ -6,7 +6,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { LLMClient } from './llm.js';
+import type { LLMClient } from '@avalon/shared';
 import { discussionPath, gameDir } from '../storage/layout.js';
 import type {
   DiscussionJson,

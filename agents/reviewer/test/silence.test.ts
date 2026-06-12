@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeRms, isSilent } from '../src/stt/silence.js';
+import { computeRms, isSilent } from '@avalon/shared';
 
 test('computeRms returns 0 for empty buffer', () => {
   assert.equal(computeRms(new Int16Array(0)), 0);

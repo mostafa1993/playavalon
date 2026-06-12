@@ -9,7 +9,7 @@
  * transcript so the downstream pipeline is never blocked.
  */
 
-import type { LLMClient } from './llm.js';
+import type { LLMClient } from '@avalon/shared';
 
 export async function correctTranscript(
   llm: LLMClient,

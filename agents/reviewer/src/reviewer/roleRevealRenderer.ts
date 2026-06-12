@@ -4,7 +4,7 @@
  * and produces 2–4 prose paragraphs describing who was who.
  */
 
-import type { LLMClient } from './llm.js';
+import type { LLMClient } from '@avalon/shared';
 import type { GameMetaSnapshot } from '../types.js';
 
 function buildRoster(meta: GameMetaSnapshot): string {

@@ -17,9 +17,8 @@ import {
   HarmBlockThreshold,
   type SafetySetting,
 } from '@google/genai';
-import type { AgentConfig } from '../config.js';
 import { loadPrompt, fill } from './prompts.js';
-import { isNetworkError, retry } from '../util/retry.js';
+import { isNetworkError, retry } from './retry.js';
 
 // Prepended to every system prompt. Clarifies to Gemini that accusatory
 // language ("kill Merlin", "he's a traitor") is gameplay vocabulary from a
@@ -48,19 +47,33 @@ export interface LLMClient {
 
 export type PromptVars = Record<string, string | number | null | undefined>;
 
-export function createLLMClient(config: AgentConfig): LLMClient {
+/** Decoupled client options (the consumer maps its own config onto these). */
+export interface LLMClientOptions {
+  /** GCP project / Vertex location / default model. */
+  project: string;
+  location: string;
+  model: string;
+  /** Directory holding the YAML prompt files. */
+  promptsDir: string;
+  retry?: {
+    maxAttempts?: number;
+    baseDelayMs?: number;
+  };
+}
+
+export function createLLMClient(opts: LLMClientOptions): LLMClient {
   const ai = new GoogleGenAI({
     vertexai: true,
-    project: config.gemini.project,
-    location: config.gemini.location,
+    project: opts.project,
+    location: opts.location,
   });
 
   const invoke = async (promptFile: string, vars: PromptVars): Promise<string> => {
-    const prompt = await loadPrompt(config.storage.promptsDir, promptFile);
+    const prompt = await loadPrompt(opts.promptsDir, promptFile);
     const systemText = GAME_CONTEXT_PREAMBLE + fill(prompt.system, vars);
     const userText = fill(prompt.user, vars);
 
-    const modelName = prompt.model ?? config.gemini.model;
+    const modelName = prompt.model ?? opts.model;
     const temperature = prompt.temperature ?? 0.4;
     const maxOutputTokens = prompt.max_output_tokens ?? 4096;
     const responseMimeType = prompt.response_mime_type;
@@ -93,8 +106,8 @@ export function createLLMClient(config: AgentConfig): LLMClient {
         return text;
       },
       {
-        maxAttempts: config.retry.maxAttempts,
-        baseDelayMs: config.retry.baseDelayMs,
+        maxAttempts: opts.retry?.maxAttempts,
+        baseDelayMs: opts.retry?.baseDelayMs,
         shouldRetry: (err) => isRetriableLlmError(err),
         onRetry: (err, attempt, delayMs) => {
           const msg = err instanceof Error ? err.message : String(err);

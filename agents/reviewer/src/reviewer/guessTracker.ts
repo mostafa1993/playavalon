@@ -10,7 +10,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import type { LLMClient } from './llm.js';
+import type { LLMClient } from '@avalon/shared';
 import type {
   GameMetaSnapshot,
   GuessLog,

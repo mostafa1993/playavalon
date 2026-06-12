@@ -1,0 +1,31 @@
+{
+  "name": "@avalon/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared library for playavalon agents: LLM client (Gemini/Vertex), prompt loader, retry, Azure Speech (STT + TTS), LiveKit audio publish",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "@livekit/rtc-node": "^0.13.25",
+    "js-yaml": "^4.1.1",
+    "livekit-server-sdk": "^2.15.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.17.10",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

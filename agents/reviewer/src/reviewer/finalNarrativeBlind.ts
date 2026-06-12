@@ -7,7 +7,7 @@
  * `final_summary` is pure deduction prose.
  */
 
-import type { LLMClient } from './llm.js';
+import type { LLMClient } from '@avalon/shared';
 import type {
   DossierJson,
   GameMetaSnapshot,
