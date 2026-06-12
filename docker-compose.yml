@@ -95,7 +95,9 @@ services:
   reviewer:
     profiles: [prod]
     build:
-      context: ./agents/reviewer
+      # Workspace root, so the image can see the @avalon/shared package.
+      context: ./agents
+      dockerfile: reviewer/Dockerfile
     env_file: ${ENV_FILE:-.env.local}
     environment:
       # Agent talks to LiveKit on the same host — skip Traefik/TLS, which
@@ -105,7 +107,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - game_reviews_data:/data/games
-      - ./agents/reviewer/prompts:/app/prompts:ro
+      - ./agents/reviewer/prompts:/app/reviewer/prompts:ro
       - ./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro
     depends_on:
       - livekit

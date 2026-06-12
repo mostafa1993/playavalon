@@ -1,23 +1,23 @@
 # agents/
 
-Two **independent** Node projects that act on games on your behalf. They share no
-code today (each has its own `package.json`, `Dockerfile`, and dependencies) — they're
-grouped here purely for clarity, so `agent` vs `agents` stops being confusing.
+The Node projects that act on games on your behalf, organized as an **npm workspace**
+(`agents/package.json` is the root; one `package-lock.json` for the workspace members).
 
 | Dir | What it is | Compose service | Build context |
 |---|---|---|---|
-| [`bot-supervisor/`](bot-supervisor/) | **Bot players.** Watches for rooms with `agent_count > 0` and spawns one rule-based agent process per bot seat. The agents sign into Supabase and play full games via the HTTP API. | `bot-supervisor` | `./agents/bot-supervisor` |
-| [`reviewer/`](reviewer/) | **AI post-game reviewer.** Joins games via LiveKit, records discussion audio, transcribes (Azure STT), and generates LLM summaries (Gemini). | `reviewer` | `./agents/reviewer` |
+| [`shared/`](shared/) | **`@avalon/shared`** — common library: Gemini LLM client + YAML prompt loader, retry/backoff, Azure Speech (STT `transcribe` + TTS `synthesize`), silence detection, and LiveKit audio publish (`publishAudioTrack`, the proven "mouth"). | — (library) | — |
+| [`reviewer/`](reviewer/) | **AI post-game reviewer.** Joins games via LiveKit, records discussion audio, transcribes (Azure STT), and generates LLM reports (god: reveal + performance; blind: evolving role guesses). Imports `@avalon/shared`. | `reviewer` | `./agents` + `reviewer/Dockerfile` |
+| [`bot-supervisor/`](bot-supervisor/) | **Bot players.** Watches for rooms with `agent_count > 0` and spawns one rule-based agent process per bot seat. The agents sign into Supabase and play full games via the HTTP API. *Not yet a workspace member* — joins when it adopts `@avalon/shared` for the LLM voice player. | `bot-supervisor` | `./agents/bot-supervisor` |
 
 Each subdir has its own `README.md` with details.
 
-## Future: smarter (LLM) bots
+## Dev notes
+- Install/build from `agents/`: `npm install`, then `npm run build` (shared builds before reviewer).
+- Reviewer tests: `npm test -w playavalon-agent` (its `pretest` rebuilds `shared/` first).
+- The reviewer's Docker build context is **`agents/`** (so the image can see `shared/`);
+  `agents/.dockerignore` keeps that context lean.
 
-When the bots gain an LLM "brain" — a new `LLMBrain` dropping in next to
-`bot-supervisor/src/brains/RuleBrain/` — the reviewer already has the pieces it would
-reuse: the Gemini client (`reviewer/src/reviewer/llm.ts`), prompt helpers, and retry logic.
-At that point, hoist those into a shared `agents/shared/` workspace package that both
-projects import (and convert `agents/` to npm workspaces).
-
-Until that day, keeping the two **independent** is intentional — they don't yet share
-enough to justify the workspace machinery.
+## Next: the LLM voice player
+`shared/` exists because of it — see `docs/2026-06-10-llm-voice-player-plan.md`. The bots
+gain an `LLMBrain` (`mode: smart | stupid` per bot yaml) + ears (STT memory) + a mouth
+(`synthesize` → `publishAudioTrack`) to speak on their speaking-timer turns.

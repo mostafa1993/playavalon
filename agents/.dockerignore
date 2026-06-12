@@ -1,0 +1,9 @@
+# Keep the agents/ build context lean (reviewer image; bot-supervisor still
+# builds from its own subdir context until it adopts the workspace).
+**/node_modules
+**/dist
+bot-supervisor
+**/*.md
+**/.gitignore
+reviewer/spike-tts.ts
+reviewer/test
