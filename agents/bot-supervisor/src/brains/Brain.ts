@@ -11,6 +11,7 @@ import type { Identity } from '../types/Identity.js';
 import type { Observation } from '../types/Observation.js';
 import type { Action } from '../types/Action.js';
 import type { AgentLogger } from '../util/logger.js';
+import type { TalkMemory } from '../voice/talkMemory.js';
 
 export interface BrainContext {
   /** Stable info about the agent itself: user_id, role, intel, etc. */
@@ -23,6 +24,9 @@ export interface BrainContext {
   rng: () => number;
   /** Scoped logger that prefixes lines with the agent's name. */
   logger: AgentLogger;
+  /** Smart mode: the bot's running memory (transcribed talk + game events).
+   *  Absent/null for stupid bots and in tests. */
+  talk?: TalkMemory | null;
 }
 
 export interface Brain {

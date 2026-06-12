@@ -133,6 +133,9 @@ services:
       # traefik+TLS for every poll.
       AGENT_BASE_URL: http://app:3000
       AGENTS_CONFIGS_DIR: /app/configs
+      # Smart bots join LiveKit on the same host — skip Traefik/TLS, which would
+      # trip rustls cert validation in @livekit/rtc-node (same as the reviewer).
+      LIVEKIT_URL: ws://host.docker.internal:7880
     volumes:
       # Live-mount configs + prompts from the repo so edits don't need a rebuild.
       - ./agents/bot-supervisor/configs:/app/configs:ro
@@ -143,6 +146,8 @@ services:
       # Same GCP hairpin workaround as the app — bots sign in to Supabase by the
       # public URL, which must resolve to the host (→ Traefik → Kong) on the VM.
       - "supabase.playavalon.fun:host-gateway"
+      # LiveKit direct (see LIVEKIT_URL above).
+      - "host.docker.internal:host-gateway"
     depends_on:
       - app
     restart: unless-stopped

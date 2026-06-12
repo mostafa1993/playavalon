@@ -30,8 +30,14 @@ export class LLMBrain implements Brain {
   private readonly fallback = new RuleBrain();
   private llm: LLMClient | null = null;
   private llmUnavailable = false;
+  // Mechanics tracking — observation deltas become memory events the prompts see.
+  private lastProposalId: string | null = null;
+  private lastVoteTrack: number | null = null;
+  private lastQuest: number | null = null;
+  private lastPhase: string | null = null;
 
   async decide(ctx: BrainContext): Promise<Action | null> {
+    this.trackMechanics(ctx);
     const ruleAction = await this.fallback.decide(ctx);
     if (!ruleAction) return null;
 
@@ -191,6 +197,38 @@ export class LLMBrain implements Brain {
     return target ? { kind: 'merlin_quiz', target_id: target.id } : null;
   }
 
+  // ── mechanics memory ──────────────────────────────────────────────────────
+
+  /** Turn observation deltas into memory events (proposals, votes, quests). */
+  private trackMechanics(ctx: BrainContext): void {
+    const game = ctx.observation.game;
+    const talk = ctx.talk;
+    if (!game || !talk) return;
+    const nameOf = (id: string) => game.players.find((p) => p.id === id)?.display_name ?? id;
+
+    const proposal = game.current_proposal;
+    if (proposal && proposal.id !== this.lastProposalId) {
+      this.lastProposalId = proposal.id;
+      talk.addEvent(
+        `Quest ${game.current_quest}: ${nameOf(proposal.leader_id)} proposed team [${proposal.team_member_ids.map(nameOf).join(', ')}]`
+      );
+    }
+    if (this.lastVoteTrack !== null && game.vote_track > this.lastVoteTrack) {
+      talk.addEvent(`The proposal was REJECTED (vote track now ${game.vote_track}/5)`);
+    }
+    this.lastVoteTrack = game.vote_track;
+    if (this.lastPhase === 'voting' && game.phase === 'quest') {
+      talk.addEvent('The team was APPROVED — quest in progress');
+    }
+    this.lastPhase = game.phase;
+    if (this.lastQuest !== null && game.current_quest > this.lastQuest) {
+      // The API doesn't expose the result — players' reactions (in the talk
+      // transcript) usually reveal it.
+      talk.addEvent(`Quest ${this.lastQuest} finished; the game moved on to quest ${game.current_quest}`);
+    }
+    this.lastQuest = game.current_quest;
+  }
+
   // ── prompt context ────────────────────────────────────────────────────────
 
   /** Vars every decision prompt receives. */
@@ -223,6 +261,7 @@ export class LLMBrain implements Brain {
       vote_track: game.vote_track,
       team_size: game.quest_requirement.size,
       fails_required: game.quest_requirement.fails_required,
+      talk_log: ctx.talk?.render() ?? '(no transcript available — reason from the game state alone)',
     };
   }
 

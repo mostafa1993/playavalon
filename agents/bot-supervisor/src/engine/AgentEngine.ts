@@ -26,6 +26,8 @@ import { Observer } from './Observer.js';
 import { ActionExecutor } from './ActionExecutor.js';
 import { jitter, randomDelayMs, sleep } from '../util/jitter.js';
 import { makeBrain } from '../brains/factory.js';
+import { TalkMemory } from '../voice/talkMemory.js';
+import { VoiceLayer } from '../voice/voiceLayer.js';
 
 export interface AgentEngineOptions {
   config: ResolvedAgentConfig;
@@ -48,6 +50,9 @@ export class AgentEngine {
 
   private alive = true;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  /** Smart mode only: the bot's running memory + its LiveKit ears. */
+  private talkMemory: TalkMemory | null = null;
+  private voice: VoiceLayer | null = null;
 
   constructor(opts: AgentEngineOptions) {
     this.opts = opts;
@@ -67,6 +72,17 @@ export class AgentEngine {
     try {
       await this.bootstrap();
       await this.joinRoomIfNeeded();
+      // Smart mode: grow ears — join LiveKit as a hidden listener feeding the
+      // talk memory. Optional: missing env / join failure → play deaf.
+      if (this.opts.config.mode === 'smart') {
+        this.talkMemory = new TalkMemory();
+        this.voice = await VoiceLayer.tryCreate({
+          roomCode: this.opts.roomCode,
+          botName: this.opts.config.name,
+          logger: this.logger,
+          memory: this.talkMemory,
+        });
+      }
       await this.mainLoop();
     } finally {
       await this.cleanup();
@@ -199,6 +215,7 @@ export class AgentEngine {
           options: this.brainOptionsForCtx(),
           rng: Math.random,
           logger: this.logger,
+          talk: this.talkMemory,
         };
         const action = await this.brain.decide(brainCtx);
         if (action && action.kind !== 'noop') {
@@ -284,6 +301,7 @@ export class AgentEngine {
 
   private async cleanup(): Promise<void> {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.voice) await this.voice.close().catch(() => {});
     if (this.session) this.session.stop();
     this.logger.info('clean exit');
   }

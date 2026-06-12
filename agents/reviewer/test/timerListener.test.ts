@@ -11,7 +11,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TimerListener } from '../src/bot/timerListener.js';
+import { TimerListener } from '@avalon/shared';
 import type { SpeakingTimerState } from '../src/types.js';
 
 function encode(state: Partial<SpeakingTimerState>): Uint8Array {

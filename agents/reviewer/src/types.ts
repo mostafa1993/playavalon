@@ -2,18 +2,9 @@
  * Shared types for the reviewer agent.
  */
 
-/** Mirrors the SpeakingTimerState broadcast by src/hooks/useSpeakingTimer.ts. */
-export interface SpeakingTimerState {
-  speakingOrder: string[];
-  currentSpeakerIndex: number;
-  timerRunning: boolean;
-  timerStartTime: number | null;
-  timerDuration: number;
-  questNumber: number;
-  /** True during the one-time intro round — these turns are filed under the
-   *  "intro" quest so they don't collide with Quest 1. Absent = normal round. */
-  isIntro?: boolean;
-}
+// SpeakingTimerState + RecordedTurn moved to @avalon/shared (the bot players
+// use the same speaking-timer machinery); re-exported for reviewer-local use.
+export type { SpeakingTimerState, RecordedTurn } from '@avalon/shared';
 
 /** Minimal view of the game + players + roles pulled from Supabase. */
 export interface GameMetaSnapshot {
@@ -214,19 +205,6 @@ export interface BlindSummaryJson extends SummaryCommon {
 
 export type SummaryJson = GodSummaryJson | BlindSummaryJson;
 
-/** One completed turn before STT has been applied. */
-export interface RecordedTurn {
-  questNumber: number;
-  /** Proposal round within the quest (0-indexed). See TurnJson.roundIndex. */
-  roundIndex: number;
-  turnIndex: number;
-  speakerIdentity: string;
-  speakerDisplayName: string;
-  startedAt: Date;
-  durationSec: number;
-  sampleRate: number;
-  pcm: Int16Array;
-}
 
 // ── Blind-mode role guessing ────────────────────────────────────────────────
 

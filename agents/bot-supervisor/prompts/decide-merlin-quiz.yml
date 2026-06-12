@@ -19,4 +19,9 @@ user: |
 
   Your secret intel during the game was: {{my_intel}}
 
+  What was said at the table + game events (chronological):
+  ---
+  {{talk_log}}
+  ---
+
   Who was Merlin? JSON only.

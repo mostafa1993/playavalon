@@ -15,7 +15,7 @@ import {
   type RemoteParticipant,
 } from '@livekit/rtc-node';
 import { AccessToken } from 'livekit-server-sdk';
-import { TIMER_TOPIC } from './timerListener.js';
+import { TIMER_TOPIC } from '@avalon/shared';
 import { DISCUSSION_TIMER_TOPIC } from './discussionListener.js';
 
 export interface BotOptions {

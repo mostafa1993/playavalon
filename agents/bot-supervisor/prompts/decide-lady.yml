@@ -27,4 +27,9 @@ user: |
 
   Your secret intel: {{my_intel}}
 
+  What has been said at the table + game events so far (chronological):
+  ---
+  {{talk_log}}
+  ---
+
   Choose who to investigate. JSON only.

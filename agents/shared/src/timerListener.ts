@@ -10,8 +10,20 @@
  * When newActiveSpeaker changes, emit the corresponding event.
  */
 
-import type { SpeakingTimerState } from '../types.js';
 import type { TurnSegmenter } from './turnSegmenter.js';
+
+/** Mirrors the SpeakingTimerState broadcast by src/hooks/useSpeakingTimer.ts. */
+export interface SpeakingTimerState {
+  speakingOrder: string[];
+  currentSpeakerIndex: number;
+  timerRunning: boolean;
+  timerStartTime: number | null;
+  timerDuration: number;
+  questNumber: number;
+  /** True during the one-time intro round — these turns are filed under the
+   *  "intro" quest so they don't collide with Quest 1. Absent = normal round. */
+  isIntro?: boolean;
+}
 
 export const TIMER_TOPIC = 'speaking-timer';
 

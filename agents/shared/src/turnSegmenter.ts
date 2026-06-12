@@ -7,7 +7,19 @@
  * the timer listener via `setActiveSpeaker`. It only buffers and flushes.
  */
 
-import type { RecordedTurn } from '../types.js';
+/** One completed speaking turn before STT has been applied. */
+export interface RecordedTurn {
+  questNumber: number;
+  /** Proposal round within the quest (0-indexed). Bumps on leader rotation. */
+  roundIndex: number;
+  turnIndex: number;
+  speakerIdentity: string;
+  speakerDisplayName: string;
+  startedAt: Date;
+  durationSec: number;
+  sampleRate: number;
+  pcm: Int16Array;
+}
 
 export type TurnFinishedHandler = (turn: RecordedTurn) => void;
 
