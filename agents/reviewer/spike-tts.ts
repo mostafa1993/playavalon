@@ -21,10 +21,16 @@
 import {
   AudioFrame,
   AudioSource,
+  AudioStream,
   LocalAudioTrack,
+  RemoteAudioTrack,
   Room,
+  RoomEvent,
   TrackPublishOptions,
   TrackSource,
+  type RemoteTrack,
+  type RemoteTrackPublication,
+  type RemoteParticipant,
 } from '@livekit/rtc-node';
 import { AccessToken } from 'livekit-server-sdk';
 
@@ -79,12 +85,72 @@ async function speak(source: AudioSource, pcm: Int16Array): Promise<void> {
   await source.waitForPlayout();
 }
 
+/**
+ * DEBUG listener — joins the room as a subscriber and reports what it sees:
+ * every audio publication's SOURCE (the browser only plays source=MICROPHONE)
+ * and the RMS level of received audio (proves real sound is flowing).
+ */
+async function listen(roomName: string): Promise<void> {
+  const token = new AccessToken(requireEnv('LIVEKIT_API_KEY'), requireEnv('LIVEKIT_API_SECRET'), {
+    identity: 'spike-listener',
+    name: 'Spike Listener',
+    ttl: '10m',
+  });
+  token.addGrant({ room: roomName, roomJoin: true, canPublish: false, canSubscribe: true, hidden: true });
+
+  const room = new Room();
+  room.on(
+    RoomEvent.TrackPublished,
+    (pub: RemoteTrackPublication, p: RemoteParticipant) => {
+      console.log(`[pub]   ${p.identity}: kind=${pub.kind} source=${pub.source} sid=${pub.sid}`);
+    }
+  );
+  room.on(
+    RoomEvent.TrackSubscribed,
+    (track: RemoteTrack, pub: RemoteTrackPublication, p: RemoteParticipant) => {
+      console.log(`[sub]   ${p.identity}: kind=${pub.kind} source=${pub.source} — subscribed`);
+      if (track instanceof RemoteAudioTrack) {
+        void (async () => {
+          const stream = new AudioStream(track);
+          let samples = 0; let sumSq = 0; let lastReport = Date.now();
+          for await (const frame of stream) {
+            for (let i = 0; i < frame.data.length; i += 1) sumSq += frame.data[i]! * frame.data[i]!;
+            samples += frame.data.length;
+            if (Date.now() - lastReport >= 1000 && samples > 0) {
+              const rms = Math.sqrt(sumSq / samples) | 0;
+              console.log(`[audio] ${p.identity}: RMS=${rms} ${rms > 100 ? '◀ REAL SOUND' : '(silence)'}`);
+              samples = 0; sumSq = 0; lastReport = Date.now();
+            }
+          }
+        })();
+      }
+    }
+  );
+
+  await room.connect(requireEnv('LIVEKIT_URL'), await token.toJwt(), { autoSubscribe: true, dynacast: false });
+  console.log(`listener joined "${roomName}" — existing participants:`);
+  for (const p of room.remoteParticipants.values()) {
+    console.log(`  - ${p.identity} (${p.trackPublications.size} tracks)`);
+    for (const pub of p.trackPublications.values()) {
+      console.log(`    [pub] kind=${pub.kind} source=${pub.source} sid=${pub.sid}`);
+    }
+  }
+  console.log('listening for 90s ... (run the speaker now in another terminal)');
+  await new Promise((r) => setTimeout(r, 90_000));
+  await room.disconnect();
+  process.exit(0);
+}
+
 async function main(): Promise<void> {
   const roomName = process.argv[2];
   const voice = process.argv[3] || 'fa-IR-DilaraNeural';
   if (!roomName) {
-    console.error('Usage: npx tsx spike-tts.ts <ROOM_NAME> [azure-voice]');
+    console.error('Usage: npx tsx spike-tts.ts <ROOM_NAME> [azure-voice]   (or: <ROOM_NAME> --listen)');
     process.exit(1);
+  }
+  if (process.argv[3] === '--listen') {
+    await listen(roomName);
+    return;
   }
 
   // 1. Synthesize first — fail fast on Azure problems before touching LiveKit.
@@ -109,7 +175,8 @@ async function main(): Promise<void> {
     track,
     new TrackPublishOptions({ source: TrackSource.SOURCE_MICROPHONE })
   );
-  console.log('audio track published — speaking 3× ...');
+  console.log('audio track published — waiting 3s for subscribers, then speaking 3× ...');
+  await new Promise((r) => setTimeout(r, 3000));
 
   // 4. Speak three times with pauses so a human has time to notice.
   for (let i = 1; i <= 3; i += 1) {
