@@ -39,8 +39,13 @@ export class LLMBrain implements Brain {
       case 'propose':
         return this.withFallback(ctx, ruleAction, () => this.decidePropose(ctx));
       case 'vote':
+        // Hard rule: a 5th rejection auto-loses the game — never consult the LLM.
+        if (ctx.observation.game?.vote_track === AUTO_APPROVE_VOTE_TRACK) return ruleAction;
         return this.withFallback(ctx, ruleAction, () => this.decideVote(ctx));
       case 'quest_action':
+        // Forced cards (good→success, lunatic→fail, brute Q4+→success) are not
+        // decisions — keep the rule action silently; only real choices hit the LLM.
+        if (this.questCardForced(ctx)) return ruleAction;
         return this.withFallback(ctx, ruleAction, () => this.decideQuest(ctx));
       case 'lady_investigate':
         return this.withFallback(ctx, ruleAction, () => this.decideLady(ctx));
@@ -112,9 +117,6 @@ export class LLMBrain implements Brain {
 
   private async decideVote(ctx: BrainContext): Promise<Action | null> {
     const game = ctx.observation.game!;
-    // Hard rule: a 5th rejection auto-loses for good and reveals nothing for
-    // evil worth the risk — never consult the LLM here.
-    if (game.vote_track === AUTO_APPROVE_VOTE_TRACK) return { kind: 'vote', choice: 'approve' };
     const proposal = game.current_proposal;
     const teamNames = proposal
       ? proposal.team_member_ids
@@ -129,16 +131,20 @@ export class LLMBrain implements Brain {
     return { kind: 'vote', choice: out.choice };
   }
 
-  private async decideQuest(ctx: BrainContext): Promise<Action | null> {
-    const game = ctx.observation.game!;
+  /** True when the quest card is dictated by role/server rules — no choice. */
+  private questCardForced(ctx: BrainContext): boolean {
+    const game = ctx.observation.game;
     const { identity } = ctx;
-    // Only a genuine choice for standard evil (and brute on Q1-Q3). Everything
-    // else is forced — keep the rule action (good→success, lunatic→fail, etc.).
-    const forced =
+    return (
+      !game ||
       identity.role !== 'evil' ||
       identity.special_role === 'lunatic' ||
-      (identity.special_role === 'brute' && game.current_quest >= 4);
-    if (forced) return null; // → fallback (which encodes the forced move)
+      (identity.special_role === 'brute' && game.current_quest >= 4)
+    );
+  }
+
+  private async decideQuest(ctx: BrainContext): Promise<Action | null> {
+    const game = ctx.observation.game!;
     const out = await this.llm!.runJson<{ choice: string }>('decide-quest.yml', {
       ...this.baseVars(ctx, game),
       fails_required: game.quest_requirement.fails_required,

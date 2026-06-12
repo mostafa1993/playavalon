@@ -1,4 +1,4 @@
-node_modules
+**/node_modules
 .next
 .git
 .claude
@@ -9,3 +9,9 @@ specs
 .env*
 livekit-dev.yaml
 docker-compose-dev.yml
+# The Next.js app image never reads the agents workspace (it has its own
+# build contexts under agents/) — keep it out of the app build context.
+agents
+# Local data/secrets that must never enter an image context
+secrets
+supabase/docker
