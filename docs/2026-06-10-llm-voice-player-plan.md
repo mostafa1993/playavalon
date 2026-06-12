@@ -3,8 +3,10 @@
 **Date:** 2026-06-10
 **Status:** Phase 0 ✅ proven · Phase 1 ✅ (`agents/shared/`) · Phase 2 ✅ (LLMBrain, `mode: smart|stupid`)
 · Phase 3 ✅ (ears: VoiceLayer + TalkMemory; STT talk + mechanics events in every decision prompt)
-— next: Phase 4 (mouth). Known gap: the API observation doesn't expose quest pass/fail results;
-the bot hears them from the players' reactions (transcript) — extend the Observer in Phase 5 if needed.
+· Phase 4 ✅ (mouth: visible player join, onMyTurn → speak-turn.yml → TTS → publish; per-bot `voice`)
+— next: live E2E test of phases 2-4 (a smart bot in a real game), then Phase 5 (polish).
+Known gap: the API observation doesn't expose quest pass/fail results; the bot hears them from
+the players' reactions (transcript) — extend the Observer in Phase 5 if needed.
 Phase 0 (2026-06-12): bot spoke Persian into a prod room, heard by a human.
 Findings: (1) the rtc-node FFI needs each AudioFrame's PCM **copied** into a fresh Int16Array —
 subarray views transmit silence; (2) `SOURCE_MICROPHONE` plays through the app's RemoteAudioSink

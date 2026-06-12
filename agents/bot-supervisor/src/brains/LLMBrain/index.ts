@@ -18,7 +18,8 @@
  * Phase 3 adds the STT discussion memory; Phase 4 adds speaking.
  */
 
-import { createLLMClient, type LLMClient } from '@avalon/shared';
+import type { LLMClient } from '@avalon/shared';
+import { createBotLLM } from '../../llm/client.js';
 import type { Action } from '../../types/Action.js';
 import type { Brain, BrainContext } from '../Brain.js';
 import type { GameObservation } from '../../types/Observation.js';
@@ -91,19 +92,12 @@ export class LLMBrain implements Brain {
   private getLLM(ctx: BrainContext): LLMClient | null {
     if (this.llm) return this.llm;
     if (this.llmUnavailable) return null;
-    const project = process.env.GCP_PROJECT_ID;
-    if (!project) {
+    this.llm = createBotLLM();
+    if (!this.llm) {
       this.llmUnavailable = true;
       ctx.logger.warn('[smart] GCP_PROJECT_ID not set — smart mode degraded to rule decisions');
       return null;
     }
-    this.llm = createLLMClient({
-      project,
-      location: process.env.GCP_LLM_LOCATION || 'us-central1',
-      model: process.env.GCP_LLM_MODEL || 'gemini-3.1-pro-preview',
-      promptsDir: process.env.BOT_PROMPTS_DIR || './prompts',
-      retry: { maxAttempts: 2, baseDelayMs: 400 },
-    });
     return this.llm;
   }
 

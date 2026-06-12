@@ -1,14 +1,21 @@
 /**
- * VoiceLayer — the smart bot's LiveKit presence. Phase 3: EARS only.
+ * VoiceLayer — the smart bot's LiveKit presence: EARS + MOUTH.
  *
- * Joins the game's LiveKit room as a hidden subscriber, follows the
- * speaking-timer broadcast (who's talking), buffers the active speaker's
+ * Joins the game's LiveKit room VISIBLY as its player (participant name =
+ * the bot's display_name, so the app's seat-mapping gives it a speaking
+ * turn like any human).
+ *
+ * Ears: follows the speaking-timer broadcast, buffers the active speaker's
  * audio per turn (shared TurnSegmenter), transcribes completed turns
- * (Azure STT), and appends {speaker, text} to the TalkMemory the LLMBrain
- * reads. Phase 4 turns this same connection into the mouth.
+ * (Azure STT) into the TalkMemory the LLMBrain reads.
+ *
+ * Mouth: when the timer reaches the bot's own slot, fires onMyTurn (once per
+ * turn); the engine generates the statement and calls say() — Azure TTS →
+ * publishAudioTrack (the Phase-0-proven path). Guards: skip if the slot
+ * already passed, hard-cap the audio length to fit the timer window.
  *
  * Entirely optional: if LiveKit/Azure env is missing or the join fails, the
- * bot plays on without ears (the brain notes the empty transcript).
+ * bot plays on silent + deaf (the brain notes the empty transcript).
  */
 
 import {
@@ -26,19 +33,33 @@ import {
   TimerListener,
   TurnSegmenter,
   isSilent,
+  publishAudioTrack,
+  synthesize,
   transcribe,
+  type AudioPublisher,
   type AzureSpeechConfig,
   type RecordedTurn,
+  type SpeakingTimerState,
 } from '@avalon/shared';
 import { TalkMemory } from './talkMemory.js';
 import type { AgentLogger } from '../util/logger.js';
 
 const EAR_SAMPLE_RATE = 16000; // matches the reviewer's STT rate
+const MOUTH_SAMPLE_RATE = 48000; // WebRTC-native; matches synthesize()
 const SILENCE_RMS_THRESHOLD = 250;
+const MAX_SPEECH_SEC = 45; // hard cap — never blow past the ~50s timer window
+
+/** Fired once when the speaking timer reaches the bot's own slot. */
+export type MyTurnHandler = (info: { quest: number; round: number; turnIndex: number }) => void;
 
 export interface VoiceLayerOptions {
   roomCode: string;
   botName: string; // config name, e.g. 'alice'
+  /** The bot's in-game display name — MUST match its player row, so the app's
+   *  seat-mapping (participant.name === display_name) includes it. */
+  displayName: string;
+  /** Azure neural voice for say(), e.g. fa-IR-DilaraNeural. */
+  voice: string;
   logger: AgentLogger;
   /** The bot's memory (owned by the engine; the brain reads it even when deaf). */
   memory: TalkMemory;
@@ -80,12 +101,24 @@ export class VoiceLayer {
   private readonly consumers = new Map<string, AbortController>();
   private readonly nameByIdentity = new Map<string, string>();
   private pendingStt: Set<Promise<void>> = new Set();
+  // Mouth state
+  private readonly selfIdentity: string;
+  private publisher: AudioPublisher | null = null;
+  private currentActiveSpeaker: string | null = null;
+  private lastFiredTurnKey: string | null = null;
+  private onMyTurn: MyTurnHandler | null = null;
 
   private constructor(
     private readonly env: VoiceEnv,
     private readonly opts: VoiceLayerOptions
   ) {
     this.memory = opts.memory;
+    this.selfIdentity = `bot_${opts.botName}`;
+  }
+
+  /** Register the engine's my-turn handler (fired once per speaking slot). */
+  setOnMyTurn(handler: MyTurnHandler): void {
+    this.onMyTurn = handler;
   }
 
   /**
@@ -111,17 +144,18 @@ export class VoiceLayer {
 
   private async join(): Promise<void> {
     const token = new AccessToken(this.env.livekitApiKey, this.env.livekitApiSecret, {
-      identity: `ears-bot_${this.opts.botName}`,
-      name: `ears-${this.opts.botName}`,
+      // Visible player presence: the app maps participants to seats by
+      // name === display_name, which also puts the bot in the speaking order.
+      identity: this.selfIdentity,
+      name: this.opts.displayName,
       ttl: '10h',
     });
     token.addGrant({
       room: this.opts.roomCode,
       roomJoin: true,
-      canPublish: false,
+      canPublish: true, // the mouth
       canSubscribe: true,
       canPublishData: false,
-      hidden: true, // listeners shouldn't appear in the players' UI
     });
 
     const onTurnFinished = (turn: RecordedTurn) => {
@@ -155,7 +189,9 @@ export class VoiceLayer {
       }
     );
     room.on(RoomEvent.DataReceived, (payload: Uint8Array, _p?: RemoteParticipant, _k?: unknown, topic?: string) => {
-      if (topic === TIMER_TOPIC) timerListener.onPayload(payload);
+      if (topic !== TIMER_TOPIC) return;
+      timerListener.onPayload(payload);
+      this.watchForMyTurn(payload, timerListener);
     });
 
     await room.connect(this.env.livekitUrl, await token.toJwt(), {
@@ -200,6 +236,54 @@ export class VoiceLayer {
     })();
   }
 
+  /** Detect "the timer just reached MY slot" and fire onMyTurn once per turn. */
+  private watchForMyTurn(payload: Uint8Array, timerListener: TimerListener): void {
+    let state: SpeakingTimerState;
+    try {
+      state = JSON.parse(new TextDecoder().decode(payload)) as SpeakingTimerState;
+    } catch {
+      return;
+    }
+    const active =
+      state.timerRunning && state.speakingOrder
+        ? (state.speakingOrder[state.currentSpeakerIndex] ?? null)
+        : null;
+    this.currentActiveSpeaker = active;
+    if (active !== this.selfIdentity || !this.onMyTurn) return;
+
+    const quest = state.isIntro ? 0 : state.questNumber;
+    const round = timerListener.getCurrentRoundIndex();
+    const key = `${quest}:${round}:${state.currentSpeakerIndex}`;
+    if (key === this.lastFiredTurnKey) return; // repeated broadcasts of the same slot
+    this.lastFiredTurnKey = key;
+    this.opts.logger.info(`[mouth] my speaking slot started (Q${quest}/R${round})`);
+    this.onMyTurn({ quest, round, turnIndex: state.currentSpeakerIndex });
+  }
+
+  /**
+   * Speak a Persian statement into the room: TTS → publish. Skips (with a log)
+   * if the slot already moved on by the time synthesis finished. Audio is
+   * hard-capped to MAX_SPEECH_SEC so the bot never tramples the next speaker.
+   */
+  async say(text: string): Promise<void> {
+    if (!this.room) return;
+    const pcm = await synthesize(this.env.azure, text, {
+      voice: this.opts.voice,
+      sampleRate: MOUTH_SAMPLE_RATE,
+    });
+    if (this.currentActiveSpeaker !== this.selfIdentity) {
+      this.opts.logger.warn('[mouth] slot passed before synthesis finished — staying quiet');
+      return;
+    }
+    const maxSamples = MAX_SPEECH_SEC * MOUTH_SAMPLE_RATE;
+    const capped = pcm.length > maxSamples ? pcm.subarray(0, maxSamples) : pcm;
+    if (!this.publisher) {
+      this.publisher = await publishAudioTrack(this.room, { sampleRate: MOUTH_SAMPLE_RATE });
+    }
+    this.opts.logger.info(`[mouth] speaking (${(capped.length / MOUTH_SAMPLE_RATE).toFixed(0)}s)`);
+    await this.publisher.speak(capped);
+  }
+
   private async processTurn(turn: RecordedTurn): Promise<void> {
     if (isSilent(turn.pcm, SILENCE_RMS_THRESHOLD)) return;
     const result = await transcribe(this.env.azure, turn.pcm, turn.sampleRate);
@@ -214,6 +298,10 @@ export class VoiceLayer {
     for (const c of this.consumers.values()) c.abort();
     this.consumers.clear();
     await Promise.allSettled(Array.from(this.pendingStt));
+    if (this.publisher) {
+      await this.publisher.close().catch(() => {});
+      this.publisher = null;
+    }
     if (this.room) {
       await this.room.disconnect().catch(() => {});
       this.room = null;

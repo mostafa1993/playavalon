@@ -28,6 +28,8 @@ import { jitter, randomDelayMs, sleep } from '../util/jitter.js';
 import { makeBrain } from '../brains/factory.js';
 import { TalkMemory } from '../voice/talkMemory.js';
 import { VoiceLayer } from '../voice/voiceLayer.js';
+import { generateTurnSpeech } from '../voice/speechGen.js';
+import { createBotLLM } from '../llm/client.js';
 
 export interface AgentEngineOptions {
   config: ResolvedAgentConfig;
@@ -72,16 +74,11 @@ export class AgentEngine {
     try {
       await this.bootstrap();
       await this.joinRoomIfNeeded();
-      // Smart mode: grow ears — join LiveKit as a hidden listener feeding the
-      // talk memory. Optional: missing env / join failure → play deaf.
+      // Smart mode: the memory exists from the start; the LiveKit presence
+      // (ears + mouth) is created lazily in the main loop once we know our
+      // display_name (required for the visible player join → speaking turn).
       if (this.opts.config.mode === 'smart') {
         this.talkMemory = new TalkMemory();
-        this.voice = await VoiceLayer.tryCreate({
-          roomCode: this.opts.roomCode,
-          botName: this.opts.config.name,
-          logger: this.logger,
-          memory: this.talkMemory,
-        });
       }
       await this.mainLoop();
     } finally {
@@ -209,6 +206,7 @@ export class AgentEngine {
       // Pre-distribution there's nothing to decide anyway — just wait.
       const identity = this.observer.identity();
       if (identity) {
+        this.ensureVoice(identity.display_name);
         const brainCtx = {
           identity,
           observation: obs,
@@ -284,6 +282,52 @@ export class AgentEngine {
         (fresh.merlin_quiz?.has_voted || fresh.merlin_quiz?.has_skipped || fresh.merlin_quiz?.complete || !fresh.merlin_quiz?.enabled)) return true;
     return false;
   }
+
+  /** Smart mode: join LiveKit (ears + mouth) once, as soon as we know who we are. */
+  private voiceStarted = false;
+  private ensureVoice(displayName: string): void {
+    if (this.opts.config.mode !== 'smart' || this.voiceStarted || !this.talkMemory) return;
+    this.voiceStarted = true;
+    void VoiceLayer.tryCreate({
+      roomCode: this.opts.roomCode,
+      botName: this.opts.config.name,
+      displayName,
+      voice: this.opts.config.voice,
+      logger: this.logger,
+      memory: this.talkMemory,
+    }).then((voice) => {
+      this.voice = voice;
+      if (voice) voice.setOnMyTurn((info) => void this.handleMyTurn(info));
+    });
+  }
+
+  /** My speaking slot: generate the statement → say it → remember what I said. */
+  private async handleMyTurn(info: { quest: number; round: number; turnIndex: number }): Promise<void> {
+    try {
+      const voice = this.voice;
+      const identity = this.observer.identity();
+      if (!voice || !identity) return;
+      const obs = await this.observer.fetch().catch(() => null);
+      if (!obs) return;
+      const llm = (this.speechLLM ??= createBotLLM());
+      if (!llm) {
+        this.logger.warn('[mouth] no LLM configured — staying quiet this turn');
+        return;
+      }
+      const text = await generateTurnSpeech(llm, {
+        identity,
+        observation: obs,
+        talk: this.talkMemory,
+      });
+      if (!text) return;
+      await voice.say(text);
+      // Remember my own statement — my ears can't hear my published track.
+      this.talkMemory?.addTurn(info.quest, info.round, identity.display_name, text);
+    } catch (err) {
+      this.logger.warn(`[mouth] speaking turn failed: ${(err as Error).message}`);
+    }
+  }
+  private speechLLM: ReturnType<typeof createBotLLM> | null = null;
 
   private brainOptionsForCtx(): Record<string, unknown> {
     const b = this.opts.config.brain;

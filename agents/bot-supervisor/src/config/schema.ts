@@ -66,6 +66,9 @@ export const AgentConfigSchema = z.object({
   /** smart = LLM decides the strategic moves (LLMBrain, falls back to the
    *  rule brain on any LLM failure); stupid = today's behavior, exactly. */
   mode: z.enum(['smart', 'stupid']).default('stupid'),
+  /** Azure neural voice for the smart bot's spoken turns — pick by the bot's
+   *  gender: fa-IR-DilaraNeural (female, default) / fa-IR-FaridNeural (male). */
+  voice: z.string().default('fa-IR-DilaraNeural'),
   /** Used by the Phase-4 supervisor to pick the first N agents. No-op in P0-P3. */
   order: z.number().int().nonnegative().default(99),
   credentials: CredentialsConfig,
