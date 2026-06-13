@@ -11,7 +11,7 @@
 # NEXT_PUBLIC_SUPABASE_ANON_KEY, AGENT_BASE_URL, AGENTS_CONFIGS_DIR;
 # smart mode also: GCP_PROJECT_ID (+ GOOGLE_APPLICATION_CREDENTIALS secret).
 
-FROM node:20-slim AS deps
+FROM node:22-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY shared/package.json shared/
@@ -25,7 +25,7 @@ COPY shared/tsconfig.json shared/
 COPY shared/src shared/src
 RUN npm run build -w @avalon/shared
 
-FROM node:20-slim AS runner
+FROM node:22-slim AS runner
 # Replicate the workspace layout: node_modules/@avalon/shared symlinks to
 # ../../shared, so shared/{package.json,dist} sits beside node_modules.
 WORKDIR /app/bot-supervisor
