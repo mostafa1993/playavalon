@@ -1,4 +1,8 @@
 name: speak_turn
+# The mouth is latency-critical (a ~50s timer slot, on stage) and only needs
+# fluent table-talk, not frontier reasoning — so it runs on flash for speed.
+# Strategic decisions stay on the default (pro) model: see the decide-*.yml.
+model: gemini-3.1-flash-preview
 temperature: 0.7
 # Thinking model: the budget below caps reasoning; max_output_tokens must hold
 # thinking + the visible Persian (~130 words ≈ 400 tokens). Headroom both ways.
