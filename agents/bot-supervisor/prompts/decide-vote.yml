@@ -1,6 +1,7 @@
 name: decide_vote
 temperature: 0.4
-max_output_tokens: 1000
+max_output_tokens: 4000
+thinking_budget: 2500
 response_mime_type: application/json
 
 system: |

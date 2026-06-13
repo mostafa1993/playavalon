@@ -1,6 +1,9 @@
 name: speak_turn
 temperature: 0.7
-max_output_tokens: 2000
+# Thinking model: the budget below caps reasoning; max_output_tokens must hold
+# thinking + the visible Persian (~130 words ≈ 400 tokens). Headroom both ways.
+max_output_tokens: 8000
+thinking_budget: 3000
 response_mime_type: text/plain
 
 system: |

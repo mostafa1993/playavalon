@@ -27,6 +27,14 @@ export interface PromptFile {
   model?: string;
   temperature?: number;
   max_output_tokens?: number;
+  /**
+   * Thinking-model reasoning cap (Gemini 3.x). These models spend output
+   * tokens on internal reasoning BEFORE the visible text — left unbounded on a
+   * long prompt the thinking can consume the entire max_output_tokens budget,
+   * yielding an empty response with finishReason=MAX_TOKENS. Setting this caps
+   * reasoning so visible output is always reachable. 0 disables thinking.
+   */
+  thinking_budget?: number;
   response_mime_type?: 'application/json' | 'text/plain';
   system: string;
   user: string;

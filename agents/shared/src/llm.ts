@@ -77,6 +77,7 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
     const temperature = prompt.temperature ?? 0.4;
     const maxOutputTokens = prompt.max_output_tokens ?? 4096;
     const responseMimeType = prompt.response_mime_type;
+    const thinkingBudget = prompt.thinking_budget;
 
     return retry(
       async () => {
@@ -88,6 +89,7 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
             temperature,
             maxOutputTokens,
             safetySettings: SAFETY_SETTINGS,
+            ...(thinkingBudget !== undefined ? { thinkingConfig: { thinkingBudget } } : {}),
             ...(responseMimeType ? { responseMimeType } : {}),
           },
         });
