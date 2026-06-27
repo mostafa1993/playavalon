@@ -13,6 +13,10 @@ system: |
   2) Your final guesses: for each player, the role you think they had + a brief reason.
   3) If your read on someone shifted during the game, mention it briefly.
 
+  You are told the GAME SETUP (which roles are in play + good/evil counts) — this is
+  public knowledge, NOT who has which role. Confine your guesses to roles that are in
+  play, and respect their counts (e.g. exactly one Merlin, one Assassin).
+
   Important: always frame your guesses as GUESSES, never as confirmed truth. Never claim
   to know anyone's real role — everything is your deduction. Write flowing English prose
   only (no JSON, no markdown).
@@ -20,6 +24,8 @@ system: |
 user: |
   Roster (seat — name):
   {{roster}}
+
+  {{roles_in_play}}
 
   Game outcome:
   {{outcome}}

@@ -21,6 +21,7 @@ import type {
 } from '../types.js';
 import { gameDir, guessLogPath } from '../storage/layout.js';
 import { writeJsonAtomic } from '../storage/atomicWrite.js';
+import { formatRolesInPlay } from '../gamestate/roleConfig.js';
 
 interface GuessUpdateOutput {
   guesses: RoleGuess[];
@@ -136,6 +137,7 @@ export class GuessTracker {
     try {
       const out = await this.llm.runJson<GuessUpdateOutput>('role-guess-update.yml', {
         seat_table: this.seatTable(),
+        roles_in_play: formatRolesInPlay(this.meta.rolesInPlay),
         prior_guesses: this.priorGuessesText(),
         quest_number: quest,
         proposal_round: proposalRound,

@@ -83,17 +83,17 @@ const prompts: Array<{
   {
     file: 'role-guess-update.yml',
     mime: 'application/json',
-    expectedVars: ['seat_table', 'prior_guesses', 'quest_number', 'proposal_round', 'round_talk'],
+    expectedVars: ['seat_table', 'roles_in_play', 'prior_guesses', 'quest_number', 'proposal_round', 'round_talk'],
   },
   {
     file: 'final-narrative-blind-fa.yml',
     mime: 'text/plain',
-    expectedVars: ['roster', 'outcome', 'quests', 'dossiers', 'timeline', 'final_guesses'],
+    expectedVars: ['roster', 'roles_in_play', 'outcome', 'quests', 'dossiers', 'timeline', 'final_guesses'],
   },
   {
     file: 'final-narrative-blind-en.yml',
     mime: 'text/plain',
-    expectedVars: ['roster', 'outcome', 'quests', 'dossiers', 'timeline', 'final_guesses'],
+    expectedVars: ['roster', 'roles_in_play', 'outcome', 'quests', 'dossiers', 'timeline', 'final_guesses'],
   },
   {
     file: 'performance-eval-fa.yml',

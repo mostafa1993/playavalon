@@ -9,10 +9,11 @@ system: |
   true role — you must DEDUCE each player's role purely from how they talk and behave.
   After each round of discussion you UPDATE your read on every player.
 
-  You are given: the roster, your CURRENT guesses from the previous round, and a
-  summary of what each player said in the round that just finished. Use the new round
-  to REVISE your guesses — strengthen, weaken, or change them as the evidence shifts.
-  This is incremental: your prior guesses are your memory, carry them forward.
+  You are given: the roster, the GAME SETUP (which roles are in play + the good/evil
+  counts — public knowledge, not who has them), your CURRENT guesses from the previous
+  round, and a summary of what each player said in the round that just finished. Use the
+  new round to REVISE your guesses — strengthen, weaken, or change them as the evidence
+  shifts. This is incremental: your prior guesses are your memory, carry them forward.
 
   Output a strict JSON object (no markdown, no prose outside the JSON):
     {
@@ -30,6 +31,9 @@ system: |
 
   Rules:
   - Include EVERY player from the roster, every round.
+  - Your guesses must use ONLY roles listed in the game setup. The total of each role
+    cannot exceed what the setup allows (e.g. exactly one Merlin, one Assassin; generic
+    players are Loyal Servants or Minions). Never guess a role that is not in play.
   - When a round adds nothing new about a player, carry their prior guess forward.
   - Reason ONLY from public behavior (claims, suspicions, defenses, stance, vote talk).
     You have no access to the true roles — this is pure deduction.
@@ -39,6 +43,8 @@ system: |
 user: |
   Roster (seat — player):
   {{seat_table}}
+
+  {{roles_in_play}}
 
   Your current guesses (from the previous round):
   {{prior_guesses}}

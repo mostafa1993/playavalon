@@ -6,6 +6,8 @@
 // use the same speaking-timer machinery); re-exported for reviewer-local use.
 export type { SpeakingTimerState, RecordedTurn } from '@avalon/shared';
 
+import type { RolesInPlay } from './gamestate/roleConfig.js';
+
 /** Minimal view of the game + players + roles pulled from Supabase. */
 export interface GameMetaSnapshot {
   gameId: string;
@@ -23,6 +25,10 @@ export interface GameMetaSnapshot {
     special_role?: string | null;
     seat_number: number | null;
   }>;
+  /** Public game setup (good/evil counts + special roles enabled). Safe for
+   *  blind mode — it's the configuration, never per-player assignments. Null
+   *  if the player count is outside the supported range. */
+  rolesInPlay?: RolesInPlay | null;
 }
 
 /** Written to meta.json when the agent first sees a game. */
@@ -35,6 +41,7 @@ export interface MetaJson {
   seatingOrder: string[];
   firstLeaderId: string;
   players: GameMetaSnapshot['players'];
+  rolesInPlay?: GameMetaSnapshot['rolesInPlay'];
   agentStartedAt: string;
 }
 

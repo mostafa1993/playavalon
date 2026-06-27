@@ -16,6 +16,7 @@ import type {
   RoleGuess,
 } from '../types.js';
 import type { GameOutcome } from '../gamestate/db.js';
+import { formatRolesInPlay } from '../gamestate/roleConfig.js';
 
 export interface BlindSummaryContext {
   meta: GameMetaSnapshot; // role-free
@@ -41,6 +42,7 @@ export async function generateBlindSummary(
 
   return llm.runText(promptFile, {
     roster: JSON.stringify(roster, null, 2),
+    roles_in_play: formatRolesInPlay(ctx.meta.rolesInPlay),
     outcome: JSON.stringify(ctx.outcome, null, 2),
     quests: JSON.stringify(ctx.quests, null, 2),
     dossiers: JSON.stringify(ctx.dossiers, null, 2),
