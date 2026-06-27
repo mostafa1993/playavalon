@@ -68,13 +68,10 @@ export interface RoomDetails {
     id: string;
     display_name: string;
   } | null;
-  // Feature 022: AI Game Reviewer
+  // Feature 022: AI Game Reviewer (manager toggle; no per-player consent)
   ai_review?: {
     enabled: boolean;
     mode: 'blind' | 'god';
-    caller_consented: boolean;
-    consented_count: number;
-    total_players: number;
   };
 }
 

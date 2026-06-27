@@ -5,27 +5,19 @@ import { Sparkles } from 'lucide-react';
 interface AIReviewToggleProps {
   enabled: boolean;
   mode: 'blind' | 'god';
-  consentedCount: number;
-  totalPlayers: number;
   isToggling: boolean;
   onToggle: (enabled: boolean, mode: 'blind' | 'god') => void;
 }
 
 /**
  * Manager-only toggle for the AI Game Reviewer feature.
- * When enabled, every player must accept the consent modal before
- * the manager can distribute roles.
  */
 export function AIReviewToggle({
   enabled,
   mode,
-  consentedCount,
-  totalPlayers,
   isToggling,
   onToggle,
 }: AIReviewToggleProps) {
-  const allConsented = enabled && consentedCount >= totalPlayers;
-
   return (
     <div className="card py-3 px-3">
       <div className="flex items-center justify-between gap-3">
@@ -90,29 +82,11 @@ export function AIReviewToggle({
               </button>
             </div>
           </div>
-          <p className="text-[11px] text-avalon-silver/70 mb-2">
+          <p className="text-[11px] text-avalon-silver/70">
             {mode === 'blind'
               ? 'Detective — never sees roles; guesses them from play.'
               : 'Coach — knows roles; reveals + grades performance.'}
           </p>
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-avalon-silver/80">
-              Consents
-            </p>
-            <p
-              className={`
-                text-xs font-semibold
-                ${allConsented ? 'text-good' : 'text-avalon-gold'}
-              `}
-            >
-              {consentedCount} / {totalPlayers}
-            </p>
-          </div>
-          {!allConsented && (
-            <p className="mt-1 text-[11px] text-avalon-silver/70">
-              Waiting for all players to accept the consent.
-            </p>
-          )}
         </div>
       )}
     </div>

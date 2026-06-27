@@ -1,8 +1,6 @@
 /**
  * API Route: POST /api/rooms/[code]/ai-review
  * Manager toggles the AI Game Reviewer feature.
- * Flipping the toggle in either direction clears all existing consents
- * so they must be collected fresh.
  */
 
 import { NextResponse } from 'next/server';
@@ -62,17 +60,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       .update({ ai_review_enabled: enabled, ai_review_mode: mode })
       .eq('id', room.id);
     if (updateErr) throw updateErr;
-
-    // Clear consents only when the enabled state actually flips. A mode-only
-    // change (blind ↔ god while still enabled) keeps existing consents, since
-    // consent is about audio recording, not the review mode.
-    if (enabled !== room.ai_review_enabled) {
-      const { error: clearErr } = await supabase
-        .from('room_ai_consents')
-        .delete()
-        .eq('room_id', room.id);
-      if (clearErr) throw clearErr;
-    }
 
     return NextResponse.json({ data: { ai_review_enabled: enabled, ai_review_mode: mode } });
   } catch (error) {

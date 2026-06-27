@@ -88,10 +88,6 @@ export function Lobby({
   const canStart = isManager && room.room.status === 'roles_distributed' && allConfirmed;
   const aiReviewEnabled = !!room.ai_review?.enabled;
   const aiReviewMode = room.ai_review?.mode ?? 'blind';
-  const aiConsented = room.ai_review?.consented_count ?? 0;
-  const aiTotal = room.ai_review?.total_players ?? room.players.length;
-  const aiConsentsComplete = !aiReviewEnabled || aiConsented >= aiTotal;
-  const distributeBlockedByConsent = canDistribute && !aiConsentsComplete;
 
   /**
    * Copy room code to clipboard
@@ -319,8 +315,6 @@ export function Lobby({
         <AIReviewToggle
           enabled={aiReviewEnabled}
           mode={aiReviewMode}
-          consentedCount={aiConsented}
-          totalPlayers={aiTotal}
           isToggling={isTogglingAIReview}
           onToggle={(enabled, mode) => { void onToggleAIReview(enabled, mode); }}
         />
@@ -335,17 +329,9 @@ export function Lobby({
               fullWidth
               onClick={onDistributeRoles}
               isLoading={isDistributing}
-              disabled={distributeBlockedByConsent}
             >
               ⚔️ Distribute Roles
             </Button>
-          )}
-
-          {distributeBlockedByConsent && (
-            <p className="text-center text-avalon-silver/80 text-xs">
-              Waiting for all players to accept the AI Review consent
-              ({aiConsented} / {aiTotal}).
-            </p>
           )}
 
           {canStart && onStartGame && (
