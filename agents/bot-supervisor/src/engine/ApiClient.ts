@@ -9,7 +9,7 @@
  *     returned as structured `ApiError` so the Brain/Executor can handle
  *     them without try/catch noise.
  *
- * Phase 0 only needs the auth + room + role + confirm + consent endpoints.
+ * Phase 0 only needs the auth + room + role + confirm endpoints.
  * The rest are added as later phases need them.
  */
 
@@ -70,10 +70,6 @@ export class ApiClient {
 
   async getRole(code: string): Promise<RoleResponse> {
     return this.get(`/api/rooms/${code}/role`);
-  }
-
-  async sendAiConsent(code: string): Promise<unknown> {
-    return this.post(`/api/rooms/${code}/ai-consent`);
   }
 
   async confirmRole(code: string): Promise<unknown> {
@@ -217,7 +213,6 @@ export interface RoomDetailsResponse {
       status: 'waiting' | 'roles_distributed' | 'started' | 'closed';
       expected_players: number;
       manager_id: string;
-      ai_review_enabled?: boolean;
     };
     players: Array<{
       id: string;
@@ -230,12 +225,6 @@ export interface RoomDetailsResponse {
       total: number;
       confirmed: number;
       details?: Array<{ player_id: string; display_name: string; is_confirmed: boolean; in_room: boolean }>;
-    };
-    ai_review?: {
-      enabled: boolean;
-      caller_consented: boolean;
-      consented_count: number;
-      total_players: number;
     };
   };
 }

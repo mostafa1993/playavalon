@@ -7,7 +7,7 @@
  *     as non-errors — the Brain re-decides next tick.
  *   - Treat unexpected errors as soft failures: log + skip + continue.
  *
- * P0 only handles: consent_ai, confirm_role. Later phases add cases as
+ * P0 only handles: confirm_role. Later phases add cases as
  * their action kinds become live.
  */
 
@@ -47,9 +47,6 @@ export class ActionExecutor {
     try {
       this.opts.logger.info(`-> ${action.kind}`, this.describeAction(action));
       switch (action.kind) {
-        case 'consent_ai':
-          await this.opts.api.sendAiConsent(this.opts.roomCode);
-          return true;
         case 'confirm_role':
           await this.opts.api.confirmRole(this.opts.roomCode);
           return true;

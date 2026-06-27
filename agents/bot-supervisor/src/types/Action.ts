@@ -6,14 +6,13 @@
  * Adding a new action kind = adding a new entry here + a new case in
  * ActionExecutor + (typically) a new method on ApiClient.
  *
- * Phase 0 only uses: noop, consent_ai, confirm_role.
+ * Phase 0 only uses: noop, confirm_role.
  * The rest are listed now so the Brain interface is stable from day one
  * and later phases just need to populate them.
  */
 
 export type Action =
   | { kind: 'noop' }
-  | { kind: 'consent_ai' }
   | { kind: 'confirm_role' }
   // Phase 1+
   | { kind: 'propose'; team: string[] }

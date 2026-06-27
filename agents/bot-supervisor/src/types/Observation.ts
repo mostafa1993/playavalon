@@ -2,7 +2,7 @@
  * Observation — the structured snapshot the Brain reads on every tick.
  *
  * Combines:
- *   - Room state from GET /api/rooms/[code]    (pre-game lobby + AI consent flags)
+ *   - Room state from GET /api/rooms/[code]    (pre-game lobby)
  *   - Game state from GET /api/games/[gameId] (when game.has_game is true)
  *
  * Phase 0 only needs the pre-game half. The post-game shape is sketched so
@@ -35,10 +35,6 @@ export interface RoomObservation {
   status: RoomStatus;
   expected_players: number;
   manager_id: string;
-  /** True if the room creator opted into AI review (we may need to consent). */
-  ai_review_enabled: boolean;
-  /** True if THIS agent has already accepted AI consent (if needed). */
-  ai_consent_given: boolean;
   /** True if THIS agent's role is confirmed (pre-game only). */
   is_confirmed: boolean;
   players: PlayerObservation[];

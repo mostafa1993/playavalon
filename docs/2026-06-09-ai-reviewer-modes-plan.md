@@ -150,7 +150,9 @@ narrative: string                             // existing game summary/story
 
 ## 8. Consent interaction
 
-- Audio consent (`ai-consent`) is about **recording**, independent of mode — unchanged.
+- ~~Audio consent (`ai-consent`) is about **recording**, independent of mode — unchanged.~~
+  **Removed (migration 026):** per-player AI consent was dropped entirely. Enabling AI
+  review is now the manager toggle alone; no `ai-consent` endpoint, table, or gate.
 - **Mode editing: editable until the game starts** (locked), then locked once the
   reviewer claims the game.
 

@@ -7,3 +7,5 @@
   - Reviewer in blind mode, must know which roles are in the game , not players role, but the exact configuration of the game must be availabe for them.
 
 - Smart Bots mode is still buggy and not very smart and smooth - we will back to this after we are confident the reviewer is doing its job perfectly
+
+- when we create a room can we make it like we still be abel to modify the configuration before distributing the roles? is it doable or not?

@@ -95,8 +95,6 @@ export class Observer {
       status: data.room.status,
       expected_players: data.room.expected_players,
       manager_id: data.room.manager_id,
-      ai_review_enabled: data.ai_review?.enabled ?? false,
-      ai_consent_given: data.ai_review?.caller_consented ?? false,
       is_confirmed: isConfirmed,
       players: data.players.map((p) => ({
         id: p.id,

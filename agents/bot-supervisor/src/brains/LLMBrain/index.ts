@@ -4,7 +4,7 @@
  *
  * Design (zero duplicated gating):
  *   1. Ask RuleBrain what it would do right now.
- *   2. null / mechanical action (noop, consent, confirm, continue) → pass through.
+ *   2. null / mechanical action (noop, confirm, continue) → pass through.
  *   3. Strategic action (propose, vote, quest, lady, assassin, quiz) → ask the
  *      LLM for the same decision; validate; on ANY failure return RuleBrain's
  *      choice. The game can never stall on the LLM.
@@ -61,7 +61,7 @@ export class LLMBrain implements Brain {
       case 'merlin_quiz':
         return this.withFallback(ctx, ruleAction, () => this.decideMerlinQuiz(ctx));
       default:
-        // Mechanical (noop / consent_ai / confirm_role / continue) — no LLM value.
+        // Mechanical (noop / confirm_role / continue) — no LLM value.
         return ruleAction;
     }
   }

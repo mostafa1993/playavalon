@@ -248,7 +248,6 @@ export class AgentEngine {
   /** Action-kind → timing range from yaml config. */
   private timingFor(kind: Action['kind'], cfg: ResolvedAgentConfig): [number, number] {
     switch (kind) {
-      case 'consent_ai': return [200, 1000];  // small, not config-exposed
       case 'confirm_role': return cfg.timing.confirm_role_ms;
       case 'propose': return cfg.timing.propose_team_ms;
       case 'vote': return cfg.timing.vote_ms;
@@ -264,7 +263,6 @@ export class AgentEngine {
   /** Heuristic: would this action be obviously stale given the latest observation? */
   private shouldDropAction(action: Action, fresh: Awaited<ReturnType<Observer['fetch']>>): boolean {
     if (action.kind === 'confirm_role' && fresh.room.is_confirmed) return true;
-    if (action.kind === 'consent_ai' && fresh.room.ai_consent_given) return true;
     if (action.kind === 'propose' && fresh.game?.phase !== 'team_building') return true;
     if (action.kind === 'propose' && fresh.game && !fresh.self.is_leader) return true;
     if (action.kind === 'vote' && (fresh.game?.phase !== 'voting' || fresh.game.has_voted)) return true;

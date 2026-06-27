@@ -24,7 +24,7 @@ export class RuleBrain implements Brain {
   async decide(ctx: BrainContext): Promise<Action | null> {
     const { room, game } = ctx.observation;
 
-    // Pre-game (lobby or role-reveal): handle consent + confirm.
+    // Pre-game (lobby or role-reveal): confirm role once distributed.
     if (room.status === 'waiting' || room.status === 'roles_distributed') {
       return confirmRole.decide(ctx);
     }
