@@ -100,6 +100,30 @@ export default function GamePage() {
     inIntroPhase: gameState?.game?.in_intro_phase ?? false,
   });
 
+  // Feature 023: auto-end the intro round once the last speaker is done.
+  // The intro speaking order ends on the last non-leader; when the manager's
+  // client advances past it (timer expiry or skip), currentIndex reaches the
+  // order length and we fire the same end-intro call the manual button makes —
+  // so the leader's propose form opens without an extra click. The manual
+  // button stays as an early-out (end intro before everyone has spoken).
+  const introAutoEndedRef = useRef(false);
+  const inIntroPhase = gameState?.game?.in_intro_phase ?? false;
+  const introOrderDone =
+    speakingTimer.speakingOrder.length > 0 &&
+    speakingTimer.currentIndex >= speakingTimer.speakingOrder.length;
+  useEffect(() => {
+    if (!inIntroPhase) {
+      introAutoEndedRef.current = false;
+      return;
+    }
+    if (!isManager || !introOrderDone || introAutoEndedRef.current) return;
+    introAutoEndedRef.current = true;
+    fetch(`/api/games/${gameId}/end-intro`, { method: 'POST' }).catch(() => {
+      // Best-effort; on failure allow a retry and fall back to the manual button.
+      introAutoEndedRef.current = false;
+    });
+  }, [inIntroPhase, isManager, introOrderDone, gameId]);
+
   // Assassin identity → LiveKit identity, via display_name.
   const assassinIdentity = useMemo(() => {
     const ap = gameState?.assassin_phase;

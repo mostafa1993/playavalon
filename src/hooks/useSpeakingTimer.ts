@@ -56,11 +56,17 @@ interface UseSpeakingTimerReturn {
 
 /**
  * Generate speaking order:
- * Leader first → random second (excluding leader) → clockwise skipping leader → leader last
+ * Leader first → random second (excluding leader) → clockwise skipping leader → leader last.
+ *
+ * During the intro round (`isIntro`), the trailing leader turn is omitted: the
+ * order ends on the last non-leader. The manager then ends the intro and the
+ * leader speaks again as the first proposer of Quest 1, so a closing leader turn
+ * here would be redundant.
  */
 function generateSpeakingOrder(
   seatNumbers: Map<string, number>,
-  leaderIdentity: string
+  leaderIdentity: string,
+  isIntro = false
 ): string[] {
   const sorted = [...seatNumbers.entries()]
     .sort((a, b) => a[1] - b[1])
@@ -86,8 +92,11 @@ function generateSpeakingOrder(
     return relA - relB;
   });
 
-  // Leader first, then clockwise others, then leader last
-  return [leaderIdentity, ...clockwise, leaderIdentity];
+  // Leader first, then clockwise others. Quest rounds close with the leader
+  // again; the intro round stops on the last non-leader.
+  return isIntro
+    ? [leaderIdentity, ...clockwise]
+    : [leaderIdentity, ...clockwise, leaderIdentity];
 }
 
 export function useSpeakingTimer({
@@ -137,7 +146,7 @@ export function useSpeakingTimer({
     if (genKey === generatedKeyRef.current && state.speakingOrder.length > 0) return;
     generatedKeyRef.current = genKey;
 
-    const order = generateSpeakingOrder(seatNumbers, leaderIdentity);
+    const order = generateSpeakingOrder(seatNumbers, leaderIdentity, inIntroPhase);
     const newState: SpeakingTimerState = {
       speakingOrder: order,
       currentSpeakerIndex: 0,
