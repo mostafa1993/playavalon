@@ -7,7 +7,7 @@
  * guesses to roles that actually exist in this match.
  *
  * This mirrors `computeRolesInPlay` / `ROLE_RATIOS` from the web app
- * (src/lib/domain/roles.ts, src/lib/utils/constants.ts). The reviewer is a
+ * (src/lib/domain/role-config.ts, src/lib/utils/constants.ts). The reviewer is a
  * separate package and can't import from `src/`, so the small amount of logic
  * is duplicated here. Keep the two in sync if the app's role rules change.
  */
