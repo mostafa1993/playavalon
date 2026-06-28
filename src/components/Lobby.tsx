@@ -8,6 +8,7 @@ import { RolesInPlay } from './RolesInPlay';
 import { LadyOfLakeBadge } from './LadyOfLakeBadge';
 import { RulebookModal } from './rulebook/RulebookModal';
 import { AIReviewToggle } from './lobby/AIReviewToggle';
+import { RoomConfigEditor, type RoomConfigUpdate } from './lobby/RoomConfigEditor';
 import type { RoomDetails } from '@/types/room';
 
 interface LobbyProps {
@@ -22,6 +23,10 @@ interface LobbyProps {
   // Feature 022
   onToggleAIReview?: (enabled: boolean, mode?: 'blind' | 'god') => Promise<void>;
   isTogglingAIReview?: boolean;
+  // Edit room setup (role config + player count) before distribution
+  onUpdateConfig?: (update: RoomConfigUpdate) => Promise<void>;
+  isUpdatingConfig?: boolean;
+  updateConfigError?: string | null;
 }
 
 /**
@@ -39,6 +44,9 @@ export function Lobby({
   isConnected = true,
   onToggleAIReview,
   isTogglingAIReview = false,
+  onUpdateConfig,
+  isUpdatingConfig = false,
+  updateConfigError = null,
 }: LobbyProps) {
   const [copied, setCopied] = useState(false);
   const [showRulebook, setShowRulebook] = useState(false);
@@ -308,6 +316,19 @@ export function Lobby({
             );
           })()}
         </div>
+      )}
+
+      {/* Edit room setup — manager-only, waiting phase only (before distribution) */}
+      {isManager && room.room.status === 'waiting' && onUpdateConfig && (
+        <RoomConfigEditor
+          expectedPlayers={room.room.expected_players}
+          roleConfig={room.room.role_config ?? {}}
+          introPhaseEnabled={room.room.intro_phase_enabled}
+          seatedPlayers={room.players.length}
+          isSaving={isUpdatingConfig}
+          error={updateConfigError}
+          onSave={onUpdateConfig}
+        />
       )}
 
       {/* Feature 022: AI Game Reviewer — manager-only toggle, waiting phase only */}

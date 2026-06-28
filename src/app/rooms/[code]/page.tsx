@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { AlertTriangle, Search } from 'lucide-react';
 import { Lobby } from '@/components/Lobby';
+import type { RoomConfigUpdate } from '@/components/lobby/RoomConfigEditor';
 import { RoleRevealModal } from '@/components/RoleRevealModal';
 import { VideoRoom } from '@/components/video';
 import { ViewModeToggle } from '@/components/video/ViewModeToggle';
@@ -33,6 +34,8 @@ export default function RoomPage() {
   const [isDistributing, setIsDistributing] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isTogglingAIReview, setIsTogglingAIReview] = useState(false);
+  const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
+  const [updateConfigError, setUpdateConfigError] = useState<string | null>(null);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [roleData, setRoleData] = useState<{
     role: 'good' | 'evil';
@@ -205,6 +208,28 @@ export default function RoomPage() {
     }
   };
 
+  // Edit room setup (role config + player count + intro) before distribution.
+  const handleUpdateConfig = async (update: RoomConfigUpdate) => {
+    setIsUpdatingConfig(true);
+    setUpdateConfigError(null);
+    try {
+      const response = await fetch(`/api/rooms/${code}/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(update),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error?.message || 'Failed to update room setup');
+      }
+      await refresh();
+    } catch (err) {
+      setUpdateConfigError(err instanceof Error ? err.message : 'Failed to update room setup');
+    } finally {
+      setIsUpdatingConfig(false);
+    }
+  };
+
   // Loading state
   if (authLoading || roomLoading) {
     return (
@@ -275,6 +300,9 @@ export default function RoomPage() {
         isConnected={isConnected}
         onToggleAIReview={handleToggleAIReview}
         isTogglingAIReview={isTogglingAIReview}
+        onUpdateConfig={handleUpdateConfig}
+        isUpdatingConfig={isUpdatingConfig}
+        updateConfigError={updateConfigError}
       />
 
       {roleData && (
