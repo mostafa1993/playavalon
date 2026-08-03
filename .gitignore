@@ -61,4 +61,11 @@ supabase/.temp
 /secrets/
 *.json.key
 
+# Local agent-run artifacts: the reviewer writes per-game output (meta.json,
+# summary.fa/en.json) under its DATA_DIR. On the VM this is a Docker volume;
+# a local run drops it into the repo — never commit it. `.data/` (unanchored)
+# matches that dir at any depth, including the nested agents/reviewer/agents/…
+# path a relative local DATA_DIR produces.
+.data/
+
 .tmp
