@@ -24,18 +24,11 @@ export interface ActiveGameRow {
 }
 
 /**
- * Return the currently-active game with AI review enabled, or null.
+ * Return the newest active game with AI review enabled, or null.
  *
- * Ordered by created_at DESC so the NEWEST active game always wins at selection
- * time. This is critical for the observed bug: on each agent (re)start
- * `currentGameId` resets to null, and an unordered `limit(1)` kept re-latching
- * the oldest "zombie" game (one that never got `ended_at` set), so the watcher
- * never advanced to newer games.
- *
- * Note the watcher only calls this while it holds no session (`currentGameId`
- * null — see watcher.ts). If it is already LOCKED onto a zombie mid-session,
- * ordering can't help; recovery of that case relies on migration 028's cleanup
- * cron force-ending the zombie (`ended_at`), after which the watcher re-selects.
+ * Newest-first matters: an abandoned "zombie" game keeps `ended_at` unset until
+ * the cleanup cron (migration 028) ends it, and must not shadow a newer game.
+ * The watcher switches to whatever this returns (see watcher.ts).
  */
 export async function findActiveReviewGame(
   db: SupabaseClient

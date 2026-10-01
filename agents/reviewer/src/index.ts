@@ -623,16 +623,24 @@ async function main(): Promise<void> {
     retry: config.retry,
   });
   let session: Session | null = null;
+  // Sessions still wrapping up (final report), awaited on shutdown.
+  const ending = new Set<Promise<void>>();
 
   const watcher = startWatcher(db, config.polling.gameWatcherMs, {
     onGameStart: async (game) => {
       session = await startSession(config, db, llm, game);
     },
-    onGameEnd: async (_gameId) => {
+    onGameEnd: (_gameId) => {
       if (!session) return;
       const s = session;
       session = null;
-      await endSession(config, db, llm, s);
+      // Wrap up in the background so the watcher can join the next game
+      // right away instead of waiting on final-report generation.
+      const task = endSession(config, db, llm, s).catch((err) => {
+        console.error('[agent] endSession failed:', err);
+      });
+      ending.add(task);
+      void task.finally(() => ending.delete(task));
     },
   });
 
@@ -640,6 +648,7 @@ async function main(): Promise<void> {
     console.log(`[agent] received ${signal}, shutting down`);
     watcher.stop();
     if (session) await endSession(config, db, llm, session).catch(() => {});
+    await Promise.allSettled(Array.from(ending));
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));
