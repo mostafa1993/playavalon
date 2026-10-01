@@ -54,6 +54,7 @@ export default function RoomPage() {
     oberon_split_intel?: OberonSplitIntelVisibility;
   } | null>(null);
   const [roleError, setRoleError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -62,8 +63,21 @@ export default function RoomPage() {
     }
   }, [authLoading, user, router, code]);
 
-  // Fetch role when roles are distributed
+  // Fetch role when roles are distributed. Also re-fetched on room activity, so
+  // a re-deal after someone leaves is picked up even if the brief 'waiting'
+  // state fell between polls.
   useEffect(() => {
+    const status = room?.room.status;
+
+    // Back in the lobby (someone left mid-deal): the old roles are gone.
+    if (status === 'waiting') {
+      setRoleData(null);
+      setShowRoleModal(false);
+      setConfirmError(null);
+      return;
+    }
+    if (status !== 'roles_distributed' && status !== 'started') return;
+
     const loadRole = async () => {
       try {
         const response = await fetch(`/api/rooms/${code}/role`);
@@ -80,10 +94,8 @@ export default function RoomPage() {
       }
     };
 
-    if (room?.room.status === 'roles_distributed' || room?.room.status === 'started') {
-      loadRole();
-    }
-  }, [room?.room.status, code]);
+    loadRole();
+  }, [room?.room.status, room?.room.last_activity_at, code]);
 
   // Fallback lock sync: polling catches players who missed the LiveKit broadcast,
   // and re-applies the correct lock state when a player reconnects video mid-window.
@@ -137,6 +149,7 @@ export default function RoomPage() {
   };
 
   const handleConfirmRole = async () => {
+    setConfirmError(null);
     try {
       const response = await fetch(`/api/rooms/${code}/confirm`, {
         method: 'POST',
@@ -144,17 +157,18 @@ export default function RoomPage() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error?.message || 'Failed to confirm role');
+        // A retry after a lost response: the first attempt already went through.
+        if (data.error?.code !== 'ALREADY_CONFIRMED') {
+          throw new Error(data.error?.message || 'Failed to confirm role');
+        }
       }
 
-      if (roleData) {
-        setRoleData({ ...roleData, is_confirmed: true });
-      }
+      setRoleData((prev) => prev && { ...prev, is_confirmed: true });
       setShowRoleModal(false);
 
       await refresh();
     } catch (err) {
-      setRoleError(err instanceof Error ? err.message : 'Failed to confirm role');
+      setConfirmError(err instanceof Error ? err.message : 'Failed to confirm role');
     }
   };
 
@@ -305,27 +319,6 @@ export default function RoomPage() {
         updateConfigError={updateConfigError}
       />
 
-      {roleData && (
-        <RoleRevealModal
-          isOpen={showRoleModal}
-          onClose={() => setShowRoleModal(false)}
-          role={roleData.role}
-          specialRole={roleData.special_role}
-          roleName={roleData.role_name}
-          roleDescription={roleData.role_description}
-          knownPlayers={roleData.known_players}
-          knownPlayersLabel={roleData.known_players_label}
-          hiddenEvilCount={roleData.hidden_evil_count}
-          hasLadyOfLake={roleData.has_lady_of_lake}
-          isConfirmed={roleData.is_confirmed}
-          onConfirm={handleConfirmRole}
-          hasDecoy={roleData.has_decoy}
-          decoyWarning={roleData.decoy_warning}
-          splitIntel={roleData.split_intel}
-          oberonSplitIntel={roleData.oberon_split_intel}
-        />
-      )}
-
       {roleData?.is_confirmed && (
         <div className="mt-4">
           <button
@@ -341,6 +334,31 @@ export default function RoomPage() {
 
   return (
     <main className="h-screen bg-avalon-midnight flex flex-col overflow-hidden">
+      {/* Rendered outside the layout below so it shows in every view mode
+          (the lobby panel is hidden in 'video' view) and survives layout
+          switches such as a video reconnect. */}
+      {roleData && (
+        <RoleRevealModal
+          isOpen={showRoleModal}
+          onClose={() => setShowRoleModal(false)}
+          role={roleData.role}
+          specialRole={roleData.special_role}
+          roleName={roleData.role_name}
+          roleDescription={roleData.role_description}
+          knownPlayers={roleData.known_players}
+          knownPlayersLabel={roleData.known_players_label}
+          hiddenEvilCount={roleData.hidden_evil_count}
+          hasLadyOfLake={roleData.has_lady_of_lake}
+          isConfirmed={roleData.is_confirmed}
+          onConfirm={handleConfirmRole}
+          confirmError={confirmError}
+          hasDecoy={roleData.has_decoy}
+          decoyWarning={roleData.decoy_warning}
+          splitIntel={roleData.split_intel}
+          oberonSplitIntel={roleData.oberon_split_intel}
+        />
+      )}
+
       {videoConnected && (
         <div className={`fixed top-6 ${isLayoutSwapped && viewMode === 'split' ? 'left-4 origin-top-left' : 'right-4 origin-top-right'} md:scale-[1.15] flex items-center gap-2 md:gap-4 px-2 md:px-4 py-1.5 bg-avalon-midnight/60 backdrop-blur-md rounded-full border border-avalon-dark-border/50 z-50`}>
           <ViewModeToggle />

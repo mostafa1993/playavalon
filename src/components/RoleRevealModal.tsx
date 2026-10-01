@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { HelpCircle, AlertTriangle } from 'lucide-react';
@@ -32,6 +33,8 @@ interface RoleRevealModalProps {
   hasLadyOfLake?: boolean;
   isConfirmed: boolean;
   onConfirm: () => Promise<void>;
+  /** Shown inside the modal so a failed confirm isn't hidden behind it */
+  confirmError?: string | null;
   // Feature 009: Merlin Decoy Mode
   hasDecoy?: boolean;
   decoyWarning?: string;
@@ -75,6 +78,7 @@ export function RoleRevealModal({
   hasLadyOfLake,
   isConfirmed,
   onConfirm,
+  confirmError,
   hasDecoy,
   decoyWarning,
   splitIntel,
@@ -83,13 +87,28 @@ export function RoleRevealModal({
 }: RoleRevealModalProps) {
   const isEvil = role === 'evil';
   const icon = specialRole ? ROLE_ICONS[specialRole] : (isEvil ? '🗡️' : '🛡️');
+  const [isConfirming, setIsConfirming] = useState(false);
 
+  const handleConfirm = async () => {
+    setIsConfirming(true);
+    try {
+      await onConfirm();
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  // Until the role is confirmed the modal can't be dismissed: confirming is
+  // only possible from here, so closing it early would leave the player stuck.
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Your Role"
       size="md"
+      closeOnOverlayClick={isConfirmed}
+      closeOnEsc={isConfirmed}
+      showCloseButton={isConfirmed}
     >
       <div className="space-y-6">
         {/* Role Card */}
@@ -453,14 +472,22 @@ export function RoleRevealModal({
 
         {/* Confirm Button */}
         {!isConfirmed ? (
-          <Button
-            variant="primary"
-            fullWidth
-            size="lg"
-            onClick={onConfirm}
-          >
-            I Understand My Role
-          </Button>
+          <div className="space-y-3">
+            {confirmError && (
+              <div className="p-3 bg-evil/20 border border-evil/50 rounded-lg">
+                <p className="text-evil-light text-sm text-center">{confirmError}</p>
+              </div>
+            )}
+            <Button
+              variant="primary"
+              fullWidth
+              size="lg"
+              onClick={handleConfirm}
+              isLoading={isConfirming}
+            >
+              I Understand My Role
+            </Button>
+          </div>
         ) : (
           <div className="text-center">
             <span className="badge bg-good/20 text-good">
