@@ -98,6 +98,7 @@ export async function POST(
       winner: result.winner,
       win_reason: result.reason,
       assassin_guess_id: guessed_player_id,
+      ended_at: new Date().toISOString(),
     });
 
     // Feature 017: Close room when game ends (FR-001)

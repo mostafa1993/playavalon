@@ -4,7 +4,7 @@
 # Does NOT touch the Supabase stack — that's deploy/supabase.sh.
 #
 # Usage:
-#   deploy/app.sh            # down --remove-orphans, then up -d --build (rebuild + start)  [default]
+#   deploy/app.sh            # apply pending DB migrations, then down --remove-orphans + up -d --build  [default]
 #   deploy/app.sh restart    # same as default — also --build, so new code is applied
 #   deploy/app.sh down       # stop + remove containers (keeps volumes/data)
 #   deploy/app.sh ps
@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 case "${1:-up}" in
-  up|restart|build) docker compose down --remove-orphans && docker compose up -d --build ;;  # clean slate (drops orphans), then rebuild + start
+  up|restart|build) deploy/migrate.sh && docker compose down --remove-orphans && docker compose up -d --build ;;  # migrate, clean slate (drops orphans), then rebuild + start
   down)             docker compose down --remove-orphans ;;
   ps)               docker compose ps ;;
   logs)             docker compose logs -f ;;

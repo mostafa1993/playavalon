@@ -2,12 +2,12 @@
 #
 # deploy/up.sh — bring up the full self-hosted playavalon stack on a VM, in order:
 #
-#     shared network  ->  Supabase stack  ->  migrations (fresh DB only)  ->  app
+#     shared network  ->  Supabase stack  ->  migrations  ->  app
 #
-# Safe to re-run: migrations are applied ONLY when the DB is empty, so it never
-# re-runs the data-truncating auth migration (021) on a populated database.
+# Safe to re-run: deploy/migrate.sh applies each migration exactly once, so it
+# never re-runs the data-truncating auth migration (021) on a populated database.
 #
-# For a normal app update you do NOT need this — just `docker compose up -d --build`.
+# For a normal app update you do NOT need this — just `deploy/app.sh`.
 # This is the from-scratch / new-VM bring-up (see docs/deploy-from-scratch.md).
 #
 # Run from anywhere; it cd's to the repo root.
@@ -34,18 +34,10 @@ echo "==> 2/4  Supabase stack"
 echo "    waiting for db..."
 for _ in $(seq 1 30); do docker exec supabase-db pg_isready -U postgres -h localhost >/dev/null 2>&1 && break; sleep 2; done
 
-echo "==> 3/4  migrations (fresh DB only)"
-if [ -z "$(regclass public.players)" ]; then
-  echo "    fresh DB — waiting for the auth schema, then applying migrations"
-  for _ in $(seq 1 30); do [ "$(regclass auth.users)" = "auth.users" ] && break; sleep 2; done
-  for f in $(ls supabase/migrations/*.sql | sort); do
-    docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < "$f" \
-      && echo "    OK $(basename "$f")" \
-      || { echo "    FAIL $(basename "$f")"; exit 1; }
-  done
-else
-  echo "    schema already present — skipping migrations (protects existing data)"
-fi
+echo "==> 3/4  migrations"
+echo "    waiting for the auth schema"
+for _ in $(seq 1 30); do [ "$(regclass auth.users)" = "auth.users" ] && break; sleep 2; done
+deploy/migrate.sh
 
 echo "==> 4/4  app"
 docker compose up -d --build

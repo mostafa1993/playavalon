@@ -19,7 +19,7 @@ node supabase/docker/generate-keys.mjs
 docker compose -f supabase/docker/docker-compose.yml up -d
 
 # 3. Apply the app schema (after auth is healthy, so the auth schema exists)
-#    See scripts/apply-migrations.sh
+#    deploy/migrate.sh  (applies each migration once; also run by deploy/app.sh)
 
 # 4. Point the app at it (.env.local), then `npm run dev`:
 #    NEXT_PUBLIC_SUPABASE_URL=http://localhost:8000

@@ -200,13 +200,11 @@ export interface Database {
         Args: { p_room_id: string; p_player_id: string };
         Returns: Array<{ display_name: string }>;
       };
-      archive_stale_rooms: {
-        Args: Record<string, never>;
+      cleanup_rooms: {
+        Args: { empty_after?: string; max_lifetime?: string };
         Returns: Array<{
-          archived_waiting: number;
-          archived_roles_distributed: number;
-          archived_started: number;
-          total_archived: number;
+          rooms_closed: number;
+          games_repaired: number;
         }>;
       };
       check_username_available: {

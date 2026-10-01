@@ -70,8 +70,9 @@ CLEANUP_API_KEY=<any random string>
 Also drop in the secret files referenced above: `secrets/vertex-sa.json`, `livekit.yaml`.
 
 > **Shortcut:** once steps 0–3 are done, run **`./deploy/up.sh`** to do steps 4–6
-> (network → Supabase + migrations → app) in one go. It only applies migrations
-> to a fresh DB, so it's safe to re-run. The manual steps below are the same thing.
+> (network → Supabase + migrations → app) in one go. Migrations go through
+> `deploy/migrate.sh`, which applies each one exactly once, so it's safe to
+> re-run. The manual steps below are the same thing.
 
 ### 4. Create the shared network (once)
 ```bash
@@ -86,9 +87,7 @@ docker compose -f supabase/docker/docker-compose.yml \
                --env-file supabase/docker/.env up -d
 
 # wait until containers are healthy, then apply the schema:
-for f in $(ls supabase/migrations/*.sql | sort); do \
-  docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < "$f" \
-  && echo "OK $(basename $f)" || { echo "FAIL $(basename $f)"; break; }; done
+./deploy/migrate.sh
 ```
 
 ### 6. Bring up the app

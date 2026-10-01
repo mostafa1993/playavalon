@@ -1,136 +1,154 @@
 -- ============================================
 -- Migration: 028_lifetime_cleanup.sql
--- Date: 2026-08-03
--- Feature: max-lifetime cleanup for games & rooms (zombie prevention)
+-- Date: 2026-10-01
+-- Feature: game/room lifecycle guarantees (zombie prevention)
 --
--- A game that never reaches a natural end (crash, disconnect, abandonment) keeps
--- ended_at = NULL forever. Such "zombie" games (a) permanently block the AI
--- reviewer's single-game watcher — an unordered LIMIT 1 keeps re-selecting the
--- oldest one — and (b) skew statistics. This adds lifetime caps enforced by
--- pg_cron, complementing the existing activity-based archive_stale_rooms():
---   - games: force-ended (ended_at = now()) once OLDER THAN 1 day. No Avalon
---            game legitimately runs a full day, so age alone is a safe signal.
---   - rooms: archived (status = 'closed') once INACTIVE for a few hours, and any
---            still-live game they hold is force-ended too.
---
--- IMPORTANT — rooms are keyed on last_activity_at, NOT created_at. created_at is
--- immutable and includes lobby/role-distribution time, so an absolute cap on it
--- would kill a legitimately in-progress game whose room was opened hours before
--- play began. last_activity_at advances on lobby/room actions (join, confirm,
--- start), so a filling lobby or a just-started game keeps a fresh timestamp and
--- is spared; only genuinely-abandoned rooms go stale. (Gameplay itself does not
--- refresh last_activity_at, but no Avalon game runs anywhere near the few-hour
--- cap, so live games are safe.) This mirrors archive_stale_rooms().
---
--- Games are marked done via ended_at only (the canonical "over" flag checked by
--- the reviewer, hasGameEnded, and the game_statistics view). phase/winner are
--- left untouched to avoid any state-machine/constraint coupling.
---
--- All functions pin search_path (SECURITY DEFINER hardening).
+-- Games could stay "live" (ended_at = NULL) forever: the only way to end one was
+-- a natural finish, "finished" was written by hand in several routes (the
+-- assassin route forgot ended_at), and 015's archive closed rooms without ending
+-- their games. The database now enforces it instead:
+--   1. A game set to phase 'game_over' always gets ended_at (trigger).
+--   2. Closing a room, by anything, ends its live game with
+--      win_reason = 'abandoned' (trigger).
+--   3. cleanup_rooms(), every 15 minutes, closes rooms nobody has been in for
+--      1 hour (no human heartbeat, room action or game move) and any room 16
+--      hours after it was created. Replaces 015's archive_stale_rooms().
+--   4. cleanup_rooms() also repairs anything that slipped past 1 and 2:
+--      finished games missing ended_at get it, and live games in a closed room
+--      or older than 16 hours are ended as abandoned.
+-- Abandoned games are kept out of game_statistics.
 -- ============================================
 
 BEGIN;
 
 -- --------------------------------------------
--- Force-end zombie games older than max_age (absolute age — safe because no
--- game runs a day).
+-- 1. Finished games always have ended_at.
 -- --------------------------------------------
-CREATE OR REPLACE FUNCTION end_zombie_games(max_age interval DEFAULT '1 day')
-RETURNS integer AS $$
-DECLARE ended_count integer := 0;
+CREATE OR REPLACE FUNCTION set_game_ended_at()
+RETURNS trigger AS $$
 BEGIN
-  WITH z AS (
-    UPDATE games
-    SET ended_at = NOW()
-    WHERE ended_at IS NULL
-      AND created_at < NOW() - max_age
-    RETURNING id
-  )
-  SELECT COUNT(*) INTO ended_count FROM z;
-  RETURN ended_count;
+  IF NEW.phase = 'game_over' AND NEW.ended_at IS NULL THEN
+    NEW.ended_at := NOW();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER games_set_ended_at
+  BEFORE INSERT OR UPDATE ON games
+  FOR EACH ROW
+  EXECUTE FUNCTION set_game_ended_at();
+
+-- --------------------------------------------
+-- 2. Closing a room ends its live game.
+-- SECURITY DEFINER so it works whoever closes the room (games has no client
+-- UPDATE policy).
+-- --------------------------------------------
+CREATE OR REPLACE FUNCTION end_games_in_closed_room()
+RETURNS trigger AS $$
+BEGIN
+  UPDATE games
+  SET ended_at = NOW(), win_reason = 'abandoned'
+  WHERE room_id = NEW.id
+    AND ended_at IS NULL
+    AND phase <> 'game_over';
+  RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
-COMMENT ON FUNCTION end_zombie_games IS
-  'Force-ends games (ended_at = now()) that never ended and are older than max_age (default 1 day).';
+CREATE TRIGGER rooms_end_games_on_close
+  AFTER UPDATE OF status ON rooms
+  FOR EACH ROW
+  WHEN (NEW.status = 'closed' AND OLD.status <> 'closed')
+  EXECUTE FUNCTION end_games_in_closed_room();
 
 -- --------------------------------------------
--- Archive rooms INACTIVE beyond max_age + end their live games.
--- Keyed on last_activity_at so active rooms/games are spared (see header).
+-- 3 + 4. Periodic cleanup + repair.
 -- --------------------------------------------
-CREATE OR REPLACE FUNCTION archive_expired_rooms(max_age interval DEFAULT '3 hours')
-RETURNS integer AS $$
-DECLARE archived_count integer := 0;
+SELECT cron.unschedule('archive-stale-rooms');
+DROP FUNCTION manual_room_archive();
+DROP FUNCTION run_room_archive();
+DROP FUNCTION archive_stale_rooms();
+
+CREATE OR REPLACE FUNCTION cleanup_rooms(
+  empty_after interval DEFAULT '1 hour',
+  max_lifetime interval DEFAULT '16 hours'
+)
+RETURNS TABLE (rooms_closed integer, games_repaired integer) AS $$
+DECLARE n integer;
 BEGIN
-  -- End any live game held by a room that has gone inactive, so the
-  -- reviewer/stats stay consistent with the archived room.
+  -- Close rooms nobody has been in for empty_after, and rooms older than
+  -- max_lifetime. rooms_end_games_on_close ends their live games.
+  UPDATE rooms r
+  SET status = 'closed', last_activity_at = NOW()
+  WHERE r.status <> 'closed'
+    AND (
+      r.created_at < NOW() - max_lifetime
+      OR GREATEST(
+           r.last_activity_at,
+           (SELECT MAX(p.last_activity_at)
+              FROM room_players rp
+              JOIN players p ON p.id = rp.player_id
+             WHERE rp.room_id = r.id AND NOT rp.is_bot),
+           (SELECT MAX(g.updated_at) FROM games g WHERE g.room_id = r.id)
+         ) < NOW() - empty_after
+    );
+  GET DIAGNOSTICS rooms_closed = ROW_COUNT;
+
+  -- Repairs; normally find nothing. Finished games missing ended_at get the
+  -- time of their game_ended event...
   UPDATE games g
-  SET ended_at = NOW()
-  FROM rooms r
-  WHERE g.room_id = r.id
-    AND g.ended_at IS NULL
-    AND r.status <> 'closed'
-    AND r.last_activity_at < NOW() - max_age;
-
-  -- Archive the inactive rooms themselves.
-  WITH a AS (
-    UPDATE rooms
-    SET status = 'closed', last_activity_at = NOW()
-    WHERE status <> 'closed'
-      AND last_activity_at < NOW() - max_age
-    RETURNING id
+  SET ended_at = COALESCE(
+    (SELECT MIN(e.created_at) FROM game_events e
+      WHERE e.game_id = g.id AND e.event_type = 'game_ended'),
+    g.updated_at
   )
-  SELECT COUNT(*) INTO archived_count FROM a;
-  RETURN archived_count;
+  WHERE g.phase = 'game_over'
+    AND g.ended_at IS NULL;
+  GET DIAGNOSTICS games_repaired = ROW_COUNT;
+
+  -- ...and live games in a closed room or older than max_lifetime are ended.
+  UPDATE games g
+  SET ended_at = NOW(), win_reason = 'abandoned'
+  WHERE g.ended_at IS NULL
+    AND g.phase <> 'game_over'
+    AND (g.created_at < NOW() - max_lifetime
+         OR EXISTS (SELECT 1 FROM rooms r WHERE r.id = g.room_id AND r.status = 'closed'));
+  GET DIAGNOSTICS n = ROW_COUNT;
+  games_repaired := games_repaired + n;
+
+  RETURN NEXT;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
-COMMENT ON FUNCTION archive_expired_rooms IS
-  'Archives rooms (status=closed) inactive beyond max_age (default 3 hours, by last_activity_at) and force-ends their live games. Spares active rooms/games.';
+COMMENT ON FUNCTION cleanup_rooms IS
+  'Closes rooms empty for 1h or older than 16h, and repairs games left live or missing ended_at. Run on demand: SELECT * FROM cleanup_rooms();';
+
+SELECT cron.schedule('cleanup-rooms', '*/15 * * * *', 'SELECT cleanup_rooms();');
 
 -- --------------------------------------------
--- Combined cron entrypoint. Uses the functions'' own defaults (single source of
--- the 1-day / 3-hour thresholds).
+-- Keep abandoned games out of statistics.
 -- --------------------------------------------
-CREATE OR REPLACE FUNCTION run_lifetime_cleanup()
-RETURNS void AS $$
-DECLARE g integer; r integer;
-BEGIN
-  SELECT end_zombie_games()      INTO g;
-  SELECT archive_expired_rooms() INTO r;
-  IF g > 0 OR r > 0 THEN
-    RAISE NOTICE 'Lifetime cleanup: % zombie game(s) ended, % expired room(s) archived', g, r;
-  END IF;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+CREATE OR REPLACE VIEW game_statistics AS
+SELECT
+  g.id as game_id,
+  r.code as room_code,
+  r.expected_players,
+  g.player_count,
+  g.winner,
+  g.win_reason,
+  g.quest_results,
+  g.created_at as game_started_at,
+  g.ended_at as game_ended_at,
+  EXTRACT(EPOCH FROM (g.ended_at - g.created_at)) / 60 as duration_minutes,
+  r.status as room_status
+FROM games g
+JOIN rooms r ON g.room_id = r.id
+WHERE g.ended_at IS NOT NULL
+  AND g.win_reason IS DISTINCT FROM 'abandoned';
 
-COMMENT ON FUNCTION run_lifetime_cleanup IS
-  'pg_cron entrypoint: end_zombie_games() + archive_expired_rooms() at their default thresholds.';
-
--- Manual trigger for testing / one-off cleanup.
-CREATE OR REPLACE FUNCTION manual_lifetime_cleanup()
-RETURNS TABLE (zombie_games_ended integer, expired_rooms_archived integer) AS $$
-BEGIN
-  RETURN QUERY SELECT end_zombie_games(), archive_expired_rooms();
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
-
-COMMENT ON FUNCTION manual_lifetime_cleanup IS
-  'Run the lifetime cleanup on demand: SELECT * FROM manual_lifetime_cleanup();';
-
--- --------------------------------------------
--- Schedule every 15 minutes. Guarded so the migration still applies cleanly on
--- a stack where pg_cron is unavailable (the functions above remain callable
--- manually via manual_lifetime_cleanup()).
--- --------------------------------------------
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'lifetime-cleanup') THEN
-      PERFORM cron.unschedule('lifetime-cleanup');
-    END IF;
-    PERFORM cron.schedule('lifetime-cleanup', '*/15 * * * *', 'SELECT run_lifetime_cleanup();');
-  END IF;
-END $$;
+-- Fix what's already broken (finished games missing ended_at, live games in
+-- closed rooms).
+SELECT * FROM cleanup_rooms();
 
 COMMIT;

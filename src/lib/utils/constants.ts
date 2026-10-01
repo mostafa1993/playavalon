@@ -21,8 +21,6 @@ export const ROOM_CODE_LENGTH = 6;
  * Timing constants (in milliseconds)
  */
 export const RECONNECTION_GRACE_PERIOD = 5 * 60 * 1000; // 5 minutes
-export const WAITING_ROOM_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
-export const STARTED_ROOM_TIMEOUT = 48 * 60 * 60 * 1000; // 48 hours
 export const REALTIME_UPDATE_DELAY = 2000; // 2 seconds max
 
 /**
