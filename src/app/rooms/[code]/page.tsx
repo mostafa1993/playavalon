@@ -18,7 +18,7 @@ import { useLiveKit } from '@/hooks/useLiveKit';
 import { useRoom } from '@/hooks/useRoom';
 import { useAuth } from '@/hooks/useAuth';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
-import type { SplitIntelVisibility, OberonSplitIntelVisibility } from '@/types/game';
+import type { RoleDetails } from '@/types/role';
 
 export default function RoomPage() {
   const params = useParams();
@@ -37,22 +37,7 @@ export default function RoomPage() {
   const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
   const [updateConfigError, setUpdateConfigError] = useState<string | null>(null);
   const [showRoleModal, setShowRoleModal] = useState(false);
-  const [roleData, setRoleData] = useState<{
-    role: 'good' | 'evil';
-    special_role?: 'merlin' | 'percival' | 'servant' | 'assassin' | 'morgana' | 'mordred' | 'oberon_standard' | 'oberon_chaos' | 'minion';
-    role_name: string;
-    role_description: string;
-    is_confirmed: boolean;
-    has_lady_of_lake?: boolean;
-    known_players?: string[];
-    known_players_label?: string;
-    hidden_evil_count?: number;
-    ability_note?: string;
-    has_decoy?: boolean;
-    decoy_warning?: string;
-    split_intel?: SplitIntelVisibility;
-    oberon_split_intel?: OberonSplitIntelVisibility;
-  } | null>(null);
+  const [roleData, setRoleData] = useState<RoleDetails | null>(null);
   const [roleError, setRoleError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
@@ -341,21 +326,9 @@ export default function RoomPage() {
         <RoleRevealModal
           isOpen={showRoleModal}
           onClose={() => setShowRoleModal(false)}
-          role={roleData.role}
-          specialRole={roleData.special_role}
-          roleName={roleData.role_name}
-          roleDescription={roleData.role_description}
-          knownPlayers={roleData.known_players}
-          knownPlayersLabel={roleData.known_players_label}
-          hiddenEvilCount={roleData.hidden_evil_count}
-          hasLadyOfLake={roleData.has_lady_of_lake}
-          isConfirmed={roleData.is_confirmed}
+          details={roleData}
           onConfirm={handleConfirmRole}
           confirmError={confirmError}
-          hasDecoy={roleData.has_decoy}
-          decoyWarning={roleData.decoy_warning}
-          splitIntel={roleData.split_intel}
-          oberonSplitIntel={roleData.oberon_split_intel}
         />
       )}
 

@@ -19,11 +19,12 @@ import { InvestigationResult } from './InvestigationResult';
 import { AssassinPhase } from './AssassinPhase';
 import { GameOver } from './GameOver';
 import { RulebookModal } from '@/components/rulebook/RulebookModal';
-import { Modal } from '@/components/ui/Modal';
+import { RoleRevealModal } from '@/components/RoleRevealModal';
 import { Button } from '@/components/ui/Button';
 import { getPhaseName, getPhaseDescription } from '@/lib/domain/game-state-machine';
 import { getQuestRequirement } from '@/lib/domain/quest-config';
 import { Copy, Check, Eye } from 'lucide-react';
+import type { RoleDetails } from '@/types/role';
 
 interface GameBoardProps {
   gameId: string;
@@ -36,8 +37,33 @@ export function GameBoard({ gameId }: GameBoardProps) {
   const [isEndingIntro, setIsEndingIntro] = useState(false);
   const [endIntroError, setEndIntroError] = useState<string | null>(null);
   const [showRoleModal, setShowRoleModal] = useState(false);
+  const [roleDetails, setRoleDetails] = useState<RoleDetails | null>(null);
   const [showRulebook, setShowRulebook] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // The full role card from role distribution (who you know, Merlin's intel...)
+  // for the Role button. Loaded up front so the button opens instantly.
+  const loadRoleDetails = useCallback(async () => {
+    if (!roomCode) return;
+    try {
+      const response = await fetch(`/api/rooms/${roomCode}/role`);
+      if (response.ok) {
+        const { data } = await response.json();
+        setRoleDetails(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch role:', err);
+    }
+  }, [roomCode]);
+
+  useEffect(() => {
+    loadRoleDetails();
+  }, [loadRoleDetails]);
+
+  const handleShowRole = () => {
+    if (!roleDetails) loadRoleDetails();
+    setShowRoleModal(true);
+  };
 
   const handleCopyRoomCode = async () => {
     if (!roomCode) return;
@@ -292,7 +318,7 @@ export function GameBoard({ gameId }: GameBoardProps) {
             ?
           </button>
           <button
-            onClick={() => setShowRoleModal(true)}
+            onClick={handleShowRole}
             className="px-3 py-1.5 text-xs rounded-md border border-avalon-dark-border text-avalon-text-secondary hover:bg-avalon-dark-lighter transition-colors"
           >
             <Eye size={16} className="inline" /> Role
@@ -477,43 +503,16 @@ export function GameBoard({ gameId }: GameBoardProps) {
         )}
       </div>
 
-      {/* Role Modal */}
-      <Modal
-        isOpen={showRoleModal}
-        onClose={() => setShowRoleModal(false)}
-        title="Your Role"
-        size="sm"
-      >
-        <div className="text-center space-y-4">
-          <div
-            className={`
-              w-24 h-24 rounded-full mx-auto flex items-center justify-center text-4xl
-              ${playerRole === 'good'
-                ? 'bg-emerald-500/20 border-2 border-emerald-500'
-                : 'bg-red-500/20 border-2 border-red-500'}
-            `}
-          >
-            {playerRole === 'good' ? '🛡️' : '🗡️'}
-          </div>
-
-          <div>
-            <h3
-              className={`text-2xl font-bold ${playerRole === 'good' ? 'text-emerald-400' : 'text-red-400'}`}
-            >
-              {playerRole === 'good' ? 'Good' : 'Evil'}
-            </h3>
-            {specialRole && (
-              <p className="text-avalon-gold capitalize mt-1">{specialRole.replace(/_/g, ' ')}</p>
-            )}
-          </div>
-
-          <p className="text-avalon-silver/70 text-sm">
-            {playerRole === 'good'
-              ? 'Help the quests succeed. Watch for saboteurs!'
-              : 'Sabotage the quests. Stay hidden!'}
-          </p>
-        </div>
-      </Modal>
+      {/* Role Modal: same card as at role distribution. The Lady of the Lake
+          line is dropped — it reflects who held it at the start; the board
+          shows the current holder. */}
+      {roleDetails && (
+        <RoleRevealModal
+          isOpen={showRoleModal}
+          onClose={() => setShowRoleModal(false)}
+          details={{ ...roleDetails, has_lady_of_lake: false }}
+        />
+      )}
 
       {/* Investigation Result Modal - stays visible even after phase change */}
       {investigationResult && (

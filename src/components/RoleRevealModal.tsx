@@ -4,46 +4,18 @@ import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { HelpCircle, AlertTriangle } from 'lucide-react';
-import type { SplitIntelVisibility, OberonSplitIntelVisibility, EvilRingVisibility } from '@/types/game';
+import type { RoleDetails } from '@/types/role';
 
-// Special role type (Phase 2: includes oberon variants, Feature 020: Big Box roles)
-type SpecialRole =
-  | 'merlin'
-  | 'percival'
-  | 'servant'
-  | 'assassin'
-  | 'morgana'
-  | 'mordred'
-  | 'oberon_standard'
-  | 'oberon_chaos'
-  | 'minion'
-  | 'lunatic'
-  | 'brute';
+type SpecialRole = NonNullable<RoleDetails['special_role']>;
 
 interface RoleRevealModalProps {
   isOpen: boolean;
   onClose: () => void;
-  role: 'good' | 'evil';
-  specialRole?: SpecialRole;
-  roleName: string;
-  roleDescription: string;
-  knownPlayers?: string[];
-  knownPlayersLabel?: string;
-  hiddenEvilCount?: number;
-  hasLadyOfLake?: boolean;
-  isConfirmed: boolean;
-  onConfirm: () => Promise<void>;
+  details: RoleDetails;
+  /** Needed while the role is unconfirmed (role distribution) */
+  onConfirm?: () => Promise<void>;
   /** Shown inside the modal so a failed confirm isn't hidden behind it */
   confirmError?: string | null;
-  // Feature 009: Merlin Decoy Mode
-  hasDecoy?: boolean;
-  decoyWarning?: string;
-  // Feature 011: Merlin Split Intel Mode
-  splitIntel?: SplitIntelVisibility;
-  // Feature 018: Oberon Split Intel Mode
-  oberonSplitIntel?: OberonSplitIntelVisibility;
-  // Feature 019: Evil Ring Visibility Mode
-  evilRingVisibility?: EvilRingVisibility;
 }
 
 // Role-specific icons (Phase 2: added oberon variants, Feature 020: Big Box roles)
@@ -68,23 +40,26 @@ const ROLE_ICONS: Record<SpecialRole, string> = {
 export function RoleRevealModal({
   isOpen,
   onClose,
-  role,
-  specialRole,
-  roleName,
-  roleDescription,
-  knownPlayers,
-  knownPlayersLabel,
-  hiddenEvilCount,
-  hasLadyOfLake,
-  isConfirmed,
+  details,
   onConfirm,
   confirmError,
-  hasDecoy,
-  decoyWarning,
-  splitIntel,
-  oberonSplitIntel,
-  evilRingVisibility,
 }: RoleRevealModalProps) {
+  const {
+    role,
+    special_role: specialRole,
+    role_name: roleName,
+    role_description: roleDescription,
+    known_players: knownPlayers,
+    known_players_label: knownPlayersLabel,
+    hidden_evil_count: hiddenEvilCount,
+    has_lady_of_lake: hasLadyOfLake,
+    is_confirmed: isConfirmed,
+    has_decoy: hasDecoy,
+    decoy_warning: decoyWarning,
+    split_intel: splitIntel,
+    oberon_split_intel: oberonSplitIntel,
+    evil_ring_visibility: evilRingVisibility,
+  } = details;
   const isEvil = role === 'evil';
   const icon = specialRole ? ROLE_ICONS[specialRole] : (isEvil ? '🗡️' : '🛡️');
   const [isConfirming, setIsConfirming] = useState(false);
@@ -92,7 +67,7 @@ export function RoleRevealModal({
   const handleConfirm = async () => {
     setIsConfirming(true);
     try {
-      await onConfirm();
+      await onConfirm?.();
     } finally {
       setIsConfirming(false);
     }

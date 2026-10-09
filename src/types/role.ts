@@ -5,6 +5,7 @@
 
 import type { Role, SpecialRole } from './database';
 import type { RoleConfig } from './role-config';
+import type { SplitIntelVisibility, OberonSplitIntelVisibility, EvilRingVisibility } from './game';
 
 // Re-export for convenience
 export type { Role, SpecialRole } from './database';
@@ -26,21 +27,26 @@ export interface RoleDistribution {
 export type RoleRatios = Record<number, RoleDistribution>;
 
 /**
- * Role display info (extended for Phase 2)
+ * A player's role and everything they know (GET /api/rooms/[code]/role).
+ * Shown at role distribution and from the in-game Role button.
  */
-export interface RoleInfo {
+export interface RoleDetails {
   role: Role;
-  special_role: SpecialRole;
+  special_role?: SpecialRole;
   role_name: string;
   role_description: string;
   is_confirmed: boolean;
   has_lady_of_lake?: boolean;
   // Visibility data (character-specific)
-  evil_teammates?: string[];
-  known_players?: Array<{ id: string; display_name: string }>;
+  known_players?: string[];
   known_players_label?: string;
   hidden_evil_count?: number;
   ability_note?: string;
+  has_decoy?: boolean;
+  decoy_warning?: string;
+  split_intel?: SplitIntelVisibility;
+  oberon_split_intel?: OberonSplitIntelVisibility;
+  evil_ring_visibility?: EvilRingVisibility;
 }
 
 /**
