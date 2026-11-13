@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Room, RoomInsert, RoomPlayer, RoomStatus } from '@/types/database';
 import type { RoomListItem, RoomDetails, RoomPlayerInfo } from '@/types/room';
 import { getConnectionStatus } from '@/lib/domain/connection-status';
+import { longestPresentHuman, type RoomMember } from '@/lib/domain/room-members';
 
 /**
  * Find a room by code
@@ -446,47 +447,45 @@ export async function isPlayerInRoom(
 }
 
 /**
- * Update manager when current manager leaves
+ * Get a room's members: who, since when, and whether a bot
+ */
+export async function getRoomMembers(
+  client: SupabaseClient,
+  roomId: string
+): Promise<RoomMember[]> {
+  const { data, error } = await client
+    .from('room_players')
+    .select('player_id, joined_at, is_bot')
+    .eq('room_id', roomId);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as RoomMember[];
+}
+
+/**
+ * Pass the manager role to the longest-present human member, when the
+ * manager leaves. Returns the new manager, or null when no human is left.
  */
 export async function transferManager(
   client: SupabaseClient,
   roomId: string
 ): Promise<string | null> {
-  // Get the longest-present player (excluding the leaving manager)
-  const { data, error } = await client
-    .from('room_players')
-    .select('player_id')
-    .eq('room_id', roomId)
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .single();
-
-  if (error || !data) {
+  const newManagerId = longestPresentHuman(await getRoomMembers(client, roomId));
+  if (!newManagerId) {
     return null;
   }
 
-  // Update room manager
-  await client
-    .from('rooms')
-    .update({ manager_id: data.player_id })
-    .eq('id', roomId);
-
-  return data.player_id;
-}
-
-/**
- * Delete empty room
- */
-export async function deleteRoom(
-  client: SupabaseClient,
-  roomId: string
-): Promise<void> {
   const { error } = await client
     .from('rooms')
-    .delete()
+    .update({ manager_id: newManagerId })
     .eq('id', roomId);
 
   if (error) {
     throw error;
   }
+
+  return newManagerId;
 }

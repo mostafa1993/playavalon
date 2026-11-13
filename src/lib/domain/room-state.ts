@@ -1,6 +1,7 @@
 /**
  * Room state transition logic (pure functions)
- * Manages room lifecycle: waiting → roles_distributed → started
+ * Manages room lifecycle: waiting → roles_distributed → started → closed.
+ * A room no human is left in closes from any state.
  */
 
 import type { RoomStatus } from '@/types/database';
@@ -14,8 +15,8 @@ export const ROOM_STATUSES = ['waiting', 'roles_distributed', 'started', 'closed
  * State transition map - defines valid transitions
  */
 const STATE_TRANSITIONS: Record<RoomStatus, RoomStatus[]> = {
-  waiting: ['roles_distributed'],
-  roles_distributed: ['started'],
+  waiting: ['roles_distributed', 'closed'], // Closed when no human is left
+  roles_distributed: ['started', 'closed'], // Closed when no human is left
   started: ['closed'], // Can transition to closed when game ends
   closed: [], // Terminal state (archived - preserves game history)
 };

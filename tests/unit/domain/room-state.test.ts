@@ -63,6 +63,20 @@ describe('room-state', () => {
       });
     });
 
+    it('should allow waiting → closed (no human left)', () => {
+      expect(isValidTransition('waiting', 'closed')).toBe(true);
+    });
+
+    it('should allow roles_distributed → closed (no human left)', () => {
+      expect(isValidTransition('roles_distributed', 'closed')).toBe(true);
+    });
+
+    it('should allow every non-closed state to close', () => {
+      ROOM_STATUSES.filter((status) => status !== 'closed').forEach((status) => {
+        expect(isValidTransition(status, 'closed')).toBe(true);
+      });
+    });
+
     it('should NOT allow any transitions from closed (terminal)', () => {
       ROOM_STATUSES.forEach((status) => {
         expect(isValidTransition('closed', status)).toBe(false);
@@ -71,12 +85,12 @@ describe('room-state', () => {
   });
 
   describe('getValidNextStates', () => {
-    it('should return [roles_distributed] for waiting', () => {
-      expect(getValidNextStates('waiting')).toEqual(['roles_distributed']);
+    it('should return [roles_distributed, closed] for waiting', () => {
+      expect(getValidNextStates('waiting')).toEqual(['roles_distributed', 'closed']);
     });
 
-    it('should return [started] for roles_distributed', () => {
-      expect(getValidNextStates('roles_distributed')).toEqual(['started']);
+    it('should return [started, closed] for roles_distributed', () => {
+      expect(getValidNextStates('roles_distributed')).toEqual(['started', 'closed']);
     });
 
     it('should return [closed] for started', () => {
@@ -300,6 +314,7 @@ describe('room-state', () => {
       it('should correctly check valid transitions', () => {
         const machine = new RoomStateMachine('waiting');
         expect(machine.canTransitionTo('roles_distributed')).toBe(true);
+        expect(machine.canTransitionTo('closed')).toBe(true);
         expect(machine.canTransitionTo('started')).toBe(false);
       });
     });
@@ -307,7 +322,7 @@ describe('room-state', () => {
     describe('getNextStates', () => {
       it('should return valid next states', () => {
         const machine = new RoomStateMachine('waiting');
-        expect(machine.getNextStates()).toEqual(['roles_distributed']);
+        expect(machine.getNextStates()).toEqual(['roles_distributed', 'closed']);
       });
     });
 

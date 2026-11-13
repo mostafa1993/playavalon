@@ -9,12 +9,12 @@ import {
   findRoomByCode,
   removePlayerFromRoom,
   isPlayerInRoom,
-  getRoomPlayerCount,
+  getRoomMembers,
   transferManager,
-  deleteRoom,
   updateRoomStatus,
 } from '@/lib/supabase/rooms';
 import { validateRoomCode } from '@/lib/domain/validation';
+import { countHumans } from '@/lib/domain/room-members';
 import { errors, handleError } from '@/lib/utils/errors';
 
 interface RouteParams {
@@ -67,15 +67,20 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Check if player was manager
     const wasManager = room.manager_id === user.id;
 
-    // Get remaining player count
-    const remainingPlayers = await getRoomPlayerCount(supabase, room.id);
+    // Bots never leave through this route, so a room is empty once no human
+    // is left in it
+    const remainingHumans = countHumans(await getRoomMembers(supabase, room.id));
 
-    if (remainingPlayers === 0) {
-      // Delete empty room
-      await deleteRoom(supabase, room.id);
+    if (remainingHumans === 0) {
+      // Close the room, never delete it: its games and their history hang off
+      // it. Closing makes the bots' processes exit, and frees a finished game's
+      // link to this room as its next room (migration 032).
+      if (statusBeforeLeave !== 'closed') {
+        await updateRoomStatus(supabase, room.id, 'closed');
+      }
     } else {
       if (wasManager) {
-        // Transfer manager to longest-present player
+        // Transfer manager to the longest-present human
         await transferManager(supabase, room.id);
       }
 
