@@ -8,6 +8,7 @@
  *   <dataDir>/<gameId>/quest_<n>.json                  (M3+)
  *   <dataDir>/<gameId>/summary.fa.json                 (M4+)
  *   <dataDir>/<gameId>/summary.en.json                 (M4+)
+ *   <dataDir>/<gameId>/record.json                     (the game record)
  *
  * The <round> segment is the proposal-round-within-quest counter and was
  * added to fix the bug where a rejected proposal's discussion was
@@ -58,6 +59,11 @@ export function summaryPath(
 
 export function discussionPath(dataDir: string, gameId: string): string {
   return path.join(gameDir(dataDir, gameId), 'discussion.json');
+}
+
+/** The game record: every fact of the game, written at game end. */
+export function recordPath(dataDir: string, gameId: string): string {
+  return path.join(gameDir(dataDir, gameId), 'record.json');
 }
 
 /** Blind-mode incremental role-guess memory (written each round of talk). */

@@ -7,6 +7,7 @@
 export type { SpeakingTimerState, RecordedTurn } from '@avalon/shared';
 
 import type { RolesInPlay } from './gamestate/roleConfig.js';
+import type { GameOutcome } from './gamestate/db.js';
 
 /** Minimal view of the game + players + roles pulled from Supabase. */
 export interface GameMetaSnapshot {
@@ -242,6 +243,127 @@ export interface GuessLog {
   updatedAt: string;
   rounds: GuessRound[];
 }
+
+// ── The game record ─────────────────────────────────────────────────────────
+
+/** One seat at the table. Seat 1 is the first leader, then clockwise. */
+export interface RecordPlayer {
+  id: string;
+  display_name: string;
+  seat_number: number;
+}
+
+/** God mode only: the seat with its true role. */
+export interface GodRecordPlayer extends RecordPlayer {
+  role: 'good' | 'evil';
+  special_role: string | null;
+}
+
+export interface RecordVote {
+  playerId: string;
+  vote: 'approve' | 'reject';
+}
+
+export interface RecordProposal {
+  quest: number;
+  proposalNumber: number;
+  leaderId: string;
+  teamIds: string[];
+  status: 'pending' | 'approved' | 'rejected';
+  /** In seat order; empty while the proposal is pending (votes not revealed). */
+  votes: RecordVote[];
+  createdAt: string;
+  /** When the vote closed; null while pending. */
+  resolvedAt: string | null;
+}
+
+/** A mission as `games.quest_results` holds it. Never who played a fail card. */
+export interface RecordMission {
+  quest: number;
+  teamIds: string[];
+  successCount: number;
+  failCount: number;
+  result: 'success' | 'fail';
+  completedAt: string;
+}
+
+/** Lady of the Lake, used after `quest`'s mission: who looked at whom. */
+export interface RecordLadyUse {
+  quest: number;
+  investigatorId: string;
+  targetId: string;
+}
+
+/** God mode only: the Lady result, which only the investigator saw. */
+export interface GodRecordLadyUse extends RecordLadyUse {
+  result: 'good' | 'evil';
+}
+
+/** One speaking turn, from its turn file. */
+export interface RecordTurn {
+  /** 0 is the intro round. */
+  quest: number;
+  round: number;
+  turn: number;
+  speakerId: string;
+  transcript: string;
+  confidence: number | null;
+  startedAt: string;
+  durationSec: number;
+  /** The proposal of `quest` this talk was about: the first one whose vote
+   *  closed after the turn started, else the quest's latest. Null in the intro
+   *  round or a quest with no proposal. */
+  proposalNumber: number | null;
+}
+
+/** One speaker's clip from the assassin-phase discussion. */
+export interface RecordDiscussionSpeaker {
+  speakerId: string;
+  transcript: string;
+  confidence: number | null;
+  durationSec: number;
+}
+
+export interface RecordDiscussion {
+  startedAt: string;
+  durationSec: number;
+  speakers: RecordDiscussionSpeaker[];
+}
+
+interface GameRecordCommon {
+  gameId: string;
+  /** Set on the record so far: everything public once this quest's round of
+   *  talk ended. Null on the whole game's record. */
+  cut: { quest: number; round: number } | null;
+  /** Ordered by quest, then proposal number. */
+  proposals: RecordProposal[];
+  missions: RecordMission[];
+  /** Who the assassin named as Merlin; null without an assassin pick. */
+  assassinPickId: string | null;
+  /** Null on a cut. */
+  outcome: GameOutcome | null;
+  /** Ordered by quest, round, turn. */
+  turns: RecordTurn[];
+  /** The assassin-phase discussion; null when there was none, and on a cut. */
+  discussion: RecordDiscussion | null;
+}
+
+/** God mode: public play plus the roles and Lady results. */
+export interface GodGameRecord extends GameRecordCommon {
+  mode: 'god';
+  players: GodRecordPlayer[];
+  lady: GodRecordLadyUse[];
+}
+
+/** Blind mode: public play only — no role, no Lady result. */
+export interface BlindGameRecord extends GameRecordCommon {
+  mode: 'blind';
+  players: RecordPlayer[];
+  lady: RecordLadyUse[];
+}
+
+/** Written to record.json: every fact of the game, built in code. */
+export type GameRecord = GodGameRecord | BlindGameRecord;
 
 /** God-mode per-player performance assessment. */
 export interface PlayerPerformance {

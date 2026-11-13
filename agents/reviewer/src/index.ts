@@ -8,7 +8,8 @@
  *      and begins buffering + transcribing turns.
  *   3. Per turn: STT → summarizer → dossier update → write turn JSON (with summary).
  *   4. On quest boundary: synthesize the completed quest → write quest_<n>.json.
- *   5. On end: flush in-flight turns, synthesize the final quest, disconnect.
+ *   5. On end: flush in-flight turns, synthesize the final quest, disconnect,
+ *      write record.json (the game record), then the final report.
  *
  * Single concurrent game is assumed by product decision.
  */
@@ -24,6 +25,8 @@ import {
 } from './gamestate/db.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { startWatcher } from './gamestate/watcher.js';
+import { buildGameRecord } from './gamestate/record.js';
+import { dbRecordSource } from './gamestate/recordSource.js';
 import type { ActiveGameRow } from './gamestate/db.js';
 import { LiveKitBot } from './bot/livekitBot.js';
 import { TurnSegmenter } from '@avalon/shared';
@@ -34,7 +37,7 @@ import { processDiscussion } from './reviewer/discussionProcessor.js';
 import { transcribe } from '@avalon/shared';
 import { isSilent } from '@avalon/shared';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
-import { metaPath, summaryPath, turnPath } from './storage/layout.js';
+import { metaPath, recordPath, summaryPath, turnPath } from './storage/layout.js';
 import { createLLMClient, type LLMClient } from '@avalon/shared';
 import { correctTranscript } from './reviewer/transcriptCorrector.js';
 import { summarizeTurn } from './reviewer/turnSummarizer.js';
@@ -324,6 +327,21 @@ async function endSession(
   // Leave LiveKit as soon as recording is fully wrapped up — no reason to
   // stay connected during LLM work.
   await session.bot.leave().catch((err) => log.error('bot.leave failed', err));
+
+  // The game record: every fact of the game, from the database and the turn
+  // files. Nothing reads it yet.
+  try {
+    const record = await buildGameRecord(
+      dbRecordSource(db, session.gameId),
+      config.storage.dataDir,
+      session.gameId,
+      session.mode
+    );
+    await writeJsonAtomic(recordPath(config.storage.dataDir, session.gameId), record);
+    log.info('game record written');
+  } catch (err) {
+    log.error('game record failed', err);
+  }
 
   // Generate the final report: role reveal + narrative, per language.
   try {

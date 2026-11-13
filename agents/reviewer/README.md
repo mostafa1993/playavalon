@@ -70,7 +70,19 @@ $DATA_DIR/<game_id>/
   turn_<quest>_<idx>.json          # raw + corrected transcript + summary
   dossier_<playerId>.json          # evolving per-player memory
   quest_<n>.json                   # LLM synthesis of one quest
+  record.json                      # the game record (written at game end)
 ```
+
+`record.json` holds every fact of the game, built in code from the database and
+the turn files (`src/gamestate/record.ts`): the roster and seats; each proposal
+with its leader, team, each player's vote and its times; each mission's team and
+card counts; who used Lady of the Lake on whom; the assassin's pick; the outcome;
+and every turn and assassin-phase transcript in order, each turn joined to the
+proposal it was about (the first of its quest whose vote closed after the turn
+started). A god-mode record adds the roles and the Lady results. A blind-mode
+record holds public play only: its build never reads `player_roles` or the Lady
+`result`. No record holds who played a fail card (`quest_actions` is never
+read). Nothing reads `record.json` yet.
 
 M4 will add `summary.fa.json`, `summary.en.json` + a review UI page.
 
