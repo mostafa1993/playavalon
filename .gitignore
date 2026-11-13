@@ -71,3 +71,8 @@ supabase/.temp
 /games/
 
 .tmp
+
+# Local working notes: plans and the tasks that measure them. Never committed.
+/.plans/
+/.tasks/
+/TODO.md
