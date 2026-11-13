@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Sparkles, ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { ReviewChat } from '@/components/review/ReviewChat';
 import type { ReviewApiResponse } from '@/types/review';
 import {
   summaryView,
@@ -200,6 +201,8 @@ export default function GameReviewPage() {
         </div>
 
         {view.assassinPhase && <AssassinPhaseSection phase={view.assassinPhase} isRtl={isRtl} />}
+
+        <ReviewChat gameId={gameId} isRtl={isRtl} />
 
         <div className="text-avalon-silver/60 text-xs text-center pt-4">
           {isRtl ? 'تولید شده در' : 'Generated'}{' '}
