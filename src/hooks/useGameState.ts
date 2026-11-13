@@ -24,6 +24,11 @@ interface UseGameStateResult {
   specialRole: string | null;
   roomCode: string | null;
   isManager: boolean;
+  /**
+   * This page saw the game in play and then saw it end. A page opened after
+   * the end (a reload, the report's Back button, a new tab) did not.
+   */
+  sawGameEnd: boolean;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -36,6 +41,8 @@ export function useGameState(gameId: string | null): UseGameStateResult {
   const [specialRole, setSpecialRole] = useState<string | null>(null);
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [isManager, setIsManager] = useState(false);
+  const [sawGameEnd, setSawGameEnd] = useState(false);
+  const sawInPlayRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,6 +127,11 @@ export function useGameState(gameId: string | null): UseGameStateResult {
       }
 
       const responseData = await response.json();
+      if (responseData.data.game.phase !== 'game_over') {
+        sawInPlayRef.current = true;
+      } else if (sawInPlayRef.current) {
+        setSawGameEnd(true);
+      }
       setGameState(responseData.data);
       setCurrentUserId(responseData.current_user_id);
       setPlayerRole(responseData.player_role || 'good');
@@ -150,6 +162,7 @@ export function useGameState(gameId: string | null): UseGameStateResult {
     specialRole,
     roomCode,
     isManager,
+    sawGameEnd,
     loading,
     error,
     refetch: fetchGameState,

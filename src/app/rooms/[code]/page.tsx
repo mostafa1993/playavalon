@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
-import { AlertTriangle, Search } from 'lucide-react';
+import { AlertTriangle, BookOpen, Search, Sparkles } from 'lucide-react';
 import { Lobby } from '@/components/Lobby';
 import type { RoomConfigUpdate } from '@/components/lobby/RoomConfigEditor';
 import { RoleRevealModal } from '@/components/RoleRevealModal';
@@ -280,8 +280,37 @@ export default function RoomPage() {
     );
   }
 
+  const previousGame = room.previous_game;
+
   const lobbyContent = (
     <>
+      {/* Play again: back to the game this room was opened from, in new tabs
+          so nobody leaves the lobby */}
+      {previousGame && (
+        <div className="flex items-center justify-center gap-4 text-sm">
+          <a
+            href={`/game/${previousGame.id}?view=roles`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-avalon-text-secondary hover:text-avalon-gold transition-colors"
+          >
+            <BookOpen size={14} />
+            Previous game
+          </a>
+          {previousGame.reviewed && (
+            <a
+              href={`/game/${previousGame.id}/review`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-avalon-text-secondary hover:text-avalon-gold transition-colors"
+            >
+              <Sparkles size={14} />
+              Previous game&apos;s report
+            </a>
+          )}
+        </div>
+      )}
+
       {roleError && (
         <div className="p-4 bg-evil/20 border border-evil/50 rounded-lg animate-slide-up">
           <p className="text-evil-light text-sm text-center">{roleError}</p>

@@ -141,6 +141,7 @@ supabase/
 4. Room manager distributes roles when full
 5. Each player confirms their role
 6. Game starts (placeholder for full game)
+7. When the game ends, any player presses "Play again": one new room opens with the same settings, every player still on the game-over screen is moved into its lobby, and anyone who comes back later gets a "Join next game" button
 
 ## Development
 

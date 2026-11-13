@@ -4,15 +4,17 @@
  * GameOver Component
  * Shows final game result with all player roles revealed
  * Feature 010: Now includes Merlin Quiz before role reveal
+ * Play again: opens the next game, or joins it, from every view
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Sparkles } from 'lucide-react';
+import { BookOpen, RotateCcw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { buttonClassName } from '@/components/ui/buttonStyles';
 import { MerlinQuiz } from './MerlinQuiz';
 import { MerlinQuizResults } from './MerlinQuizResults';
+import type { PlayAgainControls } from '@/hooks/usePlayAgain';
 import type { GameWinner, QuestResult, GamePlayer, MerlinQuizState } from '@/types/game';
 import { getWinnerAnnouncement, getWinReasonText, countQuestResults } from '@/lib/domain/win-conditions';
 
@@ -44,6 +46,9 @@ interface GameOverProps {
   currentPlayerId?: string;
   /** Whether a Merlin was dealt: the quiz and the Good win text depend on it */
   hasMerlin: boolean;
+  /** Open on the role reveal, past the quiz (the next lobby's "Previous game" link) */
+  openOnRoles?: boolean;
+  playAgain: PlayAgainControls;
 }
 
 export function GameOver({
@@ -55,6 +60,8 @@ export function GameOver({
   players,
   currentPlayerId,
   hasMerlin,
+  openOnRoles = false,
+  playAgain,
 }: GameOverProps) {
   const router = useRouter();
 
@@ -65,7 +72,7 @@ export function GameOver({
 
   // Feature 010: Quiz state management
   const [quizDisplayState, setQuizDisplayState] = useState<QuizDisplayState>(
-    hasMerlin ? 'quiz' : 'roles'
+    hasMerlin && !openOnRoles ? 'quiz' : 'roles'
   );
 
   // Feature 022: AI Game Review availability — show the button only when
@@ -96,7 +103,8 @@ export function GameOver({
         setQuizState(data.data);
 
         if (data.data.quiz_complete) {
-          setQuizDisplayState('results');
+          // Only from the quiz: a player already on the role reveal stays there
+          setQuizDisplayState((current) => (current === 'quiz' ? 'results' : current));
         }
       }
     } catch (error) {
@@ -151,6 +159,27 @@ export function GameOver({
     return 0;
   });
 
+  // Play again: open the next game while there is none, or join it
+  const nextGame = (
+    <div className="flex flex-col items-center gap-2">
+      {playAgain.busy ? (
+        <p className="text-sm text-avalon-silver/80">Joining the next game…</p>
+      ) : !playAgain.hasNextRoom ? (
+        <Button variant="primary" size="sm" onClick={playAgain.playAgain}>
+          <RotateCcw size={14} />
+          Play again
+        </Button>
+      ) : playAgain.action === 'offer_join' ? (
+        <Button variant="primary" size="sm" onClick={playAgain.joinNextGame}>
+          Join next game
+        </Button>
+      ) : null}
+      {playAgain.error && (
+        <p className="text-sm text-red-400">{playAgain.error}</p>
+      )}
+    </div>
+  );
+
   // Feature 010: Show quiz before role reveal
   if (quizDisplayState === 'quiz' && hasMerlin && currentPlayerId) {
     return (
@@ -197,6 +226,8 @@ export function GameOver({
           )}
         </div>
 
+        {nextGame}
+
         {/* Skip directly to role reveal */}
         <button
           onClick={handleShowRoles}
@@ -238,6 +269,8 @@ export function GameOver({
             onShowRoles={handleShowRoles}
           />
         </div>
+
+        {nextGame}
       </div>
     );
   }
@@ -441,6 +474,8 @@ export function GameOver({
           </div>
         </div>
       )}
+
+      {nextGame}
 
       {/* Actions */}
       <div className="flex flex-wrap gap-3">

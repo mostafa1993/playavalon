@@ -6,8 +6,9 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useGameState } from '@/hooks/useGameState';
+import { usePlayAgain } from '@/hooks/usePlayAgain';
 import { QuestTracker } from './QuestTracker';
 import { TeamProposal } from './TeamProposal';
 import { VotingPanel } from './VotingPanel';
@@ -32,7 +33,16 @@ interface GameBoardProps {
 
 export function GameBoard({ gameId }: GameBoardProps) {
   const router = useRouter();
-  const { gameState, currentUserId: currentPlayerId, playerRole, specialRole, roomCode, isManager, loading, error, refetch } = useGameState(gameId);
+  // ?view=roles (the next lobby's "Previous game" link) opens on the role reveal
+  const openOnRoles = useSearchParams().get('view') === 'roles';
+  const { gameState, currentUserId: currentPlayerId, playerRole, specialRole, roomCode, isManager, sawGameEnd, loading, error, refetch } = useGameState(gameId);
+  // Lives here, not in GameOver, so a remount of GameOver can't retry a move
+  const playAgain = usePlayAgain({
+    gameId,
+    nextRoom: gameState?.next_room ?? null,
+    sawGameEnd,
+    endedAt: gameState?.game.ended_at ?? null,
+  });
   // Feature 023: end-intro action state for the manager button
   const [isEndingIntro, setIsEndingIntro] = useState(false);
   const [endIntroError, setEndIntroError] = useState<string | null>(null);
@@ -205,6 +215,8 @@ export function GameBoard({ gameId }: GameBoardProps) {
           players={players}
           currentPlayerId={currentPlayerId ?? undefined}
           hasMerlin={hasMerlin}
+          openOnRoles={openOnRoles}
+          playAgain={playAgain}
         />
       </div>
     );

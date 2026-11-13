@@ -8,8 +8,10 @@ import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { findRoomByCode, getRoomDetails, isPlayerInRoom } from '@/lib/supabase/rooms';
 import { validateRoomCode } from '@/lib/domain/validation';
 import { computeRolesInPlay } from '@/lib/domain/role-config';
+import { playedInGame } from '@/lib/domain/game-membership';
 import { errors, handleError } from '@/lib/utils/errors';
 import { isValidRoleConfig, pickRoleConfig } from '@/types/role-config';
+import type { RoomDetails } from '@/types/room';
 
 interface RouteParams {
   params: Promise<{ code: string }>;
@@ -81,6 +83,25 @@ export async function GET(request: Request, { params }: RouteParams) {
       mode: room.ai_review_mode,
     };
 
+    // Play again: the finished game this room was opened from, for the lobby's
+    // links back to it. Only for people who played it: anyone else who joins
+    // from the public list can't open it.
+    let previousGame: RoomDetails['previous_game'] = null;
+    const { data: previous, error: previousError } = await supabase
+      .from('games')
+      .select('id, seating_order')
+      .eq('next_room_id', room.id)
+      .maybeSingle();
+    if (previousError) throw previousError;
+    if (previous && playedInGame(previous, user.id)) {
+      const { count, error: reviewError } = await supabase
+        .from('game_reviews')
+        .select('game_id', { count: 'exact', head: true })
+        .eq('game_id', previous.id);
+      if (reviewError) throw reviewError;
+      previousGame = { id: previous.id, reviewed: (count ?? 0) > 0 };
+    }
+
     return NextResponse.json({
       data: {
         ...details,
@@ -91,6 +112,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         roles_in_play: rolesInPlay,
         lady_of_lake_holder: ladyOfLakeHolder,
         ai_review: aiReview,
+        previous_game: previousGame,
       },
     });
   } catch (error) {

@@ -73,6 +73,13 @@ export interface RoomDetails {
     enabled: boolean;
     mode: 'blind' | 'god';
   };
+  // Play again: the finished game this room was opened from. Sent only to
+  // people who played it; null for everyone else and for any other room.
+  previous_game?: {
+    id: string;
+    /** It has an AI report */
+    reviewed: boolean;
+  } | null;
 }
 
 /**
