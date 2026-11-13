@@ -3,18 +3,53 @@
  * Tests the pure functions in src/lib/domain/roles.ts
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   getRoleRatio,
   shuffleArray,
   generateRolePool,
   distributeRoles,
   getRoleInfo,
-  validateRoleDistribution,
   type RoleAssignment,
 } from '@/lib/domain/roles';
 import { getDefaultConfig } from '@/lib/domain/role-config';
-import { ROLE_RATIOS } from '@/lib/utils/constants';
+import { ROLE_RATIOS, getSpecialRoleDescription } from '@/lib/utils/constants';
+
+/**
+ * The check every dealing test applies: the right number of good and evil
+ * players for the table size.
+ */
+function validateRoleDistribution(
+  assignments: RoleAssignment[],
+  expectedCount: number
+): { valid: boolean; error?: string } {
+  if (assignments.length !== expectedCount) {
+    return {
+      valid: false,
+      error: `Expected ${expectedCount} assignments, got ${assignments.length}`,
+    };
+  }
+
+  const ratio = getRoleRatio(expectedCount);
+  const goodCount = assignments.filter((a) => a.role === 'good').length;
+  const evilCount = assignments.filter((a) => a.role === 'evil').length;
+
+  if (goodCount !== ratio.good) {
+    return {
+      valid: false,
+      error: `Expected ${ratio.good} good players, got ${goodCount}`,
+    };
+  }
+
+  if (evilCount !== ratio.evil) {
+    return {
+      valid: false,
+      error: `Expected ${ratio.evil} evil players, got ${evilCount}`,
+    };
+  }
+
+  return { valid: true };
+}
 
 describe('roles', () => {
   describe('getRoleRatio', () => {
@@ -226,22 +261,51 @@ describe('roles', () => {
 
   describe('getRoleInfo', () => {
     it('should return correct info for good role', () => {
-      const info = getRoleInfo('good');
+      const info = getRoleInfo('good', true);
       expect(info.role).toBe('good');
       expect(info.role_name).toBe('Loyal Servant of Arthur');
       expect(info.role_description).toContain('loyal servant');
     });
 
     it('should return correct info for evil role', () => {
-      const info = getRoleInfo('evil');
+      const info = getRoleInfo('evil', true);
       expect(info.role).toBe('evil');
       expect(info.role_name).toBe('Minion of Mordred');
       expect(info.role_description).toContain('Mordred');
     });
 
     it('should return descriptions that are non-empty', () => {
-      expect(getRoleInfo('good').role_description.length).toBeGreaterThan(0);
-      expect(getRoleInfo('evil').role_description.length).toBeGreaterThan(0);
+      expect(getRoleInfo('good', true).role_description.length).toBeGreaterThan(0);
+      expect(getRoleInfo('evil', true).role_description.length).toBeGreaterThan(0);
+    });
+
+    it('should tell Oberon (Standard) that Merlin can see him when Merlin is in play', () => {
+      const info = getRoleInfo('evil', true, 'oberon_standard');
+      expect(info.role_name).toBe('Oberon');
+      expect(info.role_description).toContain('Merlin can see you.');
+    });
+
+    it('should not name Merlin in Oberon (Standard)\'s description without Merlin', () => {
+      const info = getRoleInfo('evil', false, 'oberon_standard');
+      expect(info.role_name).toBe('Oberon');
+      expect(info.role_description).not.toContain('Merlin');
+      expect(info.role_description).toContain('You do not know the other evil players, and they do not know you.');
+    });
+
+    it('should not name Merlin or the Assassin in any role dealt without Merlin', () => {
+      const pool = generateRolePool({ merlin: false, oberon: 'standard', lunatic: true, brute: true }, 10);
+      const roles = [...pool.good.map(sr => ['good', sr] as const), ...pool.evil.map(sr => ['evil', sr] as const)];
+      for (const [role, specialRole] of roles) {
+        const info = getRoleInfo(role, false, specialRole);
+        expect(info.role_description).not.toMatch(/Merlin|Assassin/);
+      }
+    });
+  });
+
+  describe('getSpecialRoleDescription', () => {
+    it('should say Oberon (Standard) is visible to Merlin only when Merlin is in play', () => {
+      expect(getSpecialRoleDescription('oberon_standard', true)).toContain('visible to Merlin');
+      expect(getSpecialRoleDescription('oberon_standard', false)).not.toContain('Merlin');
     });
   });
 
@@ -354,7 +418,7 @@ describe('roles', () => {
 
       // Check role info is available for each assignment
       assignments.forEach((a) => {
-        const info = getRoleInfo(a.role);
+        const info = getRoleInfo(a.role, true);
         expect(info.role_name).toBeDefined();
         expect(info.role_description).toBeDefined();
       });

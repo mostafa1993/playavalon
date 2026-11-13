@@ -247,109 +247,30 @@ const ROLE_INFO: Record<SpecialRole, Omit<RoleInfo, 'role'>> = {
 };
 
 /**
- * Get human-readable role info for a special role
+ * Oberon (Standard)'s description in a game without Merlin, where no one sees him
  */
-export function getRoleInfo(role: Role, specialRole?: SpecialRole): RoleInfo {
+const OBERON_STANDARD_DESCRIPTION_WITHOUT_MERLIN = 'You are Oberon, the mysterious evil. You do not know the other evil players, and they do not know you. Work alone to sabotage the quests!';
+
+/**
+ * Get human-readable role info for a special role
+ *
+ * @param merlinInPlay Whether the game has a Merlin; Oberon (Standard)'s description names him only then
+ */
+export function getRoleInfo(role: Role, merlinInPlay: boolean, specialRole?: SpecialRole): RoleInfo {
   // Default to basic roles if no special role specified
   const sr = specialRole || (role === 'good' ? 'servant' : 'minion');
   const info = ROLE_INFO[sr];
+
+  if (sr === 'oberon_standard' && !merlinInPlay) {
+    return {
+      role,
+      ...info,
+      role_description: OBERON_STANDARD_DESCRIPTION_WITHOUT_MERLIN,
+    };
+  }
 
   return {
     role,
     ...info,
   };
-}
-
-/**
- * Legacy function for backward compatibility
- */
-export function getBasicRoleInfo(role: Role): RoleInfo {
-  return getRoleInfo(role);
-}
-
-/**
- * Validate role distribution
- * Ensures correct number of good/evil players
- */
-export function validateRoleDistribution(
-  assignments: RoleAssignment[],
-  expectedCount: number
-): { valid: boolean; error?: string } {
-  if (assignments.length !== expectedCount) {
-    return {
-      valid: false,
-      error: `Expected ${expectedCount} assignments, got ${assignments.length}`,
-    };
-  }
-
-  const ratio = getRoleRatio(expectedCount);
-  const goodCount = assignments.filter((a) => a.role === 'good').length;
-  const evilCount = assignments.filter((a) => a.role === 'evil').length;
-
-  if (goodCount !== ratio.good) {
-    return {
-      valid: false,
-      error: `Expected ${ratio.good} good players, got ${goodCount}`,
-    };
-  }
-
-  if (evilCount !== ratio.evil) {
-    return {
-      valid: false,
-      error: `Expected ${ratio.evil} evil players, got ${evilCount}`,
-    };
-  }
-
-  return { valid: true };
-}
-
-/**
- * Get players visible to Merlin (all evil except Mordred and Oberon Chaos)
- */
-export function getPlayersVisibleToMerlin(assignments: RoleAssignment[]): string[] {
-  return assignments
-    .filter(a =>
-      a.role === 'evil' &&
-      a.specialRole !== 'mordred' &&
-      a.specialRole !== 'oberon_chaos'
-    )
-    .map(a => a.playerId);
-}
-
-/**
- * Get players visible to Percival (Merlin + Morgana)
- */
-export function getPlayersVisibleToPercival(assignments: RoleAssignment[]): string[] {
-  return assignments
-    .filter(a => a.specialRole === 'merlin' || a.specialRole === 'morgana')
-    .map(a => a.playerId);
-}
-
-/**
- * Get evil teammates (excluding Oberon variants who don't know others)
- */
-export function getEvilTeammatesForPlayer(
-  assignments: RoleAssignment[],
-  playerId: string
-): string[] {
-  const playerAssignment = assignments.find(a => a.playerId === playerId);
-  if (!playerAssignment || playerAssignment.role !== 'evil') {
-    return [];
-  }
-
-  // Oberon (both variants) doesn't know other evil players
-  if (playerAssignment.specialRole === 'oberon_standard' ||
-      playerAssignment.specialRole === 'oberon_chaos') {
-    return [];
-  }
-
-  // Other evil players see all evil except Oberon (both variants)
-  return assignments
-    .filter(a =>
-      a.role === 'evil' &&
-      a.playerId !== playerId &&
-      a.specialRole !== 'oberon_standard' &&
-      a.specialRole !== 'oberon_chaos'
-    )
-    .map(a => a.playerId);
 }

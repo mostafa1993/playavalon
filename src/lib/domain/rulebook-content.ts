@@ -211,6 +211,7 @@ export const GAME_PHASES: GamePhaseInfo[] = [
       'Evil team discusses who Merlin might be',
       'Assassin makes final selection',
       'Correct guess = Evil wins despite quest losses',
+      'Skipped in a game without Merlin: no Assassin is dealt, and Good wins at once',
     ],
   },
 ];
@@ -226,7 +227,8 @@ export interface WinCondition {
 
 export const WIN_CONDITIONS: WinCondition[] = [
   { team: 'good', description: '3 successful quests AND Merlin survives assassination' },
+  { team: 'good', description: 'In a game without Merlin, 3 successful quests win outright' },
   { team: 'evil', description: '3 failed quests' },
   { team: 'evil', description: '5 rejected team proposals in a row' },
-  { team: 'evil', description: 'Assassin correctly identifies Merlin' },
+  { team: 'evil', description: 'Assassin correctly identifies Merlin (only in a game with Merlin)' },
 ];

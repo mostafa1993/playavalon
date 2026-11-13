@@ -82,13 +82,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     const rcData: Record<string, unknown> = { ...roleConfig };
 
     // Get role info with special character details
-    const roleInfo = getRoleInfo(playerRole.role, playerRole.special_role);
+    const roleInfo = getRoleInfo(playerRole.role, roleConfig.merlin, playerRole.special_role);
 
     // Get visibility information based on special role
     let knownPlayers: string[] | undefined;
     let knownPlayersLabel: string | undefined;
     let hiddenEvilCount: number | undefined;
-    let abilityNote: string | undefined;
     let hasDecoy: boolean | undefined;
     let decoyWarning: string | undefined;
     let splitIntel: SplitIntelVisibility | undefined;
@@ -147,7 +146,6 @@ export async function GET(request: Request, { params }: RouteParams) {
 
             knownPlayers = [];
             knownPlayersLabel = '';
-            abilityNote = 'You see evil players divided: coordinated evil are certain, but Oberon is mixed with a good player.';
 
             hiddenEvilCount = roleConfig.mordred ? 1 : 0;
           }
@@ -196,7 +194,6 @@ export async function GET(request: Request, { params }: RouteParams) {
 
             knownPlayers = [];
             knownPlayersLabel = '';
-            abilityNote = 'You see players divided into two groups with different certainty levels.';
           }
         }
         // Feature 009: Handle Merlin Decoy Mode
@@ -234,31 +231,18 @@ export async function GET(request: Request, { params }: RouteParams) {
           } else {
             knownPlayersLabel = 'The Evil Among You';
           }
-
-          if (!hasDecoy && hiddenEvilCount && hiddenEvilCount > 0) {
-            abilityNote = `${hiddenEvilCount} evil ${hiddenEvilCount === 1 ? 'player is' : 'players are'} hidden from you!`;
-          }
         }
         // Standard Merlin visibility
         else {
           knownPlayers = await getPlayersVisibleToMerlin(supabase, room.id);
           knownPlayersLabel = 'The Evil Among You';
-          if (hiddenEvilCount && hiddenEvilCount > 0) {
-            abilityNote = `${hiddenEvilCount} evil ${hiddenEvilCount === 1 ? 'player is' : 'players are'} hidden from you!`;
-          }
         }
         break;
       }
 
       case 'percival':
         knownPlayers = await getPlayersVisibleToPercival(supabase, room.id);
-        if (knownPlayers.length === 1) {
-          knownPlayersLabel = 'This is Merlin';
-          abilityNote = 'Protect Merlin at all costs!';
-        } else {
-          knownPlayersLabel = 'One of These is Merlin';
-          abilityNote = 'Protect Merlin, but beware — Morgana appears the same to you!';
-        }
+        knownPlayersLabel = knownPlayers.length === 1 ? 'This is Merlin' : 'One of These is Merlin';
         break;
 
       case 'morgana': {
@@ -303,9 +287,6 @@ export async function GET(request: Request, { params }: RouteParams) {
             if (evilRingVisibility) {
               knownPlayers = [evilRingVisibility.knownTeammate.name];
               knownPlayersLabel = 'Your Known Teammate';
-              abilityNote = roleConfig.percival
-                ? 'Ring Visibility: You only know one teammate. You appear as Merlin to Percival!'
-                : 'Ring Visibility: You only know one teammate. Percival is not in this game.';
               break;
             }
           }
@@ -313,11 +294,6 @@ export async function GET(request: Request, { params }: RouteParams) {
 
         knownPlayers = await getEvilTeammates(supabase, room.id, user.id);
         knownPlayersLabel = 'Your Evil Teammates';
-        if (roleConfig.percival) {
-          abilityNote = 'You appear as Merlin to Percival. Use this to confuse and deceive!';
-        } else {
-          abilityNote = 'Percival is not in this game, so your disguise ability has no effect.';
-        }
         break;
       }
 
@@ -363,7 +339,6 @@ export async function GET(request: Request, { params }: RouteParams) {
             if (evilRingVisibility) {
               knownPlayers = [evilRingVisibility.knownTeammate.name];
               knownPlayersLabel = 'Your Known Teammate';
-              abilityNote = 'Ring Visibility: You only know one teammate. Merlin does not know you are evil!';
               break;
             }
           }
@@ -371,20 +346,13 @@ export async function GET(request: Request, { params }: RouteParams) {
 
         knownPlayers = await getEvilTeammates(supabase, room.id, user.id);
         knownPlayersLabel = 'Your Evil Teammates';
-        abilityNote = 'Merlin does not know you are evil. Lead from the shadows!';
         break;
       }
 
       case 'oberon_standard':
-        knownPlayers = [];
-        knownPlayersLabel = undefined;
-        abilityNote = "You work alone. Your teammates don't know you, and you don't know them. Merlin can see you.";
-        break;
-
       case 'oberon_chaos':
         knownPlayers = [];
         knownPlayersLabel = undefined;
-        abilityNote = 'Complete isolation! No one knows you are evil — not even Merlin!';
         break;
 
       case 'assassin':
@@ -430,9 +398,6 @@ export async function GET(request: Request, { params }: RouteParams) {
             if (evilRingVisibility) {
               knownPlayers = [evilRingVisibility.knownTeammate.name];
               knownPlayersLabel = 'Your Known Teammate';
-              abilityNote = playerRole.special_role === 'assassin'
-                ? 'Ring Visibility: You only know one teammate. If the good team wins 3 quests, you have one chance to identify Merlin!'
-                : 'Ring Visibility: You only know one teammate. Work in the shadows!';
               break;
             }
           }
@@ -440,9 +405,6 @@ export async function GET(request: Request, { params }: RouteParams) {
 
         knownPlayers = await getEvilTeammates(supabase, room.id, user.id);
         knownPlayersLabel = 'Your Evil Teammates';
-        abilityNote = playerRole.special_role === 'assassin'
-          ? 'If the good team wins 3 quests, you have one chance to identify Merlin!'
-          : 'Work with your fellow minions to sabotage the quests!';
         break;
       }
 
@@ -450,7 +412,6 @@ export async function GET(request: Request, { params }: RouteParams) {
       default:
         knownPlayers = undefined;
         knownPlayersLabel = undefined;
-        abilityNote = 'Stay vigilant! Work with your fellow knights to identify the traitors.';
         break;
     }
 
@@ -460,12 +421,12 @@ export async function GET(request: Request, { params }: RouteParams) {
         special_role: playerRole.special_role,
         role_name: roleInfo.role_name,
         role_description: roleInfo.role_description,
+        merlin_in_play: roleConfig.merlin,
         is_confirmed: playerRole.is_confirmed,
         has_lady_of_lake: playerRole.has_lady_of_lake || false,
         known_players: knownPlayers,
         known_players_label: knownPlayersLabel,
         hidden_evil_count: hiddenEvilCount,
-        ability_note: abilityNote,
         has_decoy: hasDecoy,
         decoy_warning: decoyWarning,
         split_intel: splitIntel,

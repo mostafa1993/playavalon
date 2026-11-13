@@ -40,7 +40,8 @@ interface GameOverProps {
   playerRole?: 'good' | 'evil';
   players: GamePlayer[];
   currentPlayerId?: string;
-  hasMerlin?: boolean;
+  /** Whether a Merlin was dealt: the quiz and the Good win text depend on it */
+  hasMerlin: boolean;
 }
 
 export function GameOver({
@@ -51,7 +52,7 @@ export function GameOver({
   playerRole,
   players,
   currentPlayerId,
-  hasMerlin = false,
+  hasMerlin,
 }: GameOverProps) {
   const router = useRouter();
 
@@ -128,7 +129,7 @@ export function GameOver({
   const isWinner = playerRole === winner;
   const score = countQuestResults(questResults);
   const announcement = getWinnerAnnouncement(winner, winReason as '3_quest_successes' | '3_quest_failures' | '5_rejections' | 'assassin_found_merlin');
-  const reasonText = getWinReasonText(winReason as '3_quest_successes' | '3_quest_failures' | '5_rejections' | 'assassin_found_merlin');
+  const reasonText = getWinReasonText(winReason as '3_quest_successes' | '3_quest_failures' | '5_rejections' | 'assassin_found_merlin', hasMerlin);
 
   // Get role display info
   const getRoleDisplay = (specialRole?: string, role?: 'good' | 'evil') => {

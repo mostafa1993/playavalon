@@ -502,7 +502,7 @@ export interface GameEndedEventData {
 // ============================================
 
 export type WinReason =
-  | '3_quest_successes'      // Good won 3 quests (Assassin failed to find Merlin)
+  | '3_quest_successes'      // Good won 3 quests (and the Assassin, if dealt, missed Merlin)
   | '3_quest_failures'       // Evil won 3 quests
   | '5_rejections'           // 5 consecutive team rejections
   | 'assassin_found_merlin'; // Assassin correctly identified Merlin

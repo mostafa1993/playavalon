@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { validateRoleConfig, getRoleDetails } from '@/lib/domain/role-config';
-import { SPECIAL_ROLES, LADY_OF_LAKE_MIN_RECOMMENDED } from '@/lib/utils/constants';
+import { SPECIAL_ROLES, LADY_OF_LAKE_MIN_RECOMMENDED, getSpecialRoleDescription } from '@/lib/utils/constants';
 import { canEnableEvilRingVisibility, shouldAutoDisableRing } from '@/lib/domain/evil-ring-visibility';
 import { AlertTriangle } from 'lucide-react';
 import type { RoleConfig, OberonMode } from '@/types/role-config';
@@ -172,14 +172,14 @@ export function RoleConfigPanel({
                     className="text-sm font-medium bg-avalon-midnight border border-avalon-silver/30 rounded px-2 py-1.5 text-avalon-silver"
                   >
                     <option value="">Disabled</option>
-                    <option value="standard">Standard (Visible to Merlin)</option>
+                    <option value="standard">{config.merlin ? 'Standard (Visible to Merlin)' : 'Standard'}</option>
                     <option value="chaos">Chaos (Hidden from Everyone)</option>
                   </select>
                 </div>
                 <p className="text-sm text-avalon-silver/70 mt-1">
                   {config.oberon === 'chaos'
                     ? SPECIAL_ROLES.oberon_chaos.description
-                    : SPECIAL_ROLES.oberon_standard.description}
+                    : getSpecialRoleDescription('oberon_standard', config.merlin)}
                 </p>
               </div>
             </div>

@@ -116,11 +116,15 @@ export function checkEvilWins(questResults: QuestResult[]): boolean {
 
 /**
  * Get win reason display text
+ *
+ * @param hasMerlin Whether a Merlin was dealt (only then was there an Assassin to fail)
  */
-export function getWinReasonText(reason: WinReason): string {
+export function getWinReasonText(reason: WinReason, hasMerlin: boolean): string {
   switch (reason) {
     case '3_quest_successes':
-      return 'Good completed 3 successful quests! The Assassin failed to find Merlin.';
+      return hasMerlin
+        ? 'Good completed 3 successful quests! The Assassin failed to find Merlin.'
+        : 'Good completed 3 successful quests!';
     case '3_quest_failures':
       return 'Evil sabotaged 3 quests!';
     case '5_rejections':

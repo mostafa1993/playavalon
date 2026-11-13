@@ -49,6 +49,7 @@ export function RoleRevealModal({
     special_role: specialRole,
     role_name: roleName,
     role_description: roleDescription,
+    merlin_in_play: merlinInPlay,
     known_players: knownPlayers,
     known_players_label: knownPlayersLabel,
     hidden_evil_count: hiddenEvilCount,
@@ -406,7 +407,7 @@ export function RoleRevealModal({
             ) : specialRole === 'oberon_standard' ? (
               <>
                 👤 <strong>Work alone!</strong> You don&apos;t know the other evil
-                players, and they don&apos;t know you. Merlin can see you.
+                players, and they don&apos;t know you.{merlinInPlay && ' Merlin can see you.'}
               </>
             ) : specialRole === 'oberon_chaos' ? (
               <>

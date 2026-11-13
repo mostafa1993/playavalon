@@ -197,6 +197,17 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
 };
 
 /**
+ * A special role's description for a game with or without Merlin.
+ * Oberon (Standard) is the one role dealt without Merlin whose description names him.
+ */
+export function getSpecialRoleDescription(role: SpecialRole, merlinInPlay: boolean): string {
+  if (role === 'oberon_standard' && !merlinInPlay) {
+    return 'Works alone, hidden from evil team';
+  }
+  return SPECIAL_ROLES[role].description;
+}
+
+/**
  * Good team special roles (for UI grouping)
  */
 export const GOOD_SPECIAL_ROLES: SpecialRole[] = ['merlin', 'percival', 'servant'];
