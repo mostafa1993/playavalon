@@ -33,6 +33,7 @@ const turn = (
   speakerId,
   transcript,
   confidence: 0.9,
+  low_confidence: false,
   startedAt: at('10:00:00'),
   durationSec: 30,
   proposalNumber,
@@ -110,8 +111,8 @@ const GOD: GodGameRecord = {
     startedAt: at('10:30:00'),
     durationSec: 120,
     speakers: [
-      { speakerId: 'b', transcript: 'آنا مرلین است', confidence: 0.6, durationSec: 120 },
-      { speakerId: 'd', transcript: '', confidence: null, durationSec: 120 },
+      { speakerId: 'b', transcript: 'آنا مرلین است', confidence: 0.6, low_confidence: false, durationSec: 120 },
+      { speakerId: 'd', transcript: '', confidence: null, low_confidence: false, durationSec: 120 },
     ],
   },
 };
@@ -170,6 +171,21 @@ test('the blind record reads with no role and no Lady result', () => {
   assert.ok(!/ — (good|evil)|\((merlin|assassin|servant|morgana|percival)\)|saw (good|evil)/.test(text), text);
   assert.match(text, /Lady of the Lake after quest 1: Ed looked at ٔBo \(what Ed saw stayed private\)/);
   assert.match(text, /Vote on proposal 1\.2: approve ٔBo, Cy, Di; reject Ana, Ed → approved/);
+});
+
+test('low-confidence talk is marked, in the turns and the assassin phase', () => {
+  const record: GodGameRecord = {
+    ...GOD,
+    turns: GOD.turns.map((t) => (t.quest === 1 && t.turn === 0 && t.round === 0 ? { ...t, confidence: 0.3, low_confidence: true } : t)),
+    discussion: {
+      ...GOD.discussion!,
+      speakers: GOD.discussion!.speakers.map((s) => ({ ...s, low_confidence: s.speakerId === 'b' })),
+    },
+  };
+  const text = recordText(record);
+  assert.match(text, /\n {2}1\.1\.1 Ana \[low confidence\]: من بو را می‌برم\n {2}1\.1\.2 Cy: \(no transcript\)\n/);
+  assert.match(text, /\n {2}ٔBo \[low confidence\]: آنا مرلین است\n/);
+  assert.equal((text.match(/\[low confidence\]/g) ?? []).length, 2);
 });
 
 test('talk in a quest that never had a proposal is kept, before any proposal', () => {

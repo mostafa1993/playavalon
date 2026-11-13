@@ -8,8 +8,8 @@
  * Each run goes to <out>/<gameId>/<mode>/run-<k>/ (k = 1…N), which must not
  * hold anything yet. Needs Vertex AI: GCP_PROJECT_ID, GCP_LLM_LOCATION (global
  * for the preview models), GCP_LLM_MODEL and GOOGLE_APPLICATION_CREDENTIALS;
- * TRANSCRIPT_CORRECTION_ENABLED and the RETRY_* settings as the service reads
- * them (src/config.ts).
+ * TRANSCRIPT_CORRECTION_ENABLED, LOW_CONFIDENCE_THRESHOLD and the RETRY_*
+ * settings as the service reads them (src/config.ts).
  */
 
 import fs from 'node:fs/promises';
@@ -150,6 +150,7 @@ async function main(): Promise<void> {
       await replayRun({
         llm,
         correction: config.correction.enabled,
+        lowConfidenceThreshold: config.lowConfidenceThreshold,
         exported,
         sourceDir,
         runDir,

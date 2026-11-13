@@ -165,7 +165,8 @@ async function makeGodFolder(): Promise<string> {
       transcript: `${SHIPPED} corrected`,
       transcript_raw: `raw ${label(quest, round, turn)}`,
       transcript_corrected: true,
-      confidence: 0.9,
+      // One turn the recognizer was unsure of.
+      confidence: label(quest, round, turn) === '1_1_1' ? 0.3 : 0.9,
       language: 'fa-IR',
       summary: {
         key_points: [SHIPPED],
@@ -289,6 +290,7 @@ async function replay(mode: ReplayMode) {
   await replayRun({
     llm: stub.llm,
     correction: true,
+    lowConfidenceThreshold: 0.5,
     exported: makeExport('god'),
     sourceDir,
     runDir,
@@ -341,6 +343,7 @@ test('turn files without a round segment are refused, before any model call', as
     replayRun({
       llm: stub.llm,
       correction: true,
+      lowConfidenceThreshold: 0.5,
       exported: makeExport('god'),
       sourceDir,
       runDir,
@@ -377,7 +380,7 @@ test('a run folder starts with the inputs only', async () => {
     assert.ok(!text.includes(SHIPPED), `${file} carries a shipped derived value`);
     if (!file.startsWith('turn_')) continue;
     const turn = JSON.parse(text) as Record<string, unknown>;
-    for (const key of ['transcript', 'transcript_corrected']) {
+    for (const key of ['transcript', 'transcript_corrected', 'low_confidence']) {
       assert.ok(!(key in turn), `${file} has ${key}`);
     }
     assert.match(turn.transcript_raw as string, /^raw /);
@@ -403,6 +406,15 @@ test('god mode: the report reads the whole record, once per language', async () 
   const { calls, read } = await replay('god');
   const turn = read('turn_1_0_0.json') as Record<string, unknown>;
   assert.equal(turn.transcript, 'fixed raw 1_0_0');
+  assert.equal(turn.low_confidence, false);
+  assert.equal((read('turn_1_1_1.json') as Record<string, unknown>).low_confidence, true);
+
+  // The proofreader knows the table's names.
+  const proofread = calls.filter((c) => c.file === 'correct-transcript.yml');
+  assert.equal(proofread.length, TURNS.length + 1);
+  for (const c of proofread) {
+    assert.deepEqual((c.vars.players as string).split('\n').sort(), ['- Ana', '- Ben', '- Cy', '- Dee', '- Eve']);
+  }
 
   const reports = calls.filter((c) => c.file === 'report-god.yml');
   assert.deepEqual(reports.map((c) => c.vars.language).sort(), ['English', 'Persian (فارسی)']);
@@ -410,7 +422,7 @@ test('god mode: the report reads the whole record, once per language', async () 
   // Each proposal with its own leader, the talk under it, its vote; the
   // proofread talk; the discussion; the pick.
   assert.match(record, /Proposal 1\.1: leader Ana; team Ana, Ben\n  1\.1\.1 Ana: fixed raw 1_0_0\n  1\.1\.2 Ben: fixed raw 1_0_1\n  Vote on proposal 1\.1: approve Ana, Ben; reject Cy, Dee, Eve → rejected/);
-  assert.match(record, /Proposal 1\.2: leader Ben; team Ben, Cy/);
+  assert.match(record, /Proposal 1\.2: leader Ben; team Ben, Cy\n {2}1\.2\.1 Ben: fixed raw 1_1_0\n {2}1\.2\.2 Cy \[low confidence\]: fixed raw 1_1_1\n/);
   assert.match(record, /Ana — good \(merlin\)/);
   assert.match(record, /Eve: fixed raw discussion/);
   assert.match(record, /The assassin's pick \(named as Merlin\): Ana/);

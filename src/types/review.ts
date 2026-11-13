@@ -70,6 +70,8 @@ export interface ReviewRecordDiscussion {
     speakerId: string;
     transcript: string;
     confidence: number | null;
+    /** Speech-to-text was unsure of it: the page marks it as unreliable. */
+    low_confidence: boolean;
     durationSec: number;
   }>;
 }

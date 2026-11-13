@@ -56,19 +56,27 @@ export function talkLabel(t: Pick<RecordTurn, 'quest' | 'round' | 'turn'>): stri
   return t.quest === 0 ? `intro.${t.turn + 1}` : `${t.quest}.${t.round + 1}.${t.turn + 1}`;
 }
 
+/** How the record marks a transcript flagged low_confidence (plan D8). */
+const LOW_CONFIDENCE_MARK = '[low confidence]';
+
 /**
  * The record as the report's prompt reads it: names instead of ids, and the
  * game in order — each proposal followed by the talk about it and its vote,
- * each quest's mission and Lady of the Lake after its proposals. Roles only in
- * a god record; a blind record has none to give. A cut record (the blind
- * detective's) ends where it was cut, with no outcome.
+ * each quest's mission and Lady of the Lake after its proposals. A transcript
+ * flagged low_confidence is marked. Roles only in a god record; a blind record
+ * has none to give. A cut record (the blind detective's) ends where it was
+ * cut, with no outcome.
  */
 export function recordText(record: GameRecord): string {
   const nameById = new Map(record.players.map((p) => [p.id, p.display_name]));
   const name = (id: string) => nameById.get(id) ?? id;
   const names = (ids: string[]) => (ids.length > 0 ? ids.map(name).join(', ') : 'nobody');
   const said = (transcript: string) => transcript.trim() || '(no transcript)';
-  const turnLine = (t: RecordTurn) => `${talkLabel(t)} ${name(t.speakerId)}: ${said(t.transcript)}`;
+  // Speech the recognizer was unsure of: the prompts never quote it.
+  const unsure = (s: { low_confidence: boolean }) =>
+    s.low_confidence ? ` ${LOW_CONFIDENCE_MARK}` : '';
+  const turnLine = (t: RecordTurn) =>
+    `${talkLabel(t)} ${name(t.speakerId)}${unsure(t)}: ${said(t.transcript)}`;
   const lines: string[] = [];
 
   if (record.mode === 'god') {
@@ -133,7 +141,9 @@ export function recordText(record: GameRecord): string {
       const speakers = record.discussion.speakers.filter((s) => s.transcript.trim());
       lines.push('The discussion before the pick:');
       if (speakers.length === 0) lines.push('  (nothing transcribed)');
-      for (const s of speakers) lines.push(`  ${name(s.speakerId)}: ${s.transcript.trim()}`);
+      for (const s of speakers) {
+        lines.push(`  ${name(s.speakerId)}${unsure(s)}: ${s.transcript.trim()}`);
+      }
     }
     lines.push(
       `The assassin's pick (named as Merlin): ${record.assassinPickId ? name(record.assassinPickId) : 'none'}`

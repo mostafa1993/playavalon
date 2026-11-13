@@ -602,8 +602,21 @@ function AssassinPhaseSection({
                   <span className="text-avalon-text font-semibold">{s.name}</span>
                   <span className="text-avalon-silver/80 text-xs">{Math.round(s.durationSec)}s</span>
                 </div>
+                {s.lowConfidence && (
+                  <p className="text-avalon-silver/80 text-xs mt-1">
+                    {t(
+                      'صدا واضح شنیده نشد؛ این متن ممکن است نادرست باشد.',
+                      'Unclear audio: this transcript may be wrong.'
+                    )}
+                  </p>
+                )}
                 {/* The talk is Persian whatever the report's language. */}
-                <p dir="auto" className="text-avalon-text-secondary text-sm mt-1 whitespace-pre-wrap">
+                <p
+                  dir="auto"
+                  className={`text-sm mt-1 whitespace-pre-wrap ${
+                    s.lowConfidence ? 'text-avalon-silver/70 italic' : 'text-avalon-text-secondary'
+                  }`}
+                >
                   {s.transcript}
                 </p>
               </div>

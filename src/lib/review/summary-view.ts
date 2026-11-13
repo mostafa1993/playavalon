@@ -59,8 +59,15 @@ export interface ReviewAssassinPhaseView {
   /** Who the Assassin named as Merlin. */
   pick: string | null;
   durationSec: number | null;
-  /** Each speaker's transcript, as the record holds it; silent speakers left out. */
-  speakers: Array<{ name: string; transcript: string; durationSec: number }>;
+  /** Each speaker's transcript, as the record holds it; silent speakers left
+   *  out. `lowConfidence`: speech-to-text was unsure of it, and the page marks
+   *  it as unreliable. */
+  speakers: Array<{
+    name: string;
+    transcript: string;
+    durationSec: number;
+    lowConfidence: boolean;
+  }>;
 }
 
 export interface ReviewView {
@@ -185,7 +192,12 @@ export function summaryView(summary: unknown): ReviewView | null {
           durationSec: discussion ? discussion.durationSec : null,
           speakers: (discussion?.speakers ?? [])
             .filter((s) => s.transcript.trim().length > 0)
-            .map((s) => ({ name: name(s.speakerId), transcript: s.transcript, durationSec: s.durationSec })),
+            .map((s) => ({
+              name: name(s.speakerId),
+              transcript: s.transcript,
+              durationSec: s.durationSec,
+              lowConfidence: s.low_confidence,
+            })),
         }
       : null;
 

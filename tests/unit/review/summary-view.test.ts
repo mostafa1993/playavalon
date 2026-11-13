@@ -74,8 +74,9 @@ const god: GodReviewSummary = {
       startedAt: '2026-01-01T10:30:00.000Z',
       durationSec: 119.6,
       speakers: [
-        { speakerId: 'd', transcript: 'آنا مرلین است', confidence: 0.6, durationSec: 119.6 },
-        { speakerId: 'b', transcript: '  ', confidence: null, durationSec: 119.6 },
+        { speakerId: 'd', transcript: 'آنا مرلین است', confidence: 0.6, low_confidence: false, durationSec: 119.6 },
+        { speakerId: 'b', transcript: '  ', confidence: null, low_confidence: false, durationSec: 119.6 },
+        { speakerId: 'e', transcript: 'شاید آنا', confidence: 0.32, low_confidence: true, durationSec: 119.6 },
       ],
     },
   },
@@ -170,7 +171,11 @@ describe('summaryView', () => {
       assassin: 'Bo',
       pick: 'Ana',
       durationSec: 119.6,
-      speakers: [{ name: 'Di', transcript: 'آنا مرلین است', durationSec: 119.6 }],
+      // Silent speakers left out; the unsure transcript kept, and marked.
+      speakers: [
+        { name: 'Di', transcript: 'آنا مرلین است', durationSec: 119.6, lowConfidence: false },
+        { name: 'Ed', transcript: 'شاید آنا', durationSec: 119.6, lowConfidence: true },
+      ],
     });
     expect(view.outcome).toEqual({ winner: 'evil', reason: 'The Assassin found Merlin' });
     expect(view.narrative).toBe('The story.');

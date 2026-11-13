@@ -93,6 +93,7 @@ async function startSession(
   const ctx: PipelineContext = {
     llm,
     correction: config.correction.enabled,
+    lowConfidenceThreshold: config.lowConfidenceThreshold,
     gameId: game.id,
     dir,
     mode: game.ai_review_mode,

@@ -3,7 +3,7 @@
  * RecordedDiscussion object. For each speaker's audio clip:
  *   1. silence check,
  *   2. STT,
- *   3. correction (optional, config-gated),
+ *   3. correction (optional, config-gated) and the low-confidence flag,
  * then writes a single discussion.json at the game's directory root, which
  * the game record takes in like the turns (plan D15).
  *
@@ -21,6 +21,7 @@ import { transcribe } from '@avalon/shared';
 import { isSilent } from '@avalon/shared';
 import { writeJsonAtomic } from '../storage/atomicWrite.js';
 import { discussionPath } from '../storage/layout.js';
+import { isLowConfidence } from './confidence.js';
 import { correctTranscript } from './transcriptCorrector.js';
 import type {
   DiscussionJson,
@@ -68,7 +69,7 @@ async function transcribeSpeaker(
   }
 }
 
-/** Correction for one speaker's transcribed clip. */
+/** Correction and the low-confidence flag for one speaker's transcribed clip. */
 async function finishSpeaker(
   ctx: PipelineContext,
   raw: RawDiscussionSpeaker
@@ -77,7 +78,7 @@ async function finishSpeaker(
   let corrected = false;
   if (ctx.correction && raw.transcript_raw.trim().length > 0) {
     try {
-      transcript = await correctTranscript(ctx.llm, raw.transcript_raw);
+      transcript = await correctTranscript(ctx.llm, raw.transcript_raw, ctx.meta.players);
       corrected = true;
     } catch (err) {
       ctx.log.error(`discussion correction failed for ${raw.display_name}, using raw STT`, err);
@@ -93,6 +94,7 @@ async function finishSpeaker(
     transcript_raw: raw.transcript_raw,
     transcript_corrected: corrected,
     confidence: raw.confidence,
+    low_confidence: isLowConfidence(raw.confidence, ctx.lowConfidenceThreshold),
   };
 }
 

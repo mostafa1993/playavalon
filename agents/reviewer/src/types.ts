@@ -74,6 +74,9 @@ export interface TurnJson extends RawTurnJson {
   transcript: string;
   /** True if the LLM correction step ran successfully on this turn. */
   transcript_corrected: boolean;
+  /** Its STT confidence is below LOW_CONFIDENCE_THRESHOLD: the report never
+   *  quotes it. */
+  low_confidence: boolean;
 }
 
 /** One speaker's clip from the assassin-phase discussion as speech-to-text
@@ -91,6 +94,8 @@ export interface RawDiscussionSpeaker {
 export interface DiscussionSpeakerRecord extends RawDiscussionSpeaker {
   transcript: string;
   transcript_corrected: boolean;
+  /** As a turn's: below LOW_CONFIDENCE_THRESHOLD. */
+  low_confidence: boolean;
 }
 
 /** The assassin-phase discussion as recorded and transcribed, before any
@@ -204,6 +209,8 @@ export interface RecordTurn {
   speakerId: string;
   transcript: string;
   confidence: number | null;
+  /** The turn file's flag: its transcript may be wrong, and is never quoted. */
+  low_confidence: boolean;
   startedAt: string;
   durationSec: number;
   /** The proposal of `quest` this talk was about: the first one whose vote
@@ -217,6 +224,8 @@ export interface RecordDiscussionSpeaker {
   speakerId: string;
   transcript: string;
   confidence: number | null;
+  /** The page marks it as unreliable; the report never quotes it. */
+  low_confidence: boolean;
   durationSec: number;
 }
 

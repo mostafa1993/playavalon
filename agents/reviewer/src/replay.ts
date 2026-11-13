@@ -212,6 +212,8 @@ export interface ReplayRunOptions {
   llm: LLMClient;
   /** Run the proofreading pass (TRANSCRIPT_CORRECTION_ENABLED). */
   correction: boolean;
+  /** LOW_CONFIDENCE_THRESHOLD. */
+  lowConfidenceThreshold: number;
   exported: ExportedGame;
   /** The game's stored folder: turn files, discussion.json. */
   sourceDir: string;
@@ -234,6 +236,7 @@ export async function replayRun(opts: ReplayRunOptions): Promise<void> {
   const ctx: PipelineContext = {
     llm: opts.llm,
     correction: opts.correction,
+    lowConfidenceThreshold: opts.lowConfidenceThreshold,
     gameId,
     dir: runDir,
     mode,

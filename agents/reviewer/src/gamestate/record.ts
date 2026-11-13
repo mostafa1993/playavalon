@@ -5,7 +5,8 @@
  * It holds the roster and seats; each proposal with its leader, team, each
  * player's vote and its times; each mission's team and card counts; who used
  * Lady of the Lake on whom; the assassin's pick; the outcome; and every turn
- * and assassin-phase transcript, each turn joined to the proposal it was about.
+ * and assassin-phase transcript, flagged when its confidence was low, each
+ * turn joined to the proposal it was about.
  *
  * Per mode: a god record adds the roles and the Lady results. A blind record
  * holds public play only, and its build never asks the source for roles or
@@ -87,6 +88,7 @@ export async function buildGameRecord(
         speakerId: s.identity,
         transcript: s.transcript,
         confidence: s.confidence,
+        low_confidence: s.low_confidence,
         durationSec: s.durationSec,
       })),
     },
@@ -267,6 +269,7 @@ function toRecordTurn(
     speakerId: json.speakerIdentity,
     transcript: json.transcript,
     confidence: json.confidence,
+    low_confidence: json.low_confidence,
     startedAt: json.startedAt,
     durationSec: json.durationSec,
     proposalNumber: proposalFor(quest, json.startedAt, proposals),

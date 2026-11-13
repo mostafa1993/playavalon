@@ -66,6 +66,7 @@ const RECORD: GodGameRecord = {
       speakerId: 'a',
       transcript: 'بو را می‌برم',
       confidence: 0.9,
+      low_confidence: false,
       startedAt: at('10:00:00'),
       durationSec: 30,
       proposalNumber: 1,

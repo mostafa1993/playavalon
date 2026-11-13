@@ -64,7 +64,8 @@ game end:  database rows + turn files + discussion.json  →  record.json  →  
   player. Everything else on the review page is the record's: the summary carries the
   record (without the turns' talk) and the page (`src/lib/review/summary-view.ts` in
   the app) renders the roles, each proposal's leader, team and votes, each mission,
-  Lady of the Lake, the assassin's pick and each assassin-phase speaker's transcript.
+  Lady of the Lake, the assassin's pick and each assassin-phase speaker's transcript
+  (marked as unreliable when it is `low_confidence`).
 - **The check** (`src/reviewer/checkReport.ts`, plan row D): once a report is written,
   code splits its text (narrative, quest commentary, performance notes) into numbered
   statements and numbers the lines of the record it was written from. One call
@@ -115,15 +116,23 @@ See repo-root `.env.example`. Required vars:
     STT transcript goes through an LLM proofreading pass
     (`prompts/correct-transcript.yml`) before it reaches the record and the report.
     Fixes Persian STT's common error classes (misheard words, wrong verb
-    persons, homophones, Persian half-space / number glitches). The
-    turn JSON preserves both `transcript` (corrected) and `transcript_raw`.
+    persons, homophones, Persian half-space / number glitches). It gets the
+    table's names, to recognize a misheard name, which it writes in Persian script
+    as spoken, and the prompt lists the game's words (roles, sides, the play) as
+    players say them. The turn JSON preserves both `transcript` (corrected) and
+    `transcript_raw`.
+  - `LOW_CONFIDENCE_THRESHOLD` — a turn or assassin-phase transcript whose STT
+    confidence is below this (default `0.5`) is flagged `low_confidence` in its
+    turn file, `discussion.json` and the record: the report's prompts and the
+    check never quote it, and the review page shows the assassin-phase transcript
+    marked as unreliable. Flagged, never dropped.
 
 ## Output layout
 
 ```
 $DATA_DIR/<game_id>/
   meta.json                        # players, roles, seating (written at game start)
-  turn_<quest>_<round>_<idx>.json  # raw + corrected transcript
+  turn_<quest>_<round>_<idx>.json  # raw + corrected transcript, low_confidence
   discussion.json                  # the assassin-phase discussion, if any (raw + corrected)
   guess_log.json                   # blind mode: the detective's read per round (never read back)
   record.json                      # the game record (written at game end)
@@ -135,8 +144,8 @@ $DATA_DIR/<game_id>/
 the turn files (`src/gamestate/record.ts`): the roster and seats; each proposal
 with its leader, team, each player's vote and its times; each mission's team and
 card counts; who used Lady of the Lake on whom; the assassin's pick; the outcome;
-and every turn and assassin-phase transcript in order, each turn joined to the
-proposal it was about (the first of its quest whose vote closed after the turn
+and every turn and assassin-phase transcript in order, with its `low_confidence`
+flag, each turn joined to the proposal it was about (the first of its quest whose vote closed after the turn
 started). A god-mode record adds the roles and the Lady results. A blind-mode
 record holds public play only: its build never reads `player_roles` or the Lady
 `result`. No record holds who played a fail card (`quest_actions` is never
@@ -184,8 +193,8 @@ Inputs:
 - `--runs` (default 1), `--concurrency` — turns in flight (default 6).
 - Environment: what the service reads for the model — `GCP_PROJECT_ID`,
   `GCP_LLM_LOCATION` (`global` for the preview models), `GCP_LLM_MODEL`,
-  `GOOGLE_APPLICATION_CREDENTIALS`, `TRANSCRIPT_CORRECTION_ENABLED`, `RETRY_*`,
-  `PROMPTS_DIR`. No database, LiveKit or Azure.
+  `GOOGLE_APPLICATION_CREDENTIALS`, `TRANSCRIPT_CORRECTION_ENABLED`,
+  `LOW_CONFIDENCE_THRESHOLD`, `RETRY_*`, `PROMPTS_DIR`. No database, LiveKit or Azure.
 
 Outputs: each run in `<out>/<gameId>/<mode>/run-<k>/` (k = 1…N), which must be new
 or empty; every run folder is checked before the first model call. It starts with
@@ -220,7 +229,7 @@ npm run dev
 Regression tests verify prompt YAML files parse, declare the right
 `response_mime_type`, and reference exactly the variables the agent code
 passes in — catching drift between a prompt and its caller. Plus unit tests
-for the silence detector, the game record, the final report (the record as its
+for the silence detector, the low-confidence flag, the game record, the final report (the record as its
 prompt reads it, and the summary built around a stub model's answer), the
 report's check (flagged statements rewritten, a clean report left alone), the
 blind detective (its read checked against the setup's roles and counts, the re-ask,

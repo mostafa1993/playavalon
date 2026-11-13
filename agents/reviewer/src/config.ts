@@ -73,6 +73,9 @@ export interface PipelineConfig {
      *  extra LLM call (Gemini Flash by default) per non-empty turn. */
     enabled: boolean;
   };
+  /** A transcript whose STT confidence is below this is flagged
+   *  `low_confidence`: the report never quotes it, the page marks it. */
+  lowConfidenceThreshold: number;
 }
 
 export interface AgentConfig extends PipelineConfig {
@@ -159,6 +162,7 @@ export function loadPipelineConfig(): PipelineConfig {
     correction: {
       enabled: boolEnv('TRANSCRIPT_CORRECTION_ENABLED', true),
     },
+    lowConfidenceThreshold: floatEnv('LOW_CONFIDENCE_THRESHOLD', 0.5, 0),
   };
 }
 

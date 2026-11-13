@@ -3,7 +3,8 @@
  * The live service (index.ts) runs them as the game goes; the replay
  * (replay.ts) runs the same steps after speech-to-text on a stored game.
  *
- *   per turn:        STT (live only) → proofreading → turn file
+ *   per turn:        STT (live only) → proofreading (with the table's names)
+ *                    → turn file, flagged when its confidence is low
  *   per round:       the blind detective's guess update (GuessTracker), from
  *                    the public record so far
  *   assassin phase:  the discussion (reviewer/discussionProcessor.ts)
@@ -19,6 +20,7 @@ import type { RecordSource } from './gamestate/recordSource.js';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
 import { checkPath, recordPath, summaryPath, turnPath } from './storage/layout.js';
 import { checkReport } from './reviewer/checkReport.js';
+import { isLowConfidence } from './reviewer/confidence.js';
 import { correctTranscript } from './reviewer/transcriptCorrector.js';
 import { writeBlindReport, writeGodReport } from './reviewer/finalReport.js';
 import type { GuessTracker } from './reviewer/guessTracker.js';
@@ -41,6 +43,9 @@ export interface PipelineContext {
   llm: LLMClient;
   /** Run the proofreading pass on each transcript (TRANSCRIPT_CORRECTION_ENABLED). */
   correction: boolean;
+  /** Below this STT confidence a transcript is flagged low_confidence
+   *  (LOW_CONFIDENCE_THRESHOLD). */
+  lowConfidenceThreshold: number;
   gameId: string;
   /** The game's folder: every file a step reads or writes is in it. */
   dir: string;
@@ -138,19 +143,22 @@ export async function processTurn(
   await processRawTurn(ctx, raw);
 }
 
-/** The steps after STT for one turn: proofreading and the turn file. */
+/**
+ * The steps after STT for one turn: proofreading, the low-confidence flag and
+ * the turn file.
+ */
 export async function processRawTurn(ctx: PipelineContext, turn: RawTurnJson): Promise<void> {
-  const { llm, log } = ctx;
+  const { llm, log, meta } = ctx;
 
-  // 2. LLM proofreading pass on the STT output. Fixes misheard words, wrong
-  //    verb persons, Persian half-space / number artifacts before the text
-  //    reaches the record and the report. Fails soft — we keep the raw
-  //    transcript on error.
+  // 2. LLM proofreading pass on the STT output, with the table's names and the
+  //    game's words. Fixes misheard words and names, wrong verb persons,
+  //    Persian half-space / number artifacts before the text reaches the
+  //    record and the report. Fails soft — we keep the raw transcript on error.
   let transcript = turn.transcript_raw;
   let transcriptCorrected = false;
   if (ctx.correction && turn.transcript_raw.trim().length > 0) {
     try {
-      transcript = await correctTranscript(llm, turn.transcript_raw);
+      transcript = await correctTranscript(llm, turn.transcript_raw, meta.players);
       transcriptCorrected = true;
     } catch (err) {
       log.error(`transcript correction failed for ${turnLabel(turn)}, using raw STT`, err);
@@ -172,6 +180,7 @@ export async function processRawTurn(ctx: PipelineContext, turn: RawTurnJson): P
     transcript_raw: turn.transcript_raw,
     transcript_corrected: transcriptCorrected,
     confidence: turn.confidence,
+    low_confidence: isLowConfidence(turn.confidence, ctx.lowConfidenceThreshold),
     language: turn.language,
   };
   await writeJsonAtomic(turnPath(ctx.dir, turn.questNumber, turn.roundIndex, turn.turnIndex), out);

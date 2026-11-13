@@ -233,6 +233,7 @@ async function makeFolder(): Promise<string> {
       transcript_raw: `talk ${name}`,
       transcript_corrected: false,
       confidence: 0.9,
+      low_confidence: false,
       language: 'fa-IR',
     };
     await fs.writeFile(path.join(dir, `${name}.json`), JSON.stringify(json));
@@ -252,7 +253,8 @@ async function makeFolder(): Promise<string> {
         transcript: 'Ana is Merlin',
         transcript_raw: 'Ana is Merlin',
         transcript_corrected: false,
-        confidence: 0.8,
+        confidence: 0.3,
+        low_confidence: true,
       },
     ],
   };
@@ -325,6 +327,9 @@ test('each turn joins the proposal its talk was about', async () => {
   );
   assert.equal(record.turns[1]!.transcript, 'talk turn_1_0_0');
   assert.equal(record.discussion?.speakers[0]?.transcript, 'Ana is Merlin');
+  // The turn files' low-confidence flags, as they were written.
+  assert.ok(record.turns.every((t) => t.low_confidence === false));
+  assert.equal(record.discussion?.speakers[0]?.low_confidence, true);
 });
 
 test('the god record holds the missions, the Lady result, the assassin pick and the outcome', async () => {
@@ -392,6 +397,7 @@ test('a pending proposal: its votes are not read, and talk before its vote joins
     transcript_raw: 'my team',
     transcript_corrected: false,
     confidence: 0.9,
+    low_confidence: false,
     language: 'fa-IR',
   };
   await fs.writeFile(path.join(dir, 'turn_4_0_0.json'), JSON.stringify(turn));

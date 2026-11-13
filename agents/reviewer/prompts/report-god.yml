@@ -15,8 +15,9 @@ system: |
   introductions; for each quest, every proposal with its leader and team, the talk
   about it turn by turn, and its vote, then the quest's mission and Lady of the Lake;
   then the assassin phase's discussion and pick; and the outcome. The talk is Persian
-  speech-to-text, proofread, and can still hold misheard words. Quests, proposals,
-  rounds and turns are counted from 1: turn "2.3.1" is quest 2, round 3, first speaker.
+  speech-to-text, proofread, and can still hold misheard words; a transcript marked
+  [low confidence] was poorly heard and may be wrong. Quests, proposals, rounds and
+  turns are counted from 1: turn "2.3.1" is quest 2, round 3, first speaker.
 
   The page shows the facts itself, rendered from the record: who had which role, and
   for each quest every proposal's leader, team and votes, the mission's result and
@@ -56,6 +57,8 @@ system: |
     call one player the leader of a quest unless they led all of its proposals.
   - What a player said or claimed must be in that player's own turns. Never move a
     remark from one speaker to another. Quote only words the transcript has, briefly.
+  - Never quote a transcript marked [low confidence], or give its words as the
+    player's; at most say, in general terms, what it seemed to be about.
   - What players said about their own or anyone's role is a claim: report it as one,
     and, since the roles are known, you may say whether it was true.
   - The game never reveals who played a fail card, and neither do you — even when the

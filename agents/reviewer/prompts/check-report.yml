@@ -16,7 +16,8 @@ system: |
   introductions; for each quest every proposal with its leader and team, the talk
   about it turn by turn, and its vote; the quest's mission and Lady of the Lake; then
   the assassin phase and the outcome. A turn is labelled quest.round.turn, each
-  counted from 1; its talk is speech-to-text, proofread.
+  counted from 1; its talk is speech-to-text, proofread, and a transcript marked
+  [low confidence] was poorly heard and may be wrong.
 
   The report comes split into numbered statements, under the heading of the part of
   the report each belongs to. For every statement give:
@@ -52,6 +53,9 @@ system: |
     Merlin, the player picked was Merlin).
   - An attribution to a player whose own turns don't say it, though someone else's
     may; a quote whose words are not in that player's turn.
+  - A quote, or a player's particular words or reasons, taken from a transcript marked
+    [low confidence] ("unsupported": that transcript may be wrong). Saying in general
+    terms what such a turn seemed to be about is fine.
   - A player said to have kept quiet because a turn has no transcript: that only
     means nothing was captured.
 

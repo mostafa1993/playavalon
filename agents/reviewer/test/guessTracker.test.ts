@@ -206,6 +206,7 @@ async function gameFolder(): Promise<string> {
       transcript_raw: `raw ${quest}_${round}_${turn}`,
       transcript_corrected: true,
       confidence: 0.9,
+      low_confidence: false,
       language: 'fa-IR',
     };
     await fs.writeFile(path.join(dir, `turn_${quest}_${round}_${turn}.json`), JSON.stringify(json));
@@ -226,6 +227,7 @@ async function gameFolder(): Promise<string> {
         transcript_raw: TELLING,
         transcript_corrected: true,
         confidence: 0.9,
+        low_confidence: false,
       },
     ],
   };
@@ -345,6 +347,7 @@ async function tracker(answers: unknown[], rolesInPlay: RolesInPlay | null = WIT
   const ctx: PipelineContext = {
     llm,
     correction: false,
+    lowConfidenceThreshold: 0.5,
     gameId: 'g1',
     dir,
     mode: 'blind',
