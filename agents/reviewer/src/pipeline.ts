@@ -142,6 +142,7 @@ export async function processTurn(
             maxAttempts: config.retry.maxAttempts,
             baseDelayMs: config.retry.baseDelayMs,
           },
+          silenceRmsThreshold: config.audio.silenceRmsThreshold,
         }
       );
 

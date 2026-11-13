@@ -4,8 +4,10 @@
  * STT: conversation/single-shot endpoint.
  *   Input: PCM16 mono @ `sampleRate` Hz (no header) — wrapped in a 44-byte
  *   RIFF/WAV header. Output: transcript string + optional confidence.
- *   Handles audio up to ~60s; the Avalon speaking timer caps turns at 55s
- *   (TIMER_DURATION=50 + AUTO_MUTE_DELAY=5), so this fits.
+ *   The endpoint takes at most 60 s per request. Speaking turns fit (the
+ *   timer caps them at 55 s); longer clips — one speaker's whole assassin-
+ *   phase discussion — are cut at their quietest points into pieces of at
+ *   most 55 s, transcribed piece by piece and joined.
  *
  * TTS: cognitiveservices/v1 synthesis endpoint.
  *   Input: text + a neural voice name (SSML built + escaped here).
@@ -17,6 +19,7 @@
  */
 
 import { isNetworkError, isTransientHttpStatus, retry } from './retry.js';
+import { isSilent, splitAtQuietest } from './silence.js';
 
 export interface AzureSpeechConfig {
   key: string;
@@ -35,7 +38,13 @@ export interface TranscribeOptions {
     maxAttempts?: number;
     baseDelayMs?: number;
   };
+  /** Pieces of a long clip below this RMS are skipped (default 250, as
+   *  SILENCE_RMS_THRESHOLD). */
+  silenceRmsThreshold?: number;
 }
+
+/** Longest audio sent in one request; the endpoint's cap is 60 s. */
+const MAX_PIECE_SEC = 55;
 
 /**
  * Wrapper around Azure failures so `shouldRetry` can distinguish HTTP errors
@@ -60,11 +69,64 @@ class AzureSpeechError extends Error {
   }
 }
 
+/**
+ * Transcribe a clip of any length. Up to 55 s it is one request. A longer clip
+ * is cut at its quietest points; silent pieces are skipped, a piece that fails
+ * doesn't drop the others (the clip fails only if every voiced piece does),
+ * the texts are joined in order, and the confidence is the mean of the pieces'
+ * confidences weighted by their length.
+ */
 export async function transcribe(
   config: AzureSpeechConfig,
   pcm: Int16Array,
   sampleRate: number,
   options: TranscribeOptions = {}
+): Promise<TranscribeResult> {
+  if (pcm.length <= MAX_PIECE_SEC * sampleRate) {
+    return transcribeOnce(config, pcm, sampleRate, options);
+  }
+  const threshold = options.silenceRmsThreshold ?? 250;
+  const voiced = splitAtQuietest(pcm, sampleRate, { maxSec: MAX_PIECE_SEC })
+    .map((p) => pcm.subarray(p.start, p.end))
+    .filter((piece) => !isSilent(piece, threshold));
+  if (voiced.length === 0) return { transcript: '', confidence: null, raw: [] };
+
+  const results = await Promise.allSettled(
+    voiced.map((piece) => transcribeOnce(config, piece, sampleRate, options))
+  );
+  const ok = results.flatMap((r, i) =>
+    r.status === 'fulfilled' ? [{ result: r.value, length: voiced[i]!.length }] : []
+  );
+  if (ok.length === 0) {
+    throw (results[0] as PromiseRejectedResult).reason;
+  }
+  for (const r of results) {
+    if (r.status === 'rejected') {
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      console.warn(`[stt] a piece of a long clip failed, kept the others — ${msg}`);
+    }
+  }
+  const weighted = ok.filter((o) => o.result.confidence !== null);
+  const totalLength = weighted.reduce((sum, o) => sum + o.length, 0);
+  return {
+    transcript: ok
+      .map((o) => o.result.transcript.trim())
+      .filter(Boolean)
+      .join(' '),
+    confidence:
+      totalLength === 0
+        ? null
+        : weighted.reduce((sum, o) => sum + (o.result.confidence ?? 0) * o.length, 0) / totalLength,
+    raw: ok.map((o) => o.result.raw),
+  };
+}
+
+/** One request: at most 60 s of audio. */
+async function transcribeOnce(
+  config: AzureSpeechConfig,
+  pcm: Int16Array,
+  sampleRate: number,
+  options: TranscribeOptions
 ): Promise<TranscribeResult> {
   const wav = pcmToWav(pcm, sampleRate, 1);
 

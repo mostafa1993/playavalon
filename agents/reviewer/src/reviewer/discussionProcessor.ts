@@ -69,7 +69,10 @@ async function transcribeSpeaker(
       },
       seg.pcm,
       seg.sampleRate,
-      { retry: { maxAttempts: config.retry.maxAttempts, baseDelayMs: config.retry.baseDelayMs } }
+      {
+        retry: { maxAttempts: config.retry.maxAttempts, baseDelayMs: config.retry.baseDelayMs },
+        silenceRmsThreshold: config.audio.silenceRmsThreshold,
+      }
     );
     return { ...base, transcript_raw: res.transcript, confidence: res.confidence };
   } catch (err) {

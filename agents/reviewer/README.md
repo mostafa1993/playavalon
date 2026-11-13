@@ -51,7 +51,10 @@ See repo-root `.env.example`. Required vars:
   - `GAME_WATCHER_INTERVAL_MS` — polling cadence (default `3000`).
   - `AUDIO_SAMPLE_RATE` — PCM sample rate delivered to STT (default `16000`).
   - `SILENCE_RMS_THRESHOLD` — clips with RMS below this skip STT entirely
-    (default `250`). Raise to skip more, lower to transcribe more.
+    (default `250`). Raise to skip more, lower to transcribe more. Clips over
+    55 s (a speaker's whole assassin-phase discussion) are cut at their quietest
+    points into pieces of at most 55 s, the STT endpoint's per-request limit
+    being 60 s; silent pieces are skipped by the same threshold.
   - `RETRY_MAX_ATTEMPTS` — total attempts for transient-failure retries on
     STT and LLM calls (default `3`).
   - `RETRY_BASE_DELAY_MS` — base exponential-backoff delay (default `500`).

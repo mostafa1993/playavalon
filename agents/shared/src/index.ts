@@ -14,7 +14,7 @@ export {
   type TranscribeOptions,
   type SynthesizeOptions,
 } from './azureSpeech.js';
-export { computeRms, isSilent } from './silence.js';
+export { computeRms, isSilent, splitAtQuietest, type ClipPiece } from './silence.js';
 export { publishAudioTrack, type AudioPublisher, type PublishAudioOptions } from './livekitAudio.js';
 export {
   TimerListener,
