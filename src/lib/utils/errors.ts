@@ -74,9 +74,6 @@ export const errors = {
   playerNotFound: () =>
     errorResponse(ERROR_CODES.PLAYER_NOT_FOUND, 'Player profile not found', 404),
 
-  invalidPlayerCount: () =>
-    errorResponse(ERROR_CODES.INVALID_PLAYER_COUNT, 'Player count must be 5-10', 400),
-
   playerAlreadyInRoom: (message = 'Player is already in a room') =>
     errorResponse(ERROR_CODES.PLAYER_ALREADY_IN_ROOM, message, 409),
 

@@ -245,19 +245,19 @@ export interface QuestResult {
 /**
  * Full game state for client rendering
  */
-/** The hidden columns of a game: who Merlin sees as decoy, the Split Intel
- *  groups, the Evil Ring links. Only the role route reads them, per player. */
-export type HiddenGameColumn =
-  | 'merlin_decoy_player_id'
-  | 'split_intel_certain_evil_ids'
-  | 'split_intel_mixed_evil_id'
-  | 'split_intel_mixed_good_id'
-  | 'oberon_split_intel_certain_evil_ids'
-  | 'oberon_split_intel_mixed_good_id'
-  | 'evil_ring_assignments';
+/** The fields of a game that players and watchers receive. An allow-list: the
+ *  hidden columns (the Merlin decoy, the Split Intel groups, the Evil Ring) and
+ *  the next-room bookkeeping stay out, and so does any column added later until
+ *  it is named here. */
+export const PUBLIC_GAME_FIELDS = [
+  'id', 'room_id', 'player_count', 'phase', 'current_quest', 'current_leader_id',
+  'vote_track', 'quest_results', 'seating_order', 'leader_index', 'winner',
+  'win_reason', 'assassin_guess_id', 'lady_holder_id', 'lady_enabled', 'draft_team',
+  'in_intro_phase', 'created_at', 'updated_at', 'ended_at',
+] as const satisfies readonly (keyof Game)[];
 
-/** A game as players and watchers receive it: without its hidden columns. */
-export type PublicGame = Omit<Game, HiddenGameColumn>;
+/** A game as players and watchers receive it. */
+export type PublicGame = Pick<Game, (typeof PUBLIC_GAME_FIELDS)[number]>;
 
 export interface GameState {
   game: PublicGame;

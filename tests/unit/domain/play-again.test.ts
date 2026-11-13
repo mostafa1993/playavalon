@@ -12,6 +12,7 @@ const base: NextRoomActionInput = {
   sawGameEnd: true,
   msSinceGameEnd: 60_000,
   moveTried: false,
+  seenAsMember: false,
   nextRoomStatus: 'waiting',
   isMember: false,
 };
@@ -28,6 +29,11 @@ describe('nextRoomAction', () => {
   it('does nothing for a player already in the next room', () => {
     expect(nextRoomAction({ ...base, isMember: true })).toBe('none');
     expect(nextRoomAction({ ...base, sawGameEnd: false, isMember: true })).toBe('none');
+  });
+
+  it('never moves a player it once saw in the next room, after they leave it', () => {
+    // Joined from another tab, then left: this tab offers the button, no move.
+    expect(nextRoomAction({ ...base, seenAsMember: true })).toBe('offer_join');
   });
 
   it('does nothing once the next room is no longer waiting', () => {

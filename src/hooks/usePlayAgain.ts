@@ -46,11 +46,18 @@ export function usePlayAgain({ gameId, nextRoom, sawGameEnd, endedAt }: UsePlayA
   const [error, setError] = useState<string | null>(null);
   const [moveTried, setMoveTried] = useState(false);
   const moveTriedRef = useRef(false);
+  // Once this page sees its player in the next room, it never moves them
+  // again — a player who joined from another tab and then left stays out.
+  const [seenAsMember, setSeenAsMember] = useState(false);
+  useEffect(() => {
+    if (nextRoom?.is_member) setSeenAsMember(true);
+  }, [nextRoom?.is_member]);
 
   const action = nextRoomAction({
     sawGameEnd,
     msSinceGameEnd: endedAt ? Date.now() - new Date(endedAt).getTime() : null,
     moveTried,
+    seenAsMember,
     nextRoomStatus: nextRoom?.status ?? null,
     isMember: nextRoom?.is_member ?? false,
   });

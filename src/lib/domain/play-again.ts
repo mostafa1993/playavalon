@@ -24,6 +24,9 @@ export interface NextRoomActionInput {
   msSinceGameEnd: number | null;
   /** This page already tried to move its player (joined or refused) */
   moveTried: boolean;
+  /** This page has seen its player in the next room (joined from another
+   *  tab, say); after that it never moves them, even if they leave */
+  seenAsMember: boolean;
   /** The next room's status, or null while there is no next room */
   nextRoomStatus: RoomStatus | null;
   /** Whether the player is in the next room */
@@ -39,7 +42,7 @@ export function nextRoomAction(input: NextRoomActionInput): NextRoomAction {
   }
 
   const endedRecently = input.msSinceGameEnd !== null && input.msSinceGameEnd < MOVE_WINDOW_MS;
-  if (input.sawGameEnd && endedRecently && !input.moveTried) {
+  if (input.sawGameEnd && endedRecently && !input.moveTried && !input.seenAsMember) {
     return 'move';
   }
 
