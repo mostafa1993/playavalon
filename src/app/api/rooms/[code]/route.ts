@@ -9,7 +9,7 @@ import { findRoomByCode, getRoomDetails, isPlayerInRoom } from '@/lib/supabase/r
 import { validateRoomCode } from '@/lib/domain/validation';
 import { computeRolesInPlay } from '@/lib/domain/role-config';
 import { errors, handleError } from '@/lib/utils/errors';
-import { isValidRoleConfig } from '@/types/role-config';
+import { isValidRoleConfig, pickRoleConfig } from '@/types/role-config';
 
 interface RouteParams {
   params: Promise<{ code: string }>;
@@ -84,6 +84,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     return NextResponse.json({
       data: {
         ...details,
+        // Only the public options: role distribution writes hidden assignments
+        // (the decoy, the Split Intel groups, the Evil Ring) into the stored
+        // setup, and every member reads this response.
+        room: { ...details.room, role_config: pickRoleConfig(room.role_config) },
         roles_in_play: rolesInPlay,
         lady_of_lake_holder: ladyOfLakeHolder,
         ai_review: aiReview,

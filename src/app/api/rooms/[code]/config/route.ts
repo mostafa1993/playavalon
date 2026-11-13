@@ -111,7 +111,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({
       data: {
         expected_players: newExpected,
-        role_config: newConfig,
+        role_config: pickRoleConfig(newConfig),
         intro_phase_enabled: newIntro,
       },
     });
