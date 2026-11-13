@@ -6,12 +6,29 @@
 import { describe, it, expect } from 'vitest';
 import {
   getDefaultConfig,
+  isDefaultConfig,
+  setMerlin,
+  configForPlayerCount,
   validateRoleConfig,
   computeRolesInPlay,
   getRoleDetails,
   designateLadyOfLakeHolder,
 } from '@/lib/domain/role-config';
 import { pickRoleConfig, type RoleConfig } from '@/types/role-config';
+
+/** The options a setup without Merlin refuses, each as it would be switched on. */
+const needsMerlin: { name: string; options: Partial<RoleConfig> }[] = [
+  { name: 'Percival', options: { percival: true } },
+  { name: 'Mordred', options: { mordred: true } },
+  { name: 'Morgana', options: { morgana: true } },
+  { name: 'Oberon (Chaos)', options: { oberon: 'chaos' } },
+  { name: 'Merlin Decoy', options: { merlin_decoy_enabled: true } },
+  { name: 'Split Intel', options: { merlin_split_intel_enabled: true } },
+  {
+    name: 'Oberon Split Intel',
+    options: { oberon: 'standard', oberon_split_intel_enabled: true },
+  },
+];
 
 describe('getDefaultConfig', () => {
   it('returns Merlin with no other options', () => {
@@ -159,19 +176,6 @@ describe('validateRoleConfig', () => {
       );
     });
 
-    const needsMerlin: { name: string; options: Partial<RoleConfig> }[] = [
-      { name: 'Percival', options: { percival: true } },
-      { name: 'Mordred', options: { mordred: true } },
-      { name: 'Morgana', options: { morgana: true } },
-      { name: 'Oberon (Chaos)', options: { oberon: 'chaos' } },
-      { name: 'Merlin Decoy', options: { merlin_decoy_enabled: true } },
-      { name: 'Split Intel', options: { merlin_split_intel_enabled: true } },
-      {
-        name: 'Oberon Split Intel',
-        options: { oberon: 'standard', oberon_split_intel_enabled: true },
-      },
-    ];
-
     it.each(needsMerlin)('refuses $name without Merlin, naming both', ({ name, options }) => {
       const result = validateRoleConfig({ merlin: false, ...options }, 7);
       expect(result.valid).toBe(false);
@@ -182,6 +186,97 @@ describe('validateRoleConfig', () => {
 
     it.each(needsMerlin)('accepts $name with Merlin', ({ options }) => {
       expect(validateRoleConfig({ merlin: true, ...options }, 7).valid).toBe(true);
+    });
+  });
+});
+
+describe('isDefaultConfig', () => {
+  it('reads a setup with only Merlin as the default', () => {
+    expect(isDefaultConfig(getDefaultConfig())).toBe(true);
+    expect(isDefaultConfig({ merlin: true })).toBe(true);
+  });
+
+  it('reads options that are present but off as the default', () => {
+    expect(isDefaultConfig({ merlin: true, percival: false, merlin_decoy_enabled: undefined })).toBe(true);
+  });
+
+  it('does not read a setup without Merlin as the default', () => {
+    expect(isDefaultConfig({ merlin: false })).toBe(false);
+  });
+
+  it('does not read a setup with any other option on as the default', () => {
+    expect(isDefaultConfig({ merlin: true, oberon: 'standard' })).toBe(false);
+    expect(isDefaultConfig({ merlin: true, ladyOfLake: true })).toBe(false);
+    expect(isDefaultConfig({ merlin: true, evil_ring_visibility_enabled: true })).toBe(false);
+  });
+});
+
+describe('setMerlin', () => {
+  it('switching Merlin off clears Percival, Mordred, Morgana, Oberon (Chaos) and Split Intel', () => {
+    const config: RoleConfig = {
+      merlin: true,
+      percival: true,
+      mordred: true,
+      morgana: true,
+      oberon: 'chaos',
+      merlin_split_intel_enabled: true,
+    };
+    expect(setMerlin(config, false)).toEqual({ merlin: false });
+  });
+
+  it.each(needsMerlin)('switching Merlin off clears $name, leaving a valid setup', ({ options }) => {
+    const off = setMerlin({ merlin: true, ...options }, false);
+    expect(off.merlin).toBe(false);
+    expect(validateRoleConfig(off, 7).valid).toBe(true);
+  });
+
+  it('switching Merlin off clears each intel mode', () => {
+    expect(setMerlin({ merlin: true, merlin_decoy_enabled: true }, false)).toEqual({ merlin: false });
+    expect(setMerlin({ merlin: true, merlin_split_intel_enabled: true }, false)).toEqual({ merlin: false });
+    expect(
+      setMerlin({ merlin: true, oberon: 'standard', oberon_split_intel_enabled: true }, false)
+    ).toEqual({ merlin: false, oberon: 'standard' });
+  });
+
+  it('switching Merlin off keeps Oberon (Standard), the Lunatic, the Brute and the game options', () => {
+    const kept = {
+      oberon: 'standard',
+      lunatic: true,
+      brute: true,
+      ladyOfLake: true,
+      evil_ring_visibility_enabled: true,
+    } as const;
+    expect(setMerlin({ merlin: true, ...kept }, false)).toEqual({ merlin: false, ...kept });
+  });
+
+  it('switching Merlin on keeps the rest of the setup', () => {
+    expect(setMerlin({ merlin: false, oberon: 'standard', lunatic: true }, true)).toEqual({
+      merlin: true,
+      oberon: 'standard',
+      lunatic: true,
+    });
+  });
+
+  it('does not change the setup it is given', () => {
+    const config: RoleConfig = { merlin: true, percival: true, oberon: 'chaos' };
+    setMerlin(config, false);
+    expect(config).toEqual({ merlin: true, percival: true, oberon: 'chaos' });
+  });
+});
+
+describe('configForPlayerCount', () => {
+  it('keeps a setup that is still valid at the new count', () => {
+    const config: RoleConfig = { merlin: false, oberon: 'standard' };
+    expect(configForPlayerCount(config, 5)).toBe(config);
+  });
+
+  it('resets an invalid setup to the default, keeping Merlin off', () => {
+    expect(configForPlayerCount({ merlin: false, lunatic: true }, 5)).toEqual({ merlin: false });
+  });
+
+  it('resets an invalid setup to the default, keeping Merlin on', () => {
+    expect(configForPlayerCount({ merlin: true, percival: true, lunatic: true }, 5)).toEqual({
+      merlin: true,
     });
   });
 });

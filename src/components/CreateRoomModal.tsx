@@ -6,7 +6,12 @@ import { Button } from '@/components/ui/Button';
 import { RoleConfigPanel } from '@/components/RoleConfigPanel';
 import { RoleConfigSummary } from '@/components/RoleConfigSummary';
 import { MIN_PLAYERS, MAX_PLAYERS, ROLE_RATIOS } from '@/lib/utils/constants';
-import { getDefaultConfig, validateRoleConfig } from '@/lib/domain/role-config';
+import {
+  configForPlayerCount,
+  getDefaultConfig,
+  isDefaultConfig,
+  validateRoleConfig,
+} from '@/lib/domain/role-config';
 import type { RoleConfig } from '@/types/role-config';
 
 interface CreateRoomModalProps {
@@ -42,15 +47,10 @@ export function CreateRoomModal({
     await onCreateRoom(expectedPlayers, roleConfig, introPhaseEnabled, agentCount);
   };
 
-  // T029b: Reset invalid options when player count changes
+  // T029b: Reset invalid options when player count changes, keeping Merlin in or out
   const handlePlayerCountChange = (count: number) => {
     setExpectedPlayers(count);
-    // Re-validate and clear invalid options
-    const validation = validateRoleConfig(roleConfig, count);
-    if (!validation.valid) {
-      // Reset to default config if current is invalid
-      setRoleConfig(getDefaultConfig());
-    }
+    setRoleConfig(configForPlayerCount(roleConfig, count));
     // Feature 024: agent_count must be < expected_players (at least 1 human seat)
     if (agentCount >= count) {
       setAgentCount(Math.max(0, count - 1));
@@ -151,7 +151,7 @@ export function CreateRoomModal({
           {/* Compact role summary when advanced is hidden - smooth transition */}
           <div className={`
             transition-all duration-200 overflow-hidden
-            ${!showAdvanced && Object.keys(roleConfig).length > 0 ? 'max-h-20 opacity-100 mt-2 pt-2 border-t border-avalon-silver/10' : 'max-h-0 opacity-0'}
+            ${!showAdvanced && !isDefaultConfig(roleConfig) ? 'max-h-20 opacity-100 mt-2 pt-2 border-t border-avalon-silver/10' : 'max-h-0 opacity-0'}
           `}>
             <RoleConfigSummary
               config={roleConfig}

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { RoleConfigPanel } from '@/components/RoleConfigPanel';
 import { RoleConfigSummary } from '@/components/RoleConfigSummary';
 import { MAX_PLAYERS, ROLE_RATIOS } from '@/lib/utils/constants';
-import { getDefaultConfig, validateRoleConfig } from '@/lib/domain/role-config';
+import { configForPlayerCount, validateRoleConfig } from '@/lib/domain/role-config';
 import type { RoleConfig } from '@/types/role-config';
 
 export interface RoomConfigUpdate {
@@ -57,10 +57,9 @@ export function RoomConfigEditor({
   const handleCountChange = (count: number) => {
     setDraftCount(count);
     // Match the create modal: if the current config is invalid at the new
-    // count, reset it rather than letting the manager save an invalid setup.
-    if (!validateRoleConfig(draftConfig, count).valid) {
-      setDraftConfig(getDefaultConfig());
-    }
+    // count, reset it (keeping Merlin in or out) rather than letting the
+    // manager save an invalid setup.
+    setDraftConfig(configForPlayerCount(draftConfig, count));
   };
 
   const validation = validateRoleConfig(draftConfig, draftCount);

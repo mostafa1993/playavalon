@@ -208,6 +208,24 @@ export function getSpecialRoleDescription(role: SpecialRole, merlinInPlay: boole
 }
 
 /**
+ * How a setup without Merlin is announced wherever its roles are listed.
+ */
+export const NO_MERLIN_NOTE = 'No Merlin — Good wins with 3 successful quests';
+
+/**
+ * A role's display name, as computeRolesInPlay lists it ("Oberon", "Oberon
+ * (Chaos)", "Minion of Mordred"…), to its SPECIAL_ROLES key.
+ */
+export function specialRoleKeyFromName(name: string): SpecialRole {
+  const normalized = name.toLowerCase().replace(' (chaos)', '_chaos').replace(/\s+/g, '_');
+  if (normalized === 'oberon') return 'oberon_standard';
+  if (normalized === 'loyal_servant_of_arthur' || normalized === 'loyal_servant') return 'servant';
+  if (normalized === 'the_assassin') return 'assassin';
+  if (normalized === 'minion_of_mordred') return 'minion';
+  return normalized as SpecialRole;
+}
+
+/**
  * Good team special roles (for UI grouping)
  */
 export const GOOD_SPECIAL_ROLES: SpecialRole[] = ['merlin', 'percival', 'servant'];

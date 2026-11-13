@@ -1,8 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { validateRoleConfig, getRoleDetails } from '@/lib/domain/role-config';
-import { SPECIAL_ROLES, LADY_OF_LAKE_MIN_RECOMMENDED, getSpecialRoleDescription } from '@/lib/utils/constants';
+import { validateRoleConfig, getRoleDetails, setMerlin } from '@/lib/domain/role-config';
+import {
+  SPECIAL_ROLES,
+  LADY_OF_LAKE_MIN_RECOMMENDED,
+  NO_MERLIN_NOTE,
+  getSpecialRoleDescription,
+} from '@/lib/utils/constants';
 import { canEnableEvilRingVisibility, shouldAutoDisableRing } from '@/lib/domain/evil-ring-visibility';
 import { AlertTriangle } from 'lucide-react';
 import type { RoleConfig, OberonMode } from '@/types/role-config';
@@ -97,17 +102,17 @@ export function RoleConfigPanel({
         </h4>
 
         <div className="space-y-2">
-          {/* Merlin - Always included */}
+          {/* Merlin - switching him off switches off the options that need him */}
           <RoleToggle
             role="merlin"
-            enabled={true}
-            locked
-            label="Merlin (Always Included)"
-            description={SPECIAL_ROLES.merlin.description}
+            enabled={config.merlin}
+            onChange={(v) => onChange(setMerlin(config, v))}
+            label="Merlin"
+            description={config.merlin ? SPECIAL_ROLES.merlin.description : NO_MERLIN_NOTE}
             emoji={SPECIAL_ROLES.merlin.emoji}
           />
 
-          {/* Percival - Optional */}
+          {/* Percival - Optional, needs Merlin */}
           <RoleToggle
             role="percival"
             enabled={config.percival || false}
@@ -115,6 +120,8 @@ export function RoleConfigPanel({
             label="Percival"
             description={SPECIAL_ROLES.percival.description}
             emoji={SPECIAL_ROLES.percival.emoji}
+            disabled={!config.merlin}
+            disabledReason="Requires Merlin - Percival knows who Merlin is"
           />
         </div>
       </div>
@@ -129,17 +136,21 @@ export function RoleConfigPanel({
         </h4>
 
         <div className="space-y-2">
-          {/* Assassin - Always included */}
+          {/* Assassin - comes with Merlin */}
           <RoleToggle
             role="assassin"
-            enabled={true}
+            enabled={config.merlin}
             locked
-            label="Assassin (Always Included)"
-            description={SPECIAL_ROLES.assassin.description}
+            label="Assassin (Comes with Merlin)"
+            description={
+              config.merlin
+                ? SPECIAL_ROLES.assassin.description
+                : 'Not dealt without Merlin - that seat is a Minion'
+            }
             emoji={SPECIAL_ROLES.assassin.emoji}
           />
 
-          {/* Morgana - Optional */}
+          {/* Morgana - Optional, needs Merlin */}
           <RoleToggle
             role="morgana"
             enabled={config.morgana || false}
@@ -147,9 +158,11 @@ export function RoleConfigPanel({
             label="Morgana"
             description={SPECIAL_ROLES.morgana.description}
             emoji={SPECIAL_ROLES.morgana.emoji}
+            disabled={!config.merlin}
+            disabledReason="Requires Merlin - her only power is to appear as Merlin to Percival"
           />
 
-          {/* Mordred - Optional */}
+          {/* Mordred - Optional, needs Merlin */}
           <RoleToggle
             role="mordred"
             enabled={config.mordred || false}
@@ -157,6 +170,8 @@ export function RoleConfigPanel({
             label="Mordred"
             description={SPECIAL_ROLES.mordred.description}
             emoji={SPECIAL_ROLES.mordred.emoji}
+            disabled={!config.merlin}
+            disabledReason="Requires Merlin - his only power is being hidden from Merlin"
           />
 
           {/* T028: Oberon with mode toggle */}
@@ -173,7 +188,9 @@ export function RoleConfigPanel({
                   >
                     <option value="">Disabled</option>
                     <option value="standard">{config.merlin ? 'Standard (Visible to Merlin)' : 'Standard'}</option>
-                    <option value="chaos">Chaos (Hidden from Everyone)</option>
+                    <option value="chaos" disabled={!config.merlin}>
+                      {config.merlin ? 'Chaos (Hidden from Everyone)' : 'Chaos (Requires Merlin)'}
+                    </option>
                   </select>
                 </div>
                 <p className="text-sm text-avalon-silver/70 mt-1">
@@ -181,6 +198,11 @@ export function RoleConfigPanel({
                     ? SPECIAL_ROLES.oberon_chaos.description
                     : getSpecialRoleDescription('oberon_standard', config.merlin)}
                 </p>
+                {!config.merlin && (
+                  <p className="text-xs text-amber-400/70 mt-1 italic">
+                    Chaos requires Merlin - it differs from Standard only in being hidden from Merlin
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -260,8 +282,14 @@ export function RoleConfigPanel({
             label="Merlin Decoy Mode"
             description="One random good player appears evil to Merlin, creating uncertainty"
             emoji="🃏"
-            disabled={config.merlin_split_intel_enabled || config.oberon_split_intel_enabled}
-            disabledReason={config.oberon_split_intel_enabled ? "Cannot use with Oberon Split Intel Mode" : "Cannot use with Split Intel Mode"}
+            disabled={!config.merlin || config.merlin_split_intel_enabled || config.oberon_split_intel_enabled}
+            disabledReason={
+              !config.merlin
+                ? "Requires Merlin - it changes what Merlin sees"
+                : config.oberon_split_intel_enabled
+                ? "Cannot use with Oberon Split Intel Mode"
+                : "Cannot use with Split Intel Mode"
+            }
           />
 
           {/* Feature 011: Merlin Split Intel Mode */}
@@ -284,8 +312,14 @@ export function RoleConfigPanel({
             label="Merlin Split Intel Mode"
             description="Merlin sees two groups: certain evil players, and a mixed group with one evil and one good"
             emoji="🔀"
-            disabled={config.merlin_decoy_enabled || config.oberon_split_intel_enabled}
-            disabledReason={config.oberon_split_intel_enabled ? "Cannot use with Oberon Split Intel Mode" : "Cannot use with Decoy Mode"}
+            disabled={!config.merlin || config.merlin_decoy_enabled || config.oberon_split_intel_enabled}
+            disabledReason={
+              !config.merlin
+                ? "Requires Merlin - it changes what Merlin sees"
+                : config.oberon_split_intel_enabled
+                ? "Cannot use with Oberon Split Intel Mode"
+                : "Cannot use with Decoy Mode"
+            }
           />
 
           {/* Feature 018: Oberon Split Intel Mode */}
@@ -309,12 +343,15 @@ export function RoleConfigPanel({
             description="Merlin sees Oberon mixed with a good player, while other evil (Morgana, Assassin) are shown as certain evil"
             emoji="👤🔀"
             disabled={
+              !config.merlin ||
               config.oberon !== 'standard' ||
               config.merlin_decoy_enabled ||
               config.merlin_split_intel_enabled
             }
             disabledReason={
-              config.oberon === 'chaos'
+              !config.merlin
+                ? "Requires Merlin - it changes what Merlin sees"
+                : config.oberon === 'chaos'
                 ? "Not available with Oberon (Chaos) - Oberon must be visible to Merlin"
                 : !config.oberon
                 ? "Requires Oberon (Standard) to be enabled"

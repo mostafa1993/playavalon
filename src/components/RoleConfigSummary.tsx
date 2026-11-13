@@ -1,7 +1,7 @@
 'use client';
 
 import { computeRolesInPlay, getRoleDetails } from '@/lib/domain/role-config';
-import { SPECIAL_ROLES, ROLE_RATIOS } from '@/lib/utils/constants';
+import { SPECIAL_ROLES, NO_MERLIN_NOTE, specialRoleKeyFromName } from '@/lib/utils/constants';
 import type { RoleConfig } from '@/types/role-config';
 
 interface RoleConfigSummaryProps {
@@ -22,7 +22,8 @@ export function RoleConfigSummary({
 }: RoleConfigSummaryProps) {
   const rolesInPlay = computeRolesInPlay(config);
   const details = getRoleDetails(config, expectedPlayers);
-  const ratio = ROLE_RATIOS[expectedPlayers];
+  // The roles beyond Merlin and the Assassin, the ones a setup chose
+  const chosenRoles = rolesInPlay.filter(r => r !== 'Merlin' && r !== 'Assassin');
 
   if (compact) {
     return (
@@ -30,12 +31,16 @@ export function RoleConfigSummary({
         <span className="text-good-light">{details.goodCount} Good</span>
         {' • '}
         <span className="text-evil-light">{details.evilCount} Evil</span>
-        {rolesInPlay.length > 2 && (
+        {!config.merlin && (
           <>
             {' • '}
-            <span className="text-avalon-gold">
-              {rolesInPlay.filter(r => r !== 'Merlin' && r !== 'Assassin').join(', ')}
-            </span>
+            <span className="text-avalon-gold">No Merlin</span>
+          </>
+        )}
+        {chosenRoles.length > 0 && (
+          <>
+            {' • '}
+            <span className="text-avalon-gold">{chosenRoles.join(', ')}</span>
           </>
         )}
         {config.ladyOfLake && (
@@ -73,10 +78,12 @@ export function RoleConfigSummary({
         <span className="text-xs text-avalon-text-muted uppercase tracking-wide mb-2 block">
           Roles in Play
         </span>
+        {!config.merlin && (
+          <p className="text-sm font-semibold text-avalon-gold mb-2">{NO_MERLIN_NOTE}</p>
+        )}
         <div className="flex flex-wrap gap-2">
           {rolesInPlay.map((roleName) => {
-            const roleKey = roleName.toLowerCase().replace(' (chaos)', '_chaos').replace(' ', '_');
-            const roleInfo = SPECIAL_ROLES[roleKey as keyof typeof SPECIAL_ROLES];
+            const roleInfo = SPECIAL_ROLES[specialRoleKeyFromName(roleName)];
             const isGood = roleInfo?.team === 'good';
             
             return (

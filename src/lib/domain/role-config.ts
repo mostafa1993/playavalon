@@ -18,39 +18,82 @@ export function getDefaultConfig(): RoleConfig {
 }
 
 /**
- * Setup options that need Merlin in the game, each refused while Merlin is off
- * with a message naming both.
+ * Whether a setup is the default one: Merlin, and no other option on.
  */
-const NEEDS_MERLIN: { isOn: (config: RoleConfig) => boolean; error: string }[] = [
+export function isDefaultConfig(config: RoleConfig): boolean {
+  const { merlin, ...options } = config;
+  return merlin && Object.values(options).every((value) => !value);
+}
+
+/**
+ * Setup options that need Merlin in the game, each refused while Merlin is off
+ * with a message naming both, and switched off with him.
+ */
+const NEEDS_MERLIN: {
+  isOn: (config: RoleConfig) => boolean;
+  turnOff: (config: RoleConfig) => void;
+  error: string;
+}[] = [
   {
     isOn: (c) => !!c.percival,
+    turnOff: (c) => { delete c.percival; },
     error: 'Percival requires Merlin (Percival knows who Merlin is).',
   },
   {
     isOn: (c) => !!c.morgana,
+    turnOff: (c) => { delete c.morgana; },
     error: "Morgana requires Merlin (Morgana's only power is to appear as Merlin to Percival).",
   },
   {
     isOn: (c) => !!c.mordred,
+    turnOff: (c) => { delete c.mordred; },
     error: "Mordred requires Merlin (Mordred's only power is being hidden from Merlin).",
   },
   {
     isOn: (c) => c.oberon === 'chaos',
+    turnOff: (c) => { delete c.oberon; },
     error: 'Oberon (Chaos) requires Merlin (Oberon (Chaos) differs from Oberon (Standard) only in being hidden from Merlin).',
   },
   {
     isOn: (c) => !!c.merlin_decoy_enabled,
+    turnOff: (c) => { delete c.merlin_decoy_enabled; },
     error: 'Merlin Decoy Mode requires Merlin.',
   },
   {
     isOn: (c) => !!c.merlin_split_intel_enabled,
+    turnOff: (c) => { delete c.merlin_split_intel_enabled; },
     error: 'Split Intel Mode requires Merlin.',
   },
   {
     isOn: (c) => !!c.oberon_split_intel_enabled,
+    turnOff: (c) => { delete c.oberon_split_intel_enabled; },
     error: 'Oberon Split Intel Mode requires Merlin.',
   },
 ];
+
+/**
+ * Switch Merlin on or off. Switching him off also switches off every option
+ * that needs him: Percival, Morgana, Mordred, Oberon (Chaos) and the three intel
+ * modes. Oberon (Standard), the Lunatic, the Brute and the game options stay.
+ */
+export function setMerlin(config: RoleConfig, merlin: boolean): RoleConfig {
+  const next: RoleConfig = { ...config, merlin };
+  if (!merlin) {
+    for (const option of NEEDS_MERLIN) {
+      if (option.isOn(next)) option.turnOff(next);
+    }
+  }
+  return next;
+}
+
+/**
+ * The setup to keep when the player count changes: the same setup if it is
+ * still valid at the new count, otherwise the default with Merlin kept in or out.
+ */
+export function configForPlayerCount(config: RoleConfig, playerCount: number): RoleConfig {
+  if (validateRoleConfig(config, playerCount).valid) return config;
+  return { ...getDefaultConfig(), merlin: config.merlin };
+}
 
 /**
  * T007: Validate role configuration against player count

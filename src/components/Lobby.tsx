@@ -195,12 +195,10 @@ export function Lobby({
       </div>
 
       {/* T034: Roles In Play Section */}
-      {rolesInPlay.length > 0 && (
-        <RolesInPlay
-          rolesInPlay={rolesInPlay}
-          roleConfig={room.room.role_config}
-        />
-      )}
+      <RolesInPlay
+        rolesInPlay={rolesInPlay}
+        roleConfig={room.room.role_config}
+      />
 
       {/* Lady of the Lake indicator (after distribution) */}
       {room.lady_of_lake_holder && room.room.status !== 'waiting' && (

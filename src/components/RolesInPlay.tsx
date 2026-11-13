@@ -1,31 +1,31 @@
 'use client';
 
-import { SPECIAL_ROLES, getSpecialRoleDescription } from '@/lib/utils/constants';
+import {
+  SPECIAL_ROLES,
+  NO_MERLIN_NOTE,
+  getSpecialRoleDescription,
+  specialRoleKeyFromName as normalizeRoleName,
+} from '@/lib/utils/constants';
 import type { RoleConfig } from '@/types/role-config';
 
 interface RolesInPlayProps {
   rolesInPlay: string[];
   roleConfig: RoleConfig;
   showTitle?: boolean;
-  compact?: boolean;
   className?: string;
 }
 
 /**
  * T033: Display list of active special roles in the game
- * Shown to all players in lobby before and after role distribution
+ * Shown to all players in lobby before and after role distribution.
+ * A game without Merlin leads with saying so, and may have no special roles at all.
  */
 export function RolesInPlay({
   rolesInPlay,
   roleConfig,
   showTitle = true,
-  compact = false,
   className = '',
 }: RolesInPlayProps) {
-  if (rolesInPlay.length === 0) {
-    return null;
-  }
-
   // Separate roles by team for better display
   const goodRoles = rolesInPlay.filter(name => {
     const key = normalizeRoleName(name);
@@ -41,16 +41,6 @@ export function RolesInPlay({
   const oberonMode = roleConfig.oberon;
   const hasOberon = rolesInPlay.some(r => r.includes('Oberon'));
 
-  if (compact) {
-    return (
-      <div className={`flex flex-wrap gap-2 ${className}`}>
-        {rolesInPlay.map((role) => (
-          <RoleBadge key={role} name={role} merlinInPlay={roleConfig.merlin} small />
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div className={`p-4 bg-avalon-navy rounded-lg border border-avalon-dark-border ${className}`}>
       {showTitle && (
@@ -60,6 +50,11 @@ export function RolesInPlay({
       )}
 
       <div className="space-y-3">
+        {/* A game without Merlin says so first */}
+        {!roleConfig.merlin && (
+          <p className="text-base font-semibold text-avalon-gold">{NO_MERLIN_NOTE}</p>
+        )}
+
         {/* Good Team Roles */}
         {goodRoles.length > 0 && (
           <div>
@@ -157,26 +152,20 @@ export function RolesInPlay({
 interface RoleBadgeProps {
   name: string;
   merlinInPlay: boolean;
-  team?: 'good' | 'evil';
-  small?: boolean;
+  team: 'good' | 'evil';
 }
 
-function RoleBadge({ name, merlinInPlay, team, small }: RoleBadgeProps) {
+function RoleBadge({ name, merlinInPlay, team }: RoleBadgeProps) {
   const roleKey = normalizeRoleName(name);
   const roleInfo = SPECIAL_ROLES[roleKey];
   const emoji = roleInfo?.emoji || '❓';
-  const actualTeam = team || roleInfo?.team || 'good';
-
-  const sizeClasses = small
-    ? 'px-2.5 py-1 text-sm'
-    : 'px-3 py-1.5 text-base';
 
   return (
     <span
       className={`
         inline-flex items-center gap-1.5 rounded-md font-bold
-        ${sizeClasses}
-        ${actualTeam === 'good'
+        px-3 py-1.5 text-base
+        ${team === 'good'
           ? 'bg-good/30 text-good-light border border-good/50'
           : 'bg-evil/30 text-evil-light border border-evil/50'
         }
@@ -187,25 +176,4 @@ function RoleBadge({ name, merlinInPlay, team, small }: RoleBadgeProps) {
       <span>{name}</span>
     </span>
   );
-}
-
-/**
- * Normalize role name to match SPECIAL_ROLES keys
- */
-function normalizeRoleName(name: string): keyof typeof SPECIAL_ROLES {
-  // First normalize the string without casting
-  const normalized = name
-    .toLowerCase()
-    .replace(' (chaos)', '_chaos')
-    .replace(/\s+/g, '_');
-
-  // Handle special cases for display name -> key mapping
-  if (normalized === 'oberon') return 'oberon_standard';
-  if (normalized === 'loyal_servant_of_arthur') return 'servant';
-  if (normalized === 'loyal_servant') return 'servant';
-  if (normalized === 'the_assassin') return 'assassin';
-  if (normalized === 'minion_of_mordred') return 'minion';
-
-  // Cast to SpecialRole key after special case handling
-  return normalized as keyof typeof SPECIAL_ROLES;
 }
