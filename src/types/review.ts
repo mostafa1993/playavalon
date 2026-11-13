@@ -8,6 +8,10 @@
  * own — roles (god mode), leaders, teams, votes, missions, Lady of the Lake,
  * the assassin's pick — and the model wrote only the narrative, the per-quest
  * commentary and (god mode) the performance notes.
+ *
+ * The chat with the reviewer (/api/reviews/[gameId]/chat) reads the whole
+ * record, turns' talk included (`ReviewGameRecord`), and keeps each player's
+ * thread (`ReviewChatMessage`).
  */
 
 import type { SpecialRole } from './database';
@@ -104,6 +108,34 @@ export interface BlindReviewRecord extends ReviewRecordCommon {
   lady: ReviewRecordLadyUse[];
 }
 
+// ── The whole record, as record.json holds it (with the turns' talk) ────────
+
+/** One speaking turn, as speech-to-text and proofreading left it. */
+export interface ReviewRecordTurn {
+  /** 0 is the intro round. */
+  quest: number;
+  round: number;
+  turn: number;
+  speakerId: string;
+  transcript: string;
+  confidence: number | null;
+  /** Speech-to-text was unsure of it: the chat is told not to quote it. */
+  low_confidence: boolean;
+  startedAt: string;
+  durationSec: number;
+  /** The proposal of `quest` this talk was about; null in the intro round or
+   *  a quest with no proposal. */
+  proposalNumber: number | null;
+}
+
+/** `<DATA_DIR>/<gameId>/record.json`, which the reviewer writes at the end of
+ *  a game (`GameRecord` in agents/reviewer/src/types.ts): the report's record
+ *  plus every turn's talk. The review chat reads it. */
+export type ReviewGameRecord = (GodReviewRecord | BlindReviewRecord) & {
+  /** Ordered by quest, round, turn. */
+  turns: ReviewRecordTurn[];
+};
+
 // ── The model's part ────────────────────────────────────────────────────────
 
 export interface ReviewQuestCommentary {
@@ -179,3 +211,23 @@ export type ReviewApiResponse =
         summary: unknown;
       };
     };
+
+// ── The chat with the reviewer (031) ────────────────────────────────────────
+
+/** One message of a player's thread. A question and its answer share
+ *  `turnNo`; a question whose answer failed has none. */
+export interface ReviewChatMessage {
+  turnNo: number;
+  speaker: 'player' | 'reviewer';
+  content: string;
+  createdAt: string;
+}
+
+/** GET /api/reviews/[gameId]/chat: the caller's thread, oldest first, and how
+ *  many questions a player may ask about one game. */
+export interface ReviewChatThreadResponse {
+  data: {
+    limit: number;
+    messages: ReviewChatMessage[];
+  };
+}

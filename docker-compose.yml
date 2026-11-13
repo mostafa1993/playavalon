@@ -58,8 +58,11 @@ services:
       # still routes externals via the docker network.
       - "127.0.0.1:3000:3000"
     volumes:
-      # Read-only mount of the agent's data so the review API can serve summary files.
+      # Read-only mount of the agent's data so the review API can serve summary files
+      # and the review chat can read each game's record.
       - game_reviews_data:/data/games:ro
+      # The review chat calls Gemini with the reviewer's service account.
+      - ./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro
     # GCP can't hairpin the VM's own public IP, so resolve the Supabase subdomain to
     # the host (→ Traefik → Kong). Server-side calls stay on the box; browser still
     # uses the real public DNS. Keeps NEXT_PUBLIC_SUPABASE_URL identical everywhere.

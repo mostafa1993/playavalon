@@ -11,7 +11,8 @@ starts empty — so the **only** non-reproducible pieces are secrets. Keep a saf
 backup of these from a working VM, or be ready to recreate them:
 
 - **`.env`** (repo root) — especially the LiveKit / Azure / GCP / ACME values
-- **`secrets/vertex-sa.json`** — GCP service account, for the AI reviewer (optional)
+- **`secrets/vertex-sa.json`** — GCP service account, for the AI reviewer and the app's
+  chat with it (optional)
 - **`livekit.yaml`** — LiveKit prod config (if you use voice)
 
 `supabase/docker/.env` is **generated fresh** each time, not backed up.
@@ -64,10 +65,14 @@ LIVEKIT_API_KEY=<key>
 LIVEKIT_API_SECRET=<secret>
 LIVEKIT_CONFIG=./livekit.yaml
 CLEANUP_API_KEY=<any random string>
-# AI reviewer (OPTIONAL — game works without it):
-# AZURE_SPEECH_KEY=...   GCP_PROJECT_ID=...   GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/vertex-sa.json
+# AI reviewer and the chat with it (OPTIONAL — game works without it):
+# AZURE_SPEECH_KEY=...   GCP_PROJECT_ID=...   GCP_LLM_LOCATION=global
+# GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/vertex-sa.json
+# REVIEW_CHAT_MAX_QUESTIONS=30   # questions per player per game (default 30)
 ```
 Also drop in the secret files referenced above: `secrets/vertex-sa.json`, `livekit.yaml`.
+`docker-compose.yml` mounts `secrets/vertex-sa.json` into the `reviewer` (the AI reports)
+and into `app`, whose review chat calls Gemini with it from each report page.
 
 > **Shortcut:** once steps 0–3 are done, run **`./deploy/up.sh`** to do steps 4–6
 > (network → Supabase + migrations → app) in one go. Migrations go through
@@ -108,7 +113,13 @@ docker compose up -d --build
   `avalon-shared` doesn't exist or Supabase isn't reachable yet.
 - **Fresh DB = empty.** No accounts/history; everyone re-registers (frictionless since
   email confirmation is off).
-- **AI reviewer** (the `agent` service, Azure + GCP) is optional — skip those envs and
-  the game runs fine; only post-game AI summaries are disabled.
+- **AI reviewer** (the `reviewer` service, Azure + GCP) is optional — skip those envs and
+  the game runs fine; only post-game AI reports and the chat with the reviewer are off.
+  Without `GCP_PROJECT_ID` the report page shows no chat at all.
+- **No `secrets/vertex-sa.json`?** Docker then creates an empty *directory* at that path
+  for the bind mount (a plain local `docker compose up` does this). The app still starts
+  and works, but the review chat has no credentials and answers every question with 502
+  ("The reviewer couldn't answer"). Put the real file there (delete the directory first)
+  and restart `app` to enable it.
 - **GCP can't hairpin its own public IP** — the `supabase.playavalon.fun -> host-gateway`
   mapping in `docker-compose.yml` handles that (already in the repo, nothing to do).
