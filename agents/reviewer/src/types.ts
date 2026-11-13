@@ -339,7 +339,11 @@ export interface CheckedStatement {
   /** "narrative", "quest 2 commentary", "performance note: <name>". */
   section: string;
   text: string;
-  /** Null when the check gave no answer for it: it is left as written. */
+  /** False when the check, asked twice, gave no kind for it or, for a fact or
+   *  an attribution, no verdict: it is left as written, unchecked — neither
+   *  passed nor flagged. */
+  checked: boolean;
+  /** Null when unchecked. */
   kind: 'fact' | 'attribution' | 'opinion' | null;
   /** The record lines it rests on, as the check numbered them. */
   lines: number[];

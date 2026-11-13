@@ -13,6 +13,9 @@
  *      disconnect, write record.json (the game record), then the final report
  *      from it.
  *
+ * On boot, before the watcher starts, the reviews a stopped reviewer left
+ * unfinished are marked failed (`failStaleReviews`).
+ *
  * The steps themselves are in pipeline.ts, which the replay runs too; this
  * file wires the service: watcher, LiveKit bot, sessions.
  *
@@ -22,9 +25,11 @@
 import { loadConfig, type AgentConfig } from './config.js';
 import {
   createDbClient,
+  findStaleReviews,
   insertGameReviewRecording,
   loadMetaSnapshot,
   updateGameReview,
+  type StaleReview,
 } from './gamestate/db.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { startWatcher } from './gamestate/watcher.js';
@@ -257,10 +262,11 @@ async function endSession(db: SupabaseClient, session: Session): Promise<void> {
     await updateGameReview(db, ctx.gameId, {
       status: 'ready',
       summary_fa_path: faPath,
+      // Null when the translation failed: the report is Persian only.
       summary_en_path: enPath,
       error_message: null,
     });
-    log.info('final report generated');
+    log.info(enPath ? 'final report generated' : 'final report generated, in Persian only');
   } catch (err) {
     log.error('final report generation failed', err);
     await updateGameReview(db, ctx.gameId, {
@@ -272,12 +278,44 @@ async function endSession(db: SupabaseClient, session: Session): Promise<void> {
   log.info('session closed');
 }
 
+/** What a stale review's page says, by the status it was left in. */
+const STALE_REVIEW_ERROR: Record<StaleReview['status'], string> = {
+  generating: 'The reviewer stopped while writing this report, so the report was never finished.',
+  recording:
+    'The reviewer stopped while recording this game, so it missed the rest of the game and wrote no report.',
+};
+
+/**
+ * On boot, before the watcher starts and so before any session of this
+ * process: every review a stopped reviewer left unfinished — killed while
+ * writing its report (`generating`), or while recording a game that is over
+ * by now (`recording`) — is marked failed, so its page stops waiting. No
+ * report is regenerated: a `recording` review missed the end of its game,
+ * and a `generating` one would need a second way into the report (meta.json
+ * and, in blind mode, the detective's reads from guess_log.json, which
+ * nothing reads back) for a case the stop grace period makes rare. The
+ * reviewer is the only writer of game_reviews, one instance per database.
+ */
+async function failStaleReviews(db: SupabaseClient): Promise<void> {
+  for (const review of await findStaleReviews(db)) {
+    console.log(`[agent] review of game ${review.gameId} was left ${review.status}; marking it failed`);
+    await updateGameReview(db, review.gameId, {
+      status: 'failed',
+      error_message: STALE_REVIEW_ERROR[review.status],
+    });
+  }
+}
+
 async function main(): Promise<void> {
   const config = loadConfig();
   console.log('[agent] booting; data dir:', config.storage.dataDir);
 
   const db = createDbClient(config.supabase.url, config.supabase.serviceRoleKey);
   const llm = createPipelineLlm(config);
+  // A failure here must not keep the reviewer from the next game.
+  await failStaleReviews(db).catch((err) =>
+    console.error('[agent] could not fail the stale reviews:', err)
+  );
   let session: Session | null = null;
   // Sessions still wrapping up (final report), awaited on shutdown.
   const ending = new Set<Promise<void>>();
@@ -300,6 +338,9 @@ async function main(): Promise<void> {
     },
   });
 
+  // Docker allows this stop_grace_period (docker-compose.yml) before SIGKILL:
+  // long enough for a final report. A report cut off by SIGKILL is left
+  // `generating`, and failed on the next boot.
   const shutdown = async (signal: string) => {
     console.log(`[agent] received ${signal}, shutting down`);
     watcher.stop();

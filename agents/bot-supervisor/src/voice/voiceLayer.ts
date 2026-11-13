@@ -285,7 +285,7 @@ export class VoiceLayer {
   }
 
   private async processTurn(turn: RecordedTurn): Promise<void> {
-    if (isSilent(turn.pcm, SILENCE_RMS_THRESHOLD)) return;
+    if (isSilent(turn.pcm, turn.sampleRate, SILENCE_RMS_THRESHOLD)) return;
     const result = await transcribe(this.env.azure, turn.pcm, turn.sampleRate);
     if (!result.transcript.trim()) return;
     this.memory.addTurn(turn.questNumber, turn.roundIndex, turn.speakerDisplayName, result.transcript);

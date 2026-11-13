@@ -1,7 +1,8 @@
 /**
  * Read-only Supabase access for the agent.
  * Uses the service-role key so it can bypass RLS for reading everything
- * it needs (rooms, games, players, roles) — never writes game-state tables.
+ * it needs (rooms, games, players, roles) — never writes game-state tables;
+ * it writes only its own `game_reviews` rows.
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -223,6 +224,42 @@ export async function insertGameReviewRecording(
 }
 
 export type GameReviewStatus = 'recording' | 'generating' | 'ready' | 'failed';
+
+/** A review the reviewer left unfinished when it stopped. */
+export interface StaleReview {
+  gameId: string;
+  status: 'recording' | 'generating';
+}
+
+/**
+ * The reviews a stopped reviewer left unfinished, read as it boots, before
+ * any session of its own: every one still `generating`, and every one still
+ * `recording` whose game is over (`game_over`, or `ended_at` set) or whose
+ * room is closed. A `recording` review of a game still in play is not stale:
+ * the watcher takes that game up again.
+ */
+export async function findStaleReviews(db: SupabaseClient): Promise<StaleReview[]> {
+  const { data, error } = await db
+    .from('game_reviews')
+    .select('game_id, status, games(phase, ended_at, rooms(status))')
+    .in('status', ['recording', 'generating']);
+  if (error) throw error;
+
+  type RoomField = { status: string };
+  type GameField = { phase: string; ended_at: string | null; rooms: RoomField | RoomField[] | null };
+  type Row = { game_id: string; status: StaleReview['status']; games: GameField | GameField[] | null };
+  const one = <T>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+  return ((data ?? []) as unknown as Row[])
+    .filter((row) => {
+      if (row.status === 'generating') return true;
+      const game = one(row.games);
+      return (
+        game !== null &&
+        (game.phase === 'game_over' || game.ended_at !== null || one(game.rooms)?.status === 'closed')
+      );
+    })
+    .map((row) => ({ gameId: row.game_id, status: row.status }));
+}
 
 /** Update the game_reviews row's status (and optionally paths / error). */
 export async function updateGameReview(

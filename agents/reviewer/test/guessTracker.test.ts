@@ -376,16 +376,16 @@ test('each round reads the record cut at it; the scored read is from before the 
   const records = calls.map((c) => c.vars.record as string);
   assert.match(
     records[0]!,
-    /INTRODUCTIONS \(before quest 1\)\nintro\.1 Ana: talk 0_0_0\n\nSO FAR: the record ends after the introductions; the game goes on\.$/
+    /INTRODUCTIONS \(before quest 1\)\nintro\.1 Ana: <talk>talk 0_0_0<\/talk>\n\nSO FAR: the record ends after the introductions; the game goes on\.$/
   );
   assert.match(
     records[1]!,
-    /Proposal 1\.1: leader Ana; team Ana, Bo\n {2}1\.1\.1 Ana: talk 1_0_0\n {2}1\.1\.2 Bo: talk 1_0_1\n {2}Vote on proposal 1\.1: approve Ana, Bo, Cy, Ed; reject Di → rejected/
+    /Proposal 1\.1: leader Ana; team Ana, Bo\n {2}1\.1\.1 Ana: <talk>talk 1_0_0<\/talk>\n {2}1\.1\.2 Bo: <talk>talk 1_0_1<\/talk>\n {2}Vote on proposal 1\.1: approve Ana, Bo, Cy, Ed; reject Di → rejected/
   );
   assert.ok(!records[1]!.includes('Proposal 1.2') && !records[1]!.includes('Mission 1'));
   assert.match(
     records[2]!,
-    /Proposal 1\.2: leader Bo; team Bo, Cy\n {2}1\.2\.1 Bo: talk 1_1_0\n {2}Vote on proposal 1\.2: .* → approved\nMission 1: team Bo, Cy; 2 success, 0 fail → success/
+    /Proposal 1\.2: leader Bo; team Bo, Cy\n {2}1\.2\.1 Bo: <talk>talk 1_1_0<\/talk>\n {2}Vote on proposal 1\.2: .* → approved\nMission 1: team Bo, Cy; 2 success, 0 fail → success/
   );
   for (const record of records) {
     assert.ok(!record.includes(TELLING), 'the detective read the assassin-phase discussion');

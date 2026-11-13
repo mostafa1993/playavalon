@@ -1,7 +1,10 @@
 /**
  * API Route: GET /api/reviews/[gameId]
  * Returns the AI game review status and, when ready, the full summary JSON
- * for the requested language (default: fa).
+ * for the requested language (default: fa). A ready report may be in Persian
+ * only — the reviewer keeps it when the English translation fails — and then
+ * `?lang=en` gets `summary: null`, which the page shows as "no English
+ * version", not as a failure.
  *
  * Auth: caller must have played this game (be in its seating order).
  *
@@ -94,6 +97,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     const summaryPath =
       language === 'fa' ? review.summary_fa_path : review.summary_en_path;
 
+    // A Persian-only report: its translation failed.
+    if (!summaryPath && language === 'en') {
+      return NextResponse.json({
+        data: { enabled: true, status: 'ready', language, summary: null },
+      });
+    }
     if (!summaryPath) {
       return NextResponse.json({
         data: {

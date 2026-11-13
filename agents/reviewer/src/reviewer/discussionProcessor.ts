@@ -46,7 +46,7 @@ async function transcribeSpeaker(
     confidence: null,
   };
 
-  if (isSilent(seg.pcm, config.audio.silenceRmsThreshold)) return base;
+  if (isSilent(seg.pcm, seg.sampleRate, config.audio.silenceRmsThreshold)) return base;
 
   try {
     const res = await transcribe(

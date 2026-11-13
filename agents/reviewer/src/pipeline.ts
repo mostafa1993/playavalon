@@ -10,10 +10,12 @@
  *   assassin phase:  the discussion (reviewer/discussionProcessor.ts)
  *   at the end:      record.json, then the final report from it, in Persian
  *                    (reviewer/finalReport.ts), checked against the record
- *                    (reviewer/checkReport.ts), then translated into English
- *                    → summary.fa.json, summary.en.json
+ *                    (reviewer/checkReport.ts) → summary.fa.json, then
+ *                    translated into English → summary.en.json (none when
+ *                    the translation fails: the report is Persian only)
  */
 
+import fs from 'node:fs/promises';
 import { createLLMClient, isSilent, transcribe, type LLMClient } from '@avalon/shared';
 import type { AgentConfig, PipelineConfig } from './config.js';
 import { buildGameRecord } from './gamestate/record.js';
@@ -102,9 +104,9 @@ export async function processTurn(
   // 1. STT (or silence skip). The silence check avoids a round-trip to Azure
   //    for clips that clearly contain no speech, saving cost and sparing the
   //    LLM stage garbage input.
-  const silent = isSilent(turn.pcm, config.audio.silenceRmsThreshold);
+  const silent = isSilent(turn.pcm, turn.sampleRate, config.audio.silenceRmsThreshold);
   if (silent) {
-    log.info(`turn ${turnLabel(turn)} skipped STT (RMS below silence threshold)`);
+    log.info(`turn ${turnLabel(turn)} skipped STT (no 100 ms window reaches the silence threshold)`);
   }
 
   const { transcript: rawTranscript, confidence } = silent
@@ -200,7 +202,8 @@ export async function writeGameRecord(
 /**
  * A written report checked against the record it was written from: the
  * statements the check flags are rewritten once, and the check is written to
- * check.fa.json. A failed check keeps the report as written.
+ * check.fa.json. A failed check keeps the report as written; statements the
+ * check never answered for are kept as written and logged as unchecked.
  */
 async function checkedReport(
   ctx: PipelineContext,
@@ -209,12 +212,19 @@ async function checkedReport(
 ): Promise<SummaryJson> {
   const { log } = ctx;
   try {
-    const { summary: checked, check } = await checkReport(ctx.llm, record, summary);
+    const { summary: checked, check } = await checkReport(ctx.llm, record, summary, log);
     await writeJsonAtomic(checkPath(ctx.dir, summary.language), check);
     const flagged = check.statements.filter((s) => s.flagged).length;
+    const unchecked = check.statements.filter((s) => !s.checked);
     log.info(
       `report check (${summary.language}): ${flagged} of ${check.statements.length} statements flagged and rewritten`
     );
+    if (unchecked.length > 0) {
+      log.error(
+        `report check (${summary.language}): ${unchecked.length} statements unchecked, kept as written: ` +
+          unchecked.map((s) => `[${s.id}] ${s.text}`).join(' | ')
+      );
+    }
     return checked;
   } catch (err) {
     log.error(`report check (${summary.language}) failed; the report is kept as written`, err);
@@ -224,17 +234,18 @@ async function checkedReport(
 
 /**
  * The final report from the game record: written once, in Persian, checked
- * against the record, then translated into English from the checked Persian
- * report → summary.fa.json and summary.en.json. God mode: the narrative,
- * quest commentary and performance notes. Blind mode: the narrative and quest
+ * against the record → summary.fa.json, then translated into English from the
+ * checked Persian report → summary.en.json. God mode: the narrative, quest
+ * commentary and performance notes. Blind mode: the narrative and quest
  * commentary from the blind record, with the detective's reads, its scored
- * read last. Returns the two paths.
+ * read last. Returns the two paths; the English one is null when the
+ * translation failed, and the report is Persian only.
  */
 export async function generateFinalReport(
   ctx: PipelineContext,
   record: GameRecord,
   guessTracker: GuessTracker | null
-): Promise<{ faPath: string; enPath: string }> {
+): Promise<{ faPath: string; enPath: string | null }> {
   const { llm, log, meta } = ctx;
   log.info(`writing the ${record.mode} report from the record`);
 
@@ -252,11 +263,19 @@ export async function generateFinalReport(
           meta.roomCode
         );
   const fa = await checkedReport(ctx, record, written);
-  log.info('translating the checked report into English');
-  const en = await translateReport(llm, record, fa);
-
+  // The players' report, kept whatever becomes of its translation.
   const faPath = summaryPath(ctx.dir, 'fa');
+  await writeJsonAtomic(faPath, fa);
+
+  log.info('translating the checked report into English');
   const enPath = summaryPath(ctx.dir, 'en');
-  await Promise.all([writeJsonAtomic(faPath, fa), writeJsonAtomic(enPath, en)]);
-  return { faPath, enPath };
+  try {
+    await writeJsonAtomic(enPath, await translateReport(llm, record, fa, log));
+    return { faPath, enPath };
+  } catch (err) {
+    log.error('the translation failed; the report is in Persian only', err);
+    // No English from an earlier run beside this Persian report.
+    await fs.rm(enPath, { force: true });
+    return { faPath, enPath: null };
+  }
 }

@@ -1,8 +1,9 @@
 /**
  * The report's check: statements tied to the record's numbered lines, the
  * flagged ones rewritten once and kept in the report, and a clean report left
- * as written with no rewrite call. The model is a stub that records what it
- * was given.
+ * as written with no rewrite call. A statement the check leaves unanswered is
+ * asked for once more, and never passes unchecked. The model is a stub that
+ * records what it was given.
  */
 
 import test from 'node:test';
@@ -97,6 +98,8 @@ interface Call {
   vars: PromptVars;
 }
 
+/** Answers each prompt from `answers`; a list answers its prompt's calls in
+ *  turn, its last answer from then on. */
 function stub(answers: Record<string, unknown>) {
   const calls: Call[] = [];
   const llm: LLMClient = {
@@ -104,12 +107,23 @@ function stub(answers: Record<string, unknown>) {
       throw new Error('the check asks for JSON');
     },
     runJson: async <T>(file: string, vars: PromptVars) => {
+      const n = calls.filter((c) => c.file === file).length;
       calls.push({ file, vars });
       if (!(file in answers)) throw new Error(`unexpected prompt ${file}`);
-      return answers[file] as T;
+      const given = answers[file];
+      return (Array.isArray(given) ? given[Math.min(n, given.length - 1)] : given) as T;
     },
   };
   return { llm, calls };
+}
+
+/** A log that keeps what it is told. */
+function keptLog() {
+  const lines: string[] = [];
+  return {
+    lines,
+    log: { info: (msg: string) => void lines.push(msg), error: (msg: string) => void lines.push(msg) },
+  };
 }
 
 const ok = (id: number, kind: string, lines: number[] = []) => ({
@@ -149,7 +163,7 @@ test("the record's lines are numbered, blank lines aside", () => {
 });
 
 test('a fact or attribution is flagged when wrong, unsupported, or tied to no line of the record', () => {
-  const statements = [1, 2, 3, 4, 5, 6, 7].map((id) => ({
+  const statements = [1, 2, 3, 4, 5, 6, 7, 8].map((id) => ({
     id,
     section: 'narrative',
     text: `s${id}`,
@@ -163,24 +177,26 @@ test('a fact or attribution is flagged when wrong, unsupported, or tied to no li
       ok(5, 'opinion'),
       { id: 6, kind: 'claim?', lines: [1], verdict: 'ok' },
       // 7: no answer
+      { id: 8, kind: 'fact', lines: [3], problem: '' },
     ],
     statements,
     10
   );
   assert.deepEqual(
-    checked.map((s) => [s.id, s.flagged, s.problem]),
+    checked.map((s) => [s.id, s.checked, s.flagged, s.problem]),
     [
-      [1, false, ''],
-      [2, true, 'Cy led it, not Ana.'],
-      [3, true, 'the check tied it to no record line'],
-      [4, true, 'the check tied it to lines the record does not have (99)'],
-      [5, false, ''],
-      [6, false, ''],
-      [7, false, ''],
+      [1, true, false, ''],
+      [2, true, true, 'Cy led it, not Ana.'],
+      [3, true, true, 'the check tied it to no record line'],
+      [4, true, true, 'the check tied it to lines the record does not have (99)'],
+      [5, true, false, ''],
+      [6, false, false, ''],
+      [7, false, false, ''],
+      [8, false, false, ''],
     ]
   );
-  assert.equal(checked[5]!.kind, null, 'an answer of no known kind leaves it unchecked');
-  assert.equal(checked[6]!.verdict, null);
+  // An answer of no known kind, no answer, or a fact with no verdict: unchecked, not passed.
+  for (const s of checked.slice(5)) assert.deepEqual([s.kind, s.verdict], [null, null], `statement ${s.id}`);
 });
 
 test('flagged statements reach the rewrite, and the report keeps the rewrites', async () => {
@@ -220,12 +236,14 @@ test('flagged statements reach the rewrite, and the report keeps the rewrites', 
     },
   });
 
-  const { summary, check } = await checkReport(llm, RECORD, SUMMARY);
+  const { summary, check } = await checkReport(llm, RECORD, SUMMARY, keptLog().log);
 
   assert.deepEqual(
     calls.map((c) => c.file),
     ['check-report.yml', 'rewrite-report.yml']
   );
+  assert.equal(calls[0]!.vars.recheck, '');
+  assert.ok(!('recheck' in calls[1]!.vars), 'the rewrite gets no recheck note');
   const record = calls[0]!.vars.record as string;
   assert.equal(record, numberedRecord(recordText(RECORD)).text);
   assert.match(record, /^\[1\] PLAYERS/);
@@ -280,19 +298,75 @@ test('a clean report skips the rewrite and stays as written', async () => {
         .concat([ok(8, 'opinion'), ok(9, 'attribution', [7])]),
     },
   });
-  const { summary, check } = await checkReport(llm, RECORD, SUMMARY);
+  const { summary, check } = await checkReport(llm, RECORD, SUMMARY, keptLog().log);
   assert.deepEqual(
     calls.map((c) => c.file),
     ['check-report.yml']
   );
   assert.deepEqual(summary, SUMMARY);
-  assert.ok(check.statements.every((s) => !s.flagged));
+  assert.ok(check.statements.every((s) => s.checked && !s.flagged));
 });
 
 test('a check with no statements list fails', async () => {
   const { llm } = stub({ 'check-report.yml': { verdicts: [] } });
   await assert.rejects(
-    checkReport(llm, RECORD, SUMMARY),
+    checkReport(llm, RECORD, SUMMARY, keptLog().log),
     /check-report\.yml returned no statements list/
   );
+});
+
+/** A report of two statements: a fact the record settles, and one it never can. */
+const FAIL_CARD: GodSummaryJson = {
+  ...SUMMARY,
+  narrative: 'Ana led the first proposal. Ana played a fail card.',
+  quest_commentary: [],
+  performance: [],
+};
+
+test('a check that answers only statement 1 is asked again for statement 2, and never passes it unchecked', async () => {
+  const { llm, calls } = stub({ 'check-report.yml': { statements: [ok(1, 'fact', [6])] } });
+  const { log, lines } = keptLog();
+  const { summary, check } = await checkReport(llm, RECORD, FAIL_CARD, log);
+
+  // Asked once more, for statement 2 alone, with the whole report to read it in.
+  assert.deepEqual(calls.map((c) => c.file), ['check-report.yml', 'check-report.yml']);
+  assert.match(calls[1]!.vars.recheck as string, /NO KIND OR NO VERDICT FOR THESE STATEMENTS: \[2\]\n/);
+  assert.equal(calls[1]!.vars.statements, calls[0]!.vars.statements);
+
+  // Still no answer: kept as written, recorded as unchecked — not as passed.
+  const failCard = check.statements.find((s) => s.text === 'Ana played a fail card.')!;
+  assert.deepEqual(
+    [failCard.checked, failCard.flagged, failCard.kind, failCard.verdict],
+    [false, false, null, null]
+  );
+  assert.equal(check.statements[0]!.checked, true);
+  assert.equal(summary.narrative, FAIL_CARD.narrative);
+  assert.ok(lines.some((l) => /no kind or verdict for statement 2; asking again/.test(l)));
+});
+
+test('a statement answered only when asked again is checked, flagged and rewritten', async () => {
+  const { llm, calls } = stub({
+    'check-report.yml': [
+      { statements: [ok(1, 'fact', [6])] },
+      {
+        statements: [
+          // Only the statements asked for again are read from the second answer.
+          { id: 1, kind: 'fact', lines: [6], verdict: 'wrong', problem: 'ignored' },
+          { id: 2, kind: 'fact', lines: [], verdict: 'unsupported', problem: 'The record never says who played a fail card.' },
+        ],
+      },
+    ],
+    'rewrite-report.yml': { rewrites: [{ id: 2, text: 'The mission had one fail card.' }] },
+  });
+  const { summary, check } = await checkReport(llm, RECORD, FAIL_CARD, keptLog().log);
+
+  assert.deepEqual(calls.map((c) => c.file), ['check-report.yml', 'check-report.yml', 'rewrite-report.yml']);
+  assert.deepEqual(
+    check.statements.map((s) => [s.id, s.checked, s.flagged]),
+    [
+      [1, true, false],
+      [2, true, true],
+    ]
+  );
+  assert.equal(summary.narrative, 'Ana led the first proposal. The mission had one fail card.');
 });

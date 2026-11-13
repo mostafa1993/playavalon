@@ -269,7 +269,16 @@ function stubLlm(runDir: () => string) {
           performance: [{ player: 'Ana', assessment: 'assessment' }],
         };
       case 'check-report.yml':
-        return { statements: [] };
+        // Every statement is an opinion: nothing to rewrite.
+        return {
+          statements: [...(vars.statements as string).matchAll(/^\[(\d+)\]/gm)].map((m) => ({
+            id: Number(m[1]),
+            kind: 'opinion',
+            lines: [],
+            verdict: 'ok',
+            problem: '',
+          })),
+        };
       case 'translate-report.yml': {
         const report = JSON.parse(vars.report as string) as {
           narrative: string;
@@ -433,10 +442,10 @@ test('god mode: the report reads the whole record, once, in Persian; the English
   const record = reports[0]!.vars.record as string;
   // Each proposal with its own leader, the talk under it, its vote; the
   // proofread talk; the discussion; the pick.
-  assert.match(record, /Proposal 1\.1: leader Ana; team Ana, Ben\n  1\.1\.1 Ana: fixed raw 1_0_0\n  1\.1\.2 Ben: fixed raw 1_0_1\n  Vote on proposal 1\.1: approve Ana, Ben; reject Cy, Dee, Eve → rejected/);
-  assert.match(record, /Proposal 1\.2: leader Ben; team Ben, Cy\n {2}1\.2\.1 Ben: fixed raw 1_1_0\n {2}1\.2\.2 Cy \[low confidence\]: fixed raw 1_1_1\n/);
+  assert.match(record, /Proposal 1\.1: leader Ana; team Ana, Ben\n  1\.1\.1 Ana: <talk>fixed raw 1_0_0<\/talk>\n  1\.1\.2 Ben: <talk>fixed raw 1_0_1<\/talk>\n  Vote on proposal 1\.1: approve Ana, Ben; reject Cy, Dee, Eve → rejected/);
+  assert.match(record, /Proposal 1\.2: leader Ben; team Ben, Cy\n {2}1\.2\.1 Ben: <talk>fixed raw 1_1_0<\/talk>\n {2}1\.2\.2 Cy \[low confidence\]: <talk>fixed raw 1_1_1<\/talk>\n/);
   assert.match(record, /Ana — good \(merlin\)/);
-  assert.match(record, /Eve: fixed raw discussion/);
+  assert.match(record, /Eve: <talk>fixed raw discussion/);
   assert.match(record, /The assassin's pick \(named as Merlin\): Ana/);
 
   // The Persian report is checked against the record it was written from,
@@ -476,7 +485,7 @@ test('the detective updates round by round, each from the public record cut at i
   // Each round's update read that round's proofread talk and its vote, and
   // nothing later: no later talk, no assassin phase, no outcome.
   const round10 = updates[1]!.vars.record as string;
-  assert.match(round10, /1\.1\.1 Ana: fixed raw 1_0_0\n {2}1\.1\.2 Ben: fixed raw 1_0_1\n {2}Vote on proposal 1\.1: approve Ana, Ben; reject Cy, Dee, Eve → rejected/);
+  assert.match(round10, /1\.1\.1 Ana: <talk>fixed raw 1_0_0<\/talk>\n {2}1\.1\.2 Ben: <talk>fixed raw 1_0_1<\/talk>\n {2}Vote on proposal 1\.1: approve Ana, Ben; reject Cy, Dee, Eve → rejected/);
   assert.ok(!round10.includes('Proposal 1.2') && !round10.includes('raw 1_1_0'), round10);
   for (const c of updates) {
     const record = c.vars.record as string;

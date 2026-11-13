@@ -114,9 +114,14 @@ services:
       - ./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro
     depends_on:
       - livekit
-    # Give endSession time to finish its LLM calls on SIGTERM before
-    # Docker sends SIGKILL (default 10s is too short for Vertex calls).
-    stop_grace_period: 120s
+    # On SIGTERM (`docker compose down` in deploy/app.sh) the reviewer ends the
+    # live session and finishes every final report before it exits. A report
+    # is four model calls in a row (write, check, rewrite, translate), six
+    # when the check or the translation is asked again, each with retries:
+    # well past two minutes. 600s lets it finish, at the cost of a deploy that
+    # waits for it. A report cut off by SIGKILL anyway is marked failed when
+    # the reviewer boots again.
+    stop_grace_period: 600s
     restart: unless-stopped
 
   # Feature 024 (P4): bot supervisor — watches for rooms with agent_count > 0

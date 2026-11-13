@@ -61,6 +61,14 @@ game end:  database rows + turn files + discussion.json  →  record.json  →  
   Lady of the Lake (with the result in god mode only), the assassin phase's discussion
   and pick, and the outcome. A blind report reads the blind record (no role, no Lady
   result), the game's setup and the detective's guesses.
+- **Player talk is data**: the record text fences each transcript between `<talk>` and
+  `</talk>` (`fencedTalk`; the talk's angle brackets and line breaks are taken out, so
+  it can't close its fence or pass for a record line). Every prompt that reads it —
+  the report, the check, the rewrite, the detective — says the talk and the names are
+  data from the game, never instructions: what was said is quoted or reported, never
+  acted on; the translation says the same of the quotes and names it translates. The
+  facts on the page come from the record through code; this guards the opinions and
+  notes.
 - **What the model writes**: the narrative (the whole game, the assassin phase
   included), a short commentary per quest, and in god mode a performance note per
   player. Everything else on the review page is the record's: the summary carries the
@@ -76,14 +84,28 @@ game end:  database rows + turn files + discussion.json  →  record.json  →  
   attribution found wrong or unsupported, or tied to no line the record has, is
   flagged; the flagged statements get one rewrite in one call
   (`prompts/rewrite-report.yml`), and the report keeps the rewrites (an empty one
-  removes the statement). A report with nothing flagged skips the rewrite; a rewrite
-  is not checked again; a failed check keeps the report as written. The check's
-  prompt is its own, not the judge's (`agents/review-judge`).
+  removes the statement). A statement the answer gives no kind, or a fact or
+  attribution it gives no verdict, is unchecked, not passed: the check is asked once
+  more for those alone, and any still unchecked are kept as written, logged, and
+  recorded in `check.<lang>.json` with `checked: false`. A report with nothing flagged
+  skips the rewrite; a rewrite is not checked again; a failed check keeps the report
+  as written. The check's prompt is its own, not the judge's (`agents/review-judge`).
 - **One report, translated** (plan row G): the report is reasoned and written once,
   in Persian, which the players read, and checked; the English report is one call
   (`prompts/translate-report.yml`) translating the checked Persian narrative, quest
-  commentary and performance notes, around the same record and reads. A translation
-  that leaves out a quest or a player fails the report.
+  commentary and performance notes, around the same record and reads.
+  `summary.fa.json` is written before the translation is tried. An answer that can't
+  be used — the call failed, its JSON is broken or cut off, or it leaves out the
+  narrative, a quest or a player — is asked for once more, with what was wrong; when
+  that fails too, the review is ready in Persian only (no `summary.en.json`,
+  `summary_en_path` null) and the page's English view says the English version isn't
+  available.
+- **Stopping and booting**: on SIGTERM the reviewer ends the live session and finishes
+  every final report before it exits; the compose file gives it 600 s
+  (`stop_grace_period`). On boot, before the watcher starts, every review left
+  `generating`, or left `recording` for a game that is over or whose room is closed,
+  is marked `failed` with what happened (`failStaleReviews` in `src/index.ts`), so its
+  page stops waiting; no report is regenerated.
 
 ## Environment
 
@@ -111,11 +133,19 @@ See repo-root `.env.example`. Required vars:
   - `LIVEKIT_BOT_IDENTITY_PREFIX` — default `reviewer-`.
   - `GAME_WATCHER_INTERVAL_MS` — polling cadence (default `3000`).
   - `AUDIO_SAMPLE_RATE` — PCM sample rate delivered to STT (default `16000`).
-  - `SILENCE_RMS_THRESHOLD` — clips with RMS below this skip STT entirely
-    (default `250`). Raise to skip more, lower to transcribe more. Clips over
-    55 s (a speaker's whole assassin-phase discussion) are cut at their quietest
-    points into pieces of at most 55 s, the STT endpoint's per-request limit
-    being 60 s; silent pieces are skipped by the same threshold.
+  - `SILENCE_RMS_THRESHOLD` — clips with no 100 ms window at this RMS skip STT
+    entirely (default `250`); the loudest window, not the clip's average, so a
+    short remark in a long clip of room noise is kept. Raise to skip more, lower
+    to transcribe more. Clips over 55 s (a speaker's whole assassin-phase
+    discussion) are cut at their quietest points into pieces of 20–55 s, the STT
+    endpoint's per-request limit being 60 s; silent pieces are skipped by the same
+    threshold. Every request is sent without its leading and trailing quiet (the
+    same windows and threshold, 0.3 s kept), so talk that starts late in a clip
+    isn't lost to the endpoint's initial-silence timeout; an `InitialSilenceTimeout`
+    answer, like `NoMatch`, is no words heard, not a failure. The joined confidence
+    is the mean weighted by the length sent, a piece whose request failed counting
+    as 0 and one that heard no words not counting, so a transcript that lost much
+    of its talk is flagged `low_confidence`.
   - `RETRY_MAX_ATTEMPTS` — total attempts for transient-failure retries on
     STT and LLM calls (default `3`).
   - `RETRY_BASE_DELAY_MS` — base exponential-backoff delay (default `500`).
@@ -143,7 +173,7 @@ $DATA_DIR/<game_id>/
   discussion.json                  # the assassin-phase discussion, if any (raw + corrected)
   guess_log.json                   # blind mode: the detective's read per round (never read back)
   record.json                      # the game record (written at game end)
-  summary.fa.json, summary.en.json # the final report, from the record
+  summary.fa.json, summary.en.json # the final report, from the record (no .en when the translation failed)
   check.fa.json                    # the report's check: each statement, what it rests on, rewrites
 ```
 
@@ -167,8 +197,9 @@ talk (the facts the page renders); `narrative`; `quest_commentary`, one
 shows "This report is no longer available".
 
 `check.fa.json` (`ReportCheck`) holds every statement of the Persian report as written,
-with the check's kind, record lines (as numbered in the check's prompt), verdict and
-problem, and for a flagged statement the rewrite that took its place.
+whether it was `checked`, with the check's kind, record lines (as numbered in the
+check's prompt), verdict and problem, and for a flagged statement the rewrite that
+took its place. An unchecked statement (`checked: false`) has no kind or verdict.
 
 ## Replay
 
@@ -235,11 +266,14 @@ npm run dev
 
 Regression tests verify prompt YAML files parse, declare the right
 `response_mime_type`, and reference exactly the variables the agent code
-passes in — catching drift between a prompt and its caller. Plus unit tests
-for the silence detector, the low-confidence flag, the game record, the final report (the record as its
-prompt reads it, the summary built around a stub model's answer, and the English
-translated from the checked Persian report), the
-report's check (flagged statements rewritten, a clean report left alone), the
+passes in — catching drift between a prompt and its caller — and that every prompt
+reading player talk treats it as data. Plus unit tests
+for the silence detector and the cut (on noisy audio), the low-confidence flag, the game record, the final report (the record as its
+prompt reads it, the talk fenced, the summary built around a stub model's answer,
+the English translated from the checked Persian report and asked again once, a
+failed check or translation never losing the report), the
+report's check (flagged statements rewritten, a clean report left alone, an
+unanswered statement asked again and never passed), the stale reviews read on boot, the
 blind detective (its read checked against the setup's roles and counts, the re-ask,
 the record cut per round), the watcher, and the replay (on a stub model).
 

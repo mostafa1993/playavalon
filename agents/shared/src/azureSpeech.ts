@@ -7,7 +7,9 @@
  *   The endpoint takes at most 60 s per request. Speaking turns fit (the
  *   timer caps them at 55 s); longer clips — one speaker's whole assassin-
  *   phase discussion — are cut at their quietest points into pieces of at
- *   most 55 s, transcribed piece by piece and joined.
+ *   most 55 s, transcribed piece by piece and joined. Every request is sent
+ *   without its leading and trailing quiet, so talk that starts late in a
+ *   clip isn't lost to the endpoint's initial-silence timeout.
  *
  * TTS: cognitiveservices/v1 synthesis endpoint.
  *   Input: text + a neural voice name (SSML built + escaped here).
@@ -19,7 +21,7 @@
  */
 
 import { isNetworkError, isTransientHttpStatus, retry } from './retry.js';
-import { isSilent, splitAtQuietest } from './silence.js';
+import { splitAtQuietest, voicedSpan } from './silence.js';
 
 export interface AzureSpeechConfig {
   key: string;
@@ -38,10 +40,13 @@ export interface TranscribeOptions {
     maxAttempts?: number;
     baseDelayMs?: number;
   };
-  /** Pieces of a long clip below this RMS are skipped (default 250, as
+  /** The quiet a request is trimmed of, and the pieces of a long clip that
+   *  are skipped, have no 100 ms window at this RMS (default 250, as
    *  SILENCE_RMS_THRESHOLD). */
   silenceRmsThreshold?: number;
 }
+
+const DEFAULT_SILENCE_RMS = 250;
 
 /** Longest audio sent in one request; the endpoint's cap is 60 s. */
 const MAX_PIECE_SEC = 55;
@@ -71,10 +76,14 @@ class AzureSpeechError extends Error {
 
 /**
  * Transcribe a clip of any length. Up to 55 s it is one request. A longer clip
- * is cut at its quietest points; silent pieces are skipped, a piece that fails
+ * is cut at its quietest points into pieces of 20–55 s. Each request is the
+ * clip's or the piece's voiced span (`voicedSpan`): its leading and trailing
+ * quiet trimmed, 0.3 s kept; nothing voiced, no request. A piece that fails
  * doesn't drop the others (the clip fails only if every voiced piece does),
- * the texts are joined in order, and the confidence is the mean of the pieces'
- * confidences weighted by their length.
+ * and the texts are joined in order. The confidence is the mean of the
+ * pieces' confidences weighted by the length sent, a failed piece counting as
+ * 0 — so a clip that lost a minute of talk reads as unsure, not as only what
+ * survived — and a piece that heard no words (no confidence) not counting.
  */
 export async function transcribe(
   config: AzureSpeechConfig,
@@ -82,13 +91,19 @@ export async function transcribe(
   sampleRate: number,
   options: TranscribeOptions = {}
 ): Promise<TranscribeResult> {
+  const threshold = options.silenceRmsThreshold ?? DEFAULT_SILENCE_RMS;
+  const voicedOf = (clip: Int16Array) => {
+    const span = voicedSpan(clip, sampleRate, threshold);
+    return span ? clip.subarray(span.start, span.end) : null;
+  };
   if (pcm.length <= MAX_PIECE_SEC * sampleRate) {
-    return transcribeOnce(config, pcm, sampleRate, options);
+    const voiced = voicedOf(pcm);
+    if (!voiced) return { transcript: '', confidence: null, raw: null };
+    return transcribeOnce(config, voiced, sampleRate, options);
   }
-  const threshold = options.silenceRmsThreshold ?? 250;
   const voiced = splitAtQuietest(pcm, sampleRate, { maxSec: MAX_PIECE_SEC })
-    .map((p) => pcm.subarray(p.start, p.end))
-    .filter((piece) => !isSilent(piece, threshold));
+    .map((p) => voicedOf(pcm.subarray(p.start, p.end)))
+    .filter((piece): piece is Int16Array => piece !== null);
   if (voiced.length === 0) return { transcript: '', confidence: null, raw: [] };
 
   const results = await Promise.allSettled(
@@ -100,14 +115,18 @@ export async function transcribe(
   if (ok.length === 0) {
     throw (results[0] as PromiseRejectedResult).reason;
   }
-  for (const r of results) {
+  let failedLength = 0;
+  results.forEach((r, i) => {
     if (r.status === 'rejected') {
+      failedLength += voiced[i]!.length;
       const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
       console.warn(`[stt] a piece of a long clip failed, kept the others — ${msg}`);
     }
-  }
+  });
+  // A piece that came back with no confidence (no words) has no weight; a
+  // failed one weighs its length at confidence 0.
   const weighted = ok.filter((o) => o.result.confidence !== null);
-  const totalLength = weighted.reduce((sum, o) => sum + o.length, 0);
+  const totalLength = weighted.reduce((sum, o) => sum + o.length, 0) + failedLength;
   return {
     transcript: ok
       .map((o) => o.result.transcript.trim())
@@ -160,11 +179,13 @@ async function transcribeOnce(
         raw: payload,
       };
     }
-    if (payload.RecognitionStatus === 'NoMatch') {
+    // No words heard: nothing matched, or only silence until the endpoint
+    // stopped waiting. An empty transcript with no confidence, not a failure.
+    if (payload.RecognitionStatus === 'NoMatch' || payload.RecognitionStatus === 'InitialSilenceTimeout') {
       return { transcript: '', confidence: null, raw: payload };
     }
-    // Other statuses (InitialSilenceTimeout, BabbleTimeout, Error, etc.) are
-    // non-transient — retrying won't help.
+    // Other statuses (BabbleTimeout, Error, etc.) are non-transient —
+    // retrying won't help.
     throw new AzureSpeechError(
       { payloadStatus: payload.RecognitionStatus },
       `Azure Speech status=${payload.RecognitionStatus}`

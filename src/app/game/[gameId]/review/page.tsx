@@ -16,6 +16,12 @@ import {
 
 type Language = 'fa' | 'en';
 
+/** How often the page asks again while the reviewer works, and for how long:
+ *  a report takes minutes, so a review still unfinished after half an hour
+ *  is stuck, and the page stops asking. */
+const POLL_EVERY_MS = 10_000;
+const POLL_FOR_MS = 30 * 60_000;
+
 export default function GameReviewPage() {
   const params = useParams();
   const gameId = params.gameId as string;
@@ -34,6 +40,8 @@ export default function GameReviewPage() {
     | 'disabled'
     | 'unavailable'
     | 'in_play'
+    | 'untranslated'
+    | 'stalled'
   >('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +59,7 @@ export default function GameReviewPage() {
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const pollUntil = Date.now() + POLL_FOR_MS;
 
     const fetchOnce = async () => {
       try {
@@ -72,18 +81,26 @@ export default function GameReviewPage() {
           return;
         }
         if (body.data.status === 'ready') {
+          // A Persian-only report: its English translation failed.
+          if (body.data.summary === null) {
+            setStatus('untranslated');
+            return;
+          }
           // A report in an earlier format can't be shown (plan D17).
           const next = summaryView(body.data.summary);
           setView(next);
           setStatus(next ? 'ready' : 'unavailable');
           return;
         }
-        setStatus(body.data.status);
         setError(body.data.error_message ?? null);
-
-        if (body.data.status !== 'failed') {
+        if (body.data.status === 'failed') {
+          setStatus('failed');
+        } else if (Date.now() < pollUntil) {
           // Poll again while the agent is still working.
-          timer = setTimeout(fetchOnce, 10_000);
+          setStatus(body.data.status);
+          timer = setTimeout(fetchOnce, POLL_EVERY_MS);
+        } else {
+          setStatus('stalled');
         }
       } catch (err) {
         if (cancelled) return;
@@ -136,6 +153,32 @@ export default function GameReviewPage() {
       <ReviewShell onBack={() => router.push(`/game/${gameId}`)} title="AI Game Report">
         <div className="card p-6 text-center space-y-3">
           <p className="text-avalon-text">The report opens once the game is over.</p>
+        </div>
+      </ReviewShell>
+    );
+  }
+
+  if (status === 'untranslated') {
+    return (
+      <ReviewShell
+        onBack={() => router.push(`/game/${gameId}`)}
+        title="AI Game Report"
+        right={<LanguageToggle value={language} onChange={setLanguage} />}
+      >
+        <div className="card p-6 text-center space-y-3">
+          <p className="text-avalon-text">The English version isn&apos;t available for this game.</p>
+          <p className="text-avalon-silver text-sm">The report is in Persian: switch to فارسی above.</p>
+        </div>
+      </ReviewShell>
+    );
+  }
+
+  if (status === 'stalled') {
+    return (
+      <ReviewShell onBack={() => router.push(`/game/${gameId}`)} title="AI Game Report">
+        <div className="card p-6 text-center space-y-3">
+          <p className="text-avalon-text">The report is taking much longer than it should.</p>
+          <p className="text-avalon-silver text-sm">Reload this page to check again.</p>
         </div>
       </ReviewShell>
     );

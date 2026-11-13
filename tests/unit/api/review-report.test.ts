@@ -2,7 +2,8 @@
  * Unit tests for GET /api/reviews/[gameId], with the database and the summary
  * file stubbed: the report opens only for a player of the game, and only once
  * the game can't be played any more — over, or its room closed — since the
- * reviewer can mark a live game's review ready.
+ * reviewer can mark a live game's review ready. A report whose translation
+ * failed is Persian only: its English request is ready with no summary.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -34,8 +35,8 @@ const GAME = '6f1c1a52-6c2e-4e7b-9a43-0d6f3b1e2a10';
 const PLAYER = 'p1';
 const SUMMARY = { format: 2, mode: 'god', narrative: 'روایت' };
 
-async function open(gameId = GAME) {
-  const res = await GET(new Request(`http://test/api/reviews/${gameId}?lang=fa`), {
+async function open(gameId = GAME, lang = 'fa') {
+  const res = await GET(new Request(`http://test/api/reviews/${gameId}?lang=${lang}`), {
     params: Promise.resolve({ gameId }),
   });
   return { status: res.status, body: await res.json() };
@@ -65,6 +66,27 @@ describe('GET /api/reviews/[gameId]', () => {
     expect(await open()).toEqual({
       status: 200,
       body: { data: { enabled: true, status: 'ready', language: 'fa', summary: SUMMARY } },
+    });
+  });
+
+  it('serves a Persian-only report: its English request is ready with no summary, never an error', async () => {
+    m.review.mockReturnValue({
+      status: 'ready',
+      summary_fa_path: `/data/games/${GAME}/summary.fa.json`,
+      summary_en_path: null,
+      error_message: null,
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+    expect(await open(GAME, 'en')).toEqual({
+      status: 200,
+      body: { data: { enabled: true, status: 'ready', language: 'en', summary: null } },
+    });
+    expect(m.readFile).not.toHaveBeenCalled();
+    expect((await open(GAME, 'fa')).body.data).toEqual({
+      enabled: true,
+      status: 'ready',
+      language: 'fa',
+      summary: SUMMARY,
     });
   });
 

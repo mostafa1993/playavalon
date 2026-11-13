@@ -8,16 +8,20 @@
  * the record the report was written from (`recordText`). The check
  * (`prompts/check-report.yml`) gives every statement its kind, the record
  * lines it rests on and a verdict. Code flags a fact or attribution whose
- * verdict isn't "ok", or that cites no line the record has. The flagged
- * statements go to one rewrite call (`prompts/rewrite-report.yml`), each once,
- * and the rewrites take their places in the text; a report with nothing
- * flagged skips it. A rewrite is not checked again.
+ * verdict isn't "ok", or that cites no line the record has. A statement the
+ * answer leaves without a kind, or a fact or attribution without a verdict,
+ * is unchecked, not passed: the check is asked once more for those alone, and
+ * any still unchecked are kept as written and recorded as unchecked. The
+ * flagged statements go to one rewrite call (`prompts/rewrite-report.yml`),
+ * each once, and the rewrites take their places in the text; a report with
+ * nothing flagged skips it. A rewrite is not checked again.
  *
  * The check is not the judge (agents/review-judge): its prompt is its own,
  * though the model is the same.
  */
 
 import type { LLMClient } from '@avalon/shared';
+import type { GameLog } from '../pipeline.js';
 import { recordText } from './finalReport.js';
 import type { CheckedStatement, GameRecord, ReportCheck, SummaryJson } from '../types.js';
 
@@ -128,14 +132,22 @@ const items = (v: unknown): Array<Record<string, unknown>> =>
     ? v.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
     : [];
 
+/** A statement as the check and the rewrite name it. */
+interface Statement {
+  id: number;
+  section: string;
+  text: string;
+}
+
 /**
  * The check's answer, statement by statement. A fact or attribution is
  * flagged when its verdict isn't "ok" or it rests on no line the record has.
- * A statement the check gave no answer for is left as written.
+ * A statement the answer gives no kind for, or a fact or attribution it gives
+ * no verdict, is unchecked (`checked: false`), never passed.
  */
 export function readCheck(
   raw: unknown,
-  statements: Array<{ id: number; section: string; text: string }>,
+  statements: Statement[],
   recordLines: number
 ): CheckedStatement[] {
   const byId = new Map<number, Record<string, unknown>>();
@@ -145,15 +157,15 @@ export function readCheck(
   }
   return statements.map((s) => {
     const r = byId.get(s.id);
-    if (!r || !isKind(r.kind)) {
-      return { ...s, kind: null, lines: [], verdict: null, flagged: false, problem: '' };
+    const verdict = str(r?.verdict);
+    if (!r || !isKind(r.kind) || (r.kind !== 'opinion' && !verdict)) {
+      return { ...s, checked: false, kind: null, lines: [], verdict: null, flagged: false, problem: '' };
     }
     const lines = (Array.isArray(r.lines) ? r.lines : [])
       .map(Number)
       .filter((n) => Number.isInteger(n));
-    const verdict = str(r.verdict) || 'ok';
     if (r.kind === 'opinion') {
-      return { ...s, kind: r.kind, lines, verdict, flagged: false, problem: '' };
+      return { ...s, checked: true, kind: r.kind, lines, verdict: verdict || 'ok', flagged: false, problem: '' };
     }
     const missing = lines.filter((n) => n < 1 || n > recordLines);
     const problem =
@@ -164,8 +176,19 @@ export function readCheck(
           : missing.length > 0
             ? `the check tied it to lines the record does not have (${missing.join(', ')})`
             : '';
-    return { ...s, kind: r.kind, lines, verdict, flagged: problem !== '', problem };
+    return { ...s, checked: true, kind: r.kind, lines, verdict, flagged: problem !== '', problem };
   });
+}
+
+/** The note that asks the check again for the statements it left unchecked. */
+function recheckText(unchecked: CheckedStatement[]): string {
+  return [
+    '',
+    'YOUR LAST ANSWER GAVE NO KIND OR NO VERDICT FOR THESE STATEMENTS: ' +
+      unchecked.map((s) => `[${s.id}]`).join(', '),
+    'Check these statements now, and only these: one entry for each, in order.',
+    '',
+  ].join('\n');
 }
 
 function flaggedText(flagged: CheckedStatement[]): string {
@@ -191,13 +214,16 @@ function readRewrites(raw: unknown, flagged: CheckedStatement[]): Map<number, st
 
 /**
  * Check a written report against the record it was written from, and rewrite
- * what the check flags. Returns the report with the rewrites in place, and the
- * check (every statement as written, what was found, what replaced it).
+ * what the check flags. The statements the check's answer leaves unchecked are
+ * asked for once more; those still unchecked are kept as written and recorded
+ * as unchecked. Returns the report with the rewrites in place, and the check
+ * (every statement as written, what was found, what replaced it).
  */
 export async function checkReport(
   llm: LLMClient,
   record: GameRecord,
-  summary: SummaryJson
+  summary: SummaryJson,
+  log: GameLog
 ): Promise<{ summary: SummaryJson; check: ReportCheck }> {
   const sections = reportSections(summary, record);
   const statements = sections.flatMap((s) =>
@@ -205,12 +231,38 @@ export async function checkReport(
   );
   const numbered = numberedRecord(recordText(record));
   const vars = { record: numbered.text, statements: statementsText(sections) };
+  const where = `report check (${summary.language})`;
 
-  const out = await llm.runJson<{ statements?: unknown }>('check-report.yml', vars);
+  const out = await llm.runJson<{ statements?: unknown }>('check-report.yml', {
+    ...vars,
+    recheck: '',
+  });
   if (!Array.isArray(out?.statements)) {
     throw new Error('check-report.yml returned no statements list');
   }
-  const checked = readCheck(out.statements, statements, numbered.lines);
+  let checked = readCheck(out.statements, statements, numbered.lines);
+  const unanswered = checked.filter((s) => !s.checked);
+  if (unanswered.length > 0) {
+    log.error(
+      `${where}: no kind or verdict for statement ${unanswered.map((s) => s.id).join(', ')}; asking again`
+    );
+    const again = await llm
+      .runJson<{ statements?: unknown }>('check-report.yml', {
+        ...vars,
+        recheck: recheckText(unanswered),
+      })
+      .catch((err) => {
+        log.error(`${where}: asking again failed`, err);
+        return null;
+      });
+    const ids = new Set(unanswered.map((s) => s.id));
+    const answered = new Map(
+      readCheck(again?.statements, statements.filter((s) => ids.has(s.id)), numbered.lines)
+        .filter((s) => s.checked)
+        .map((s) => [s.id, s])
+    );
+    checked = checked.map((s) => answered.get(s.id) ?? s);
+  }
   const flagged = checked.filter((s) => s.flagged);
   if (flagged.length === 0) {
     return { summary, check: { language: summary.language, statements: checked } };

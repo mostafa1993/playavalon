@@ -1,5 +1,5 @@
 /**
- * Blind-mode purity regression test.
+ * Blind-mode purity regression test, and the stale reviews read on boot.
  *
  * The honesty guarantee of blind mode is that the reviewer NEVER reads the
  * player_roles table for that game — so it can only deduce roles, never know
@@ -10,7 +10,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadMetaSnapshot } from '../src/gamestate/db.js';
+import { findStaleReviews, loadMetaSnapshot } from '../src/gamestate/db.js';
 
 interface FakeResult {
   data: unknown;
@@ -102,4 +102,32 @@ test('god mode reads player_roles (the true roles it is meant to know)', async (
     meta.players.some((p) => p.role === 'evil'),
     'god roster carries the true roles'
   );
+});
+
+test('stale reviews: every one left generating, and one left recording only once its game is over', async () => {
+  const queried: string[] = [];
+  const game = (phase: string, ended_at: string | null, room: string) => ({ phase, ended_at, rooms: { status: room } });
+  const db = makeFakeDb(
+    {
+      game_reviews: {
+        data: [
+          { game_id: 'g-writing', status: 'generating', games: game('voting', null, 'started') },
+          { game_id: 'g-over', status: 'recording', games: game('game_over', '2026-01-01T00:00:00Z', 'started') },
+          { game_id: 'g-ended', status: 'recording', games: [game('quest_execution', '2026-01-01T00:00:00Z', 'started')] },
+          { game_id: 'g-closed', status: 'recording', games: game('voting', null, 'closed') },
+          { game_id: 'g-live', status: 'recording', games: game('voting', null, 'started') },
+        ],
+        error: null,
+      },
+    },
+    queried
+  );
+
+  assert.deepEqual(await findStaleReviews(db), [
+    { gameId: 'g-writing', status: 'generating' },
+    { gameId: 'g-over', status: 'recording' },
+    { gameId: 'g-ended', status: 'recording' },
+    { gameId: 'g-closed', status: 'recording' },
+  ]);
+  assert.deepEqual(queried, ['game_reviews']);
 });

@@ -18,6 +18,7 @@
 
 import type { LLMClient } from '@avalon/shared';
 import { formatRolesInPlay, type RolesInPlay } from '../gamestate/roleConfig.js';
+import type { GameLog } from '../pipeline.js';
 import {
   SUMMARY_FORMAT,
   type BlindGameRecord,
@@ -56,18 +57,29 @@ export function talkLabel(t: Pick<RecordTurn, 'quest' | 'round' | 'turn'>): stri
 const LOW_CONFIDENCE_MARK = '[low confidence]';
 
 /**
+ * A player's talk fenced as data from the game: between <talk> and </talk>,
+ * which every prompt that reads the record names as what a player said, never
+ * an instruction. Angle brackets are taken out of the talk, so no talk can
+ * close its fence, and line breaks, so it stays on its own record line.
+ */
+export function fencedTalk(transcript: string): string {
+  return `<talk>${transcript.replace(/[<>]/g, '').replace(/\s*\n\s*/g, ' ')}</talk>`;
+}
+
+/**
  * The record as the report's prompt reads it: names instead of ids, and the
  * game in order — each proposal followed by the talk about it and its vote,
- * each quest's mission and Lady of the Lake after its proposals. A transcript
- * flagged low_confidence is marked. Roles only in a god record; a blind record
- * has none to give. A cut record (the blind detective's) ends where it was
- * cut, with no outcome.
+ * each quest's mission and Lady of the Lake after its proposals. Each
+ * transcript is fenced (`fencedTalk`); one flagged low_confidence is marked.
+ * Roles only in a god record; a blind record has none to give. A cut record
+ * (the blind detective's) ends where it was cut, with no outcome.
  */
 export function recordText(record: GameRecord): string {
   const nameById = new Map(record.players.map((p) => [p.id, p.display_name]));
   const name = (id: string) => nameById.get(id) ?? id;
   const names = (ids: string[]) => (ids.length > 0 ? ids.map(name).join(', ') : 'nobody');
-  const said = (transcript: string) => transcript.trim() || '(no transcript)';
+  const said = (transcript: string) =>
+    transcript.trim() ? fencedTalk(transcript.trim()) : '(no transcript)';
   // Speech the recognizer was unsure of: the prompts never quote it.
   const unsure = (s: { low_confidence: boolean }) =>
     s.low_confidence ? ` ${LOW_CONFIDENCE_MARK}` : '';
@@ -138,7 +150,7 @@ export function recordText(record: GameRecord): string {
       lines.push('The discussion before the pick:');
       if (speakers.length === 0) lines.push('  (nothing transcribed)');
       for (const s of speakers) {
-        lines.push(`  ${name(s.speakerId)}${unsure(s)}: ${s.transcript.trim()}`);
+        lines.push(`  ${name(s.speakerId)}${unsure(s)}: ${said(s.transcript)}`);
       }
     }
     lines.push(
@@ -311,15 +323,69 @@ export async function writeBlindReport(
 }
 
 /**
+ * A translation's answer read against the Persian report: the English report,
+ * or what keeps it from being one — no narrative, a quest or a player's note
+ * left out.
+ */
+function readTranslation(
+  out: ReportOutput | null | undefined,
+  record: GameRecord,
+  persian: SummaryJson
+): { english: SummaryJson | null; problems: string[] } {
+  const nameById = new Map(record.players.map((p) => [p.id, p.display_name]));
+  const problems: string[] = [];
+  const narrative = str(out?.narrative);
+  if (!narrative) problems.push('it has no narrative');
+  const quest_commentary = questCommentary(out?.quests, record);
+  const missingQuests = persian.quest_commentary
+    .map((c) => c.quest)
+    .filter((q) => !quest_commentary.some((c) => c.quest === q));
+  if (missingQuests.length > 0) {
+    problems.push(`it left out the commentary on quest ${missingQuests.join(', ')}`);
+  }
+  const translated = { language: 'en' as const, narrative, quest_commentary };
+  if (persian.mode === 'blind' || record.mode === 'blind') {
+    return { english: problems.length > 0 ? null : { ...persian, ...translated }, problems };
+  }
+
+  const performance = performanceNotes(out?.performance, record);
+  const missingPlayers = persian.performance
+    .filter((p) => !performance.some((n) => n.playerId === p.playerId))
+    .map((p) => nameById.get(p.playerId) ?? p.playerId);
+  if (missingPlayers.length > 0) {
+    problems.push(`it left out the performance note on ${missingPlayers.join(', ')}`);
+  }
+  return {
+    english: problems.length > 0 ? null : { ...persian, ...translated, performance },
+    problems,
+  };
+}
+
+/** The note that asks for the translation again, with what was wrong. */
+function translationRecheck(problems: string[]): string {
+  return [
+    '',
+    'YOUR LAST ANSWER COULD NOT BE USED:',
+    ...problems.map((p) => `- ${p}`),
+    'Translate the whole report again, as one complete JSON object of the shape above.',
+    '',
+  ].join('\n');
+}
+
+/**
  * The English report: the (checked) Persian report's narrative, quest
  * commentary and performance notes translated by one call
  * (`prompts/translate-report.yml`), around the same record and, in blind mode,
  * the same reads. Every quest and player of the Persian report must come back.
+ * An answer that can't be used — the call failed, its JSON is broken or cut
+ * off, or a part is missing — is asked for once more, with what was wrong; a
+ * second such answer fails the translation.
  */
 export async function translateReport(
   llm: LLMClient,
   record: GameRecord,
-  persian: SummaryJson
+  persian: SummaryJson,
+  log: GameLog
 ): Promise<SummaryJson> {
   const nameById = new Map(record.players.map((p) => [p.id, p.display_name]));
   const report = {
@@ -333,27 +399,25 @@ export async function translateReport(
           }))
         : [],
   };
-  const out = await runReport(llm, 'translate-report.yml', {
+  const vars = {
     players: record.players.map((p) => `- ${p.display_name}`).join('\n'),
     report: JSON.stringify(report, null, 2),
-  });
+  };
 
-  const quest_commentary = questCommentary(out.quests, record);
-  const missingQuests = persian.quest_commentary
-    .map((c) => c.quest)
-    .filter((q) => !quest_commentary.some((c) => c.quest === q));
-  if (missingQuests.length > 0) {
-    throw new Error(`translate-report.yml left out quest ${missingQuests.join(', ')}`);
+  let recheck = '';
+  for (let ask = 1; ; ask += 1) {
+    const answer = await llm.runJson<ReportOutput>('translate-report.yml', { ...vars, recheck }).then(
+      (out) => readTranslation(out, record, persian),
+      (err: unknown) => ({
+        english: null,
+        problems: [`the call failed: ${(err instanceof Error ? err.message : String(err)).slice(0, 300)}`],
+      })
+    );
+    if (answer.english) return answer.english;
+    if (ask === 2) {
+      throw new Error(`translate-report.yml, asked twice: ${answer.problems.join('; ')}`);
+    }
+    log.error(`translation: ${answer.problems.join('; ')}; asking again`);
+    recheck = translationRecheck(answer.problems);
   }
-  const translated = { language: 'en' as const, narrative: out.narrative, quest_commentary };
-  if (persian.mode === 'blind' || record.mode === 'blind') return { ...persian, ...translated };
-
-  const performance = performanceNotes(out.performance, record);
-  const missingPlayers = persian.performance
-    .filter((p) => !performance.some((n) => n.playerId === p.playerId))
-    .map((p) => nameById.get(p.playerId) ?? p.playerId);
-  if (missingPlayers.length > 0) {
-    throw new Error(`translate-report.yml left out the note on ${missingPlayers.join(', ')}`);
-  }
-  return { ...persian, ...translated, performance };
 }
