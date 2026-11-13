@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { buttonClassName } from '@/components/ui/buttonStyles';
 import { MerlinQuiz } from './MerlinQuiz';
 import { MerlinQuizResults } from './MerlinQuizResults';
 import type { GameWinner, QuestResult, GamePlayer, MerlinQuizState } from '@/types/game';
@@ -455,14 +456,15 @@ export function GameOver({
           View Game Again
         </Button>
         {aiReviewEnabled && (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => router.push(`/game/${gameId}/review`)}
-            leftIcon={<Sparkles size={14} />}
+          <a
+            href={`/game/${gameId}/review`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClassName({ variant: 'primary', size: 'sm' })}
           >
+            <Sparkles size={14} />
             View AI Game Report
-          </Button>
+          </a>
         )}
       </div>
     </div>
