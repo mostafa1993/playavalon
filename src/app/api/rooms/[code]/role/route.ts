@@ -19,7 +19,7 @@ import { countHiddenEvilFromMerlin, generateDecoyWarning, getSplitIntelVisibilit
 import { shuffleArray } from '@/lib/domain/decoy-selection';
 import { validateRoomCode } from '@/lib/domain/validation';
 import { errors, handleError } from '@/lib/utils/errors';
-import type { RoleConfig } from '@/types/role-config';
+import { isValidRoleConfig } from '@/types/role-config';
 import type { SplitIntelGroups, SplitIntelVisibility, OberonSplitIntelGroups, OberonSplitIntelVisibility, EvilRingAssignments, EvilRingVisibility } from '@/types/game';
 
 interface RouteParams {
@@ -74,7 +74,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Get role config for visibility calculations
-    const roleConfig: RoleConfig = room.role_config || {};
+    if (!isValidRoleConfig(room.role_config)) {
+      return errors.internalError('Room has an invalid role setup');
+    }
+    const roleConfig = room.role_config;
+    // The setup plus the keys distribution adds to it (_merlin_decoy_player_id, _split_intel_*, ...)
+    const rcData: Record<string, unknown> = { ...roleConfig };
 
     // Get role info with special character details
     const roleInfo = getRoleInfo(playerRole.role, playerRole.special_role);
@@ -98,7 +103,6 @@ export async function GET(request: Request, { params }: RouteParams) {
         if (roleConfig.oberon_split_intel_enabled) {
           let oberonSplitIntelGroups: OberonSplitIntelGroups | null = null;
 
-          const rcData = roleConfig as Record<string, unknown>;
           if (rcData._oberon_split_intel_oberon_id && rcData._oberon_split_intel_mixed_good_id) {
             oberonSplitIntelGroups = {
               certainEvilIds: (rcData._oberon_split_intel_certain_evil_ids as string[]) || [],
@@ -152,7 +156,6 @@ export async function GET(request: Request, { params }: RouteParams) {
         else if (roleConfig.merlin_split_intel_enabled) {
           let splitIntelGroups: SplitIntelGroups | null = null;
 
-          const rcData = roleConfig as Record<string, unknown>;
           if (rcData._split_intel_certain_evil_ids && rcData._split_intel_mixed_evil_id && rcData._split_intel_mixed_good_id) {
             splitIntelGroups = {
               certainEvilIds: rcData._split_intel_certain_evil_ids as string[],
@@ -202,8 +205,8 @@ export async function GET(request: Request, { params }: RouteParams) {
 
           let decoyPlayerId: string | null = null;
 
-          if ((roleConfig as Record<string, unknown>)._merlin_decoy_player_id) {
-            decoyPlayerId = (roleConfig as Record<string, unknown>)._merlin_decoy_player_id as string;
+          if (rcData._merlin_decoy_player_id) {
+            decoyPlayerId = rcData._merlin_decoy_player_id as string;
           } else {
             const game = await getGameByRoomId(supabase, room.id);
             if (game?.merlin_decoy_player_id) {
@@ -262,7 +265,6 @@ export async function GET(request: Request, { params }: RouteParams) {
         if (roleConfig.evil_ring_visibility_enabled) {
           let ringAssignments: EvilRingAssignments | null = null;
 
-          const rcData = roleConfig as Record<string, unknown>;
           if (rcData._evil_ring_assignments) {
             ringAssignments = rcData._evil_ring_assignments as EvilRingAssignments;
           } else {
@@ -323,7 +325,6 @@ export async function GET(request: Request, { params }: RouteParams) {
         if (roleConfig.evil_ring_visibility_enabled) {
           let ringAssignments: EvilRingAssignments | null = null;
 
-          const rcData = roleConfig as Record<string, unknown>;
           if (rcData._evil_ring_assignments) {
             ringAssignments = rcData._evil_ring_assignments as EvilRingAssignments;
           } else {
@@ -391,7 +392,6 @@ export async function GET(request: Request, { params }: RouteParams) {
         if (roleConfig.evil_ring_visibility_enabled) {
           let ringAssignments: EvilRingAssignments | null = null;
 
-          const rcData = roleConfig as Record<string, unknown>;
           if (rcData._evil_ring_assignments) {
             ringAssignments = rcData._evil_ring_assignments as EvilRingAssignments;
           } else {

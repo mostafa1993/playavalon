@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { RoleConfigPanel } from '@/components/RoleConfigPanel';
 import { RoleConfigSummary } from '@/components/RoleConfigSummary';
 import { MIN_PLAYERS, MAX_PLAYERS, ROLE_RATIOS } from '@/lib/utils/constants';
-import { validateRoleConfig } from '@/lib/domain/role-config';
+import { getDefaultConfig, validateRoleConfig } from '@/lib/domain/role-config';
 import type { RoleConfig } from '@/types/role-config';
 
 interface CreateRoomModalProps {
@@ -32,7 +32,7 @@ export function CreateRoomModal({
   isLoading = false,
 }: CreateRoomModalProps) {
   const [expectedPlayers, setExpectedPlayers] = useState(5);
-  const [roleConfig, setRoleConfig] = useState<RoleConfig>({});
+  const [roleConfig, setRoleConfig] = useState<RoleConfig>(getDefaultConfig);
   const [introPhaseEnabled, setIntroPhaseEnabled] = useState(false);
   const [agentCount, setAgentCount] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -49,7 +49,7 @@ export function CreateRoomModal({
     const validation = validateRoleConfig(roleConfig, count);
     if (!validation.valid) {
       // Reset to default config if current is invalid
-      setRoleConfig({});
+      setRoleConfig(getDefaultConfig());
     }
     // Feature 024: agent_count must be < expected_players (at least 1 human seat)
     if (agentCount >= count) {

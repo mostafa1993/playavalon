@@ -57,7 +57,6 @@ export interface SpecialRoleInfo {
   appearsAsMerlin: boolean;  // Appears as Merlin to Percival (Morgana)
   knowsTeammates: boolean;   // Can see evil teammates (not Oberon)
   // Constraints
-  required: boolean;         // Always included (Merlin, Assassin)
   maxPerGame: number;        // Max instances (always 1 for special roles)
 }
 
@@ -72,7 +71,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: false,
     appearsAsMerlin: false,
     knowsTeammates: false,
-    required: true,
     maxPerGame: 1,
   },
   percival: {
@@ -85,7 +83,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: true,
     appearsAsMerlin: false,
     knowsTeammates: false,
-    required: false,
     maxPerGame: 1,
   },
   servant: {
@@ -98,7 +95,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: false,
     appearsAsMerlin: false,
     knowsTeammates: false,
-    required: false,
     maxPerGame: 10,
   },
   assassin: {
@@ -111,7 +107,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: false,
     appearsAsMerlin: false,
     knowsTeammates: true,
-    required: true,
     maxPerGame: 1,
   },
   morgana: {
@@ -124,7 +119,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: false,
     appearsAsMerlin: true,
     knowsTeammates: true,
-    required: false,
     maxPerGame: 1,
   },
   mordred: {
@@ -137,7 +131,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: false,
     appearsAsMerlin: false,
     knowsTeammates: true,
-    required: false,
     maxPerGame: 1,
   },
   oberon_standard: {
@@ -150,7 +143,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: false,
     appearsAsMerlin: false,
     knowsTeammates: false, // KEY: Doesn't know evil teammates
-    required: false,
     maxPerGame: 1,
   },
   oberon_chaos: {
@@ -163,7 +155,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: false,
     appearsAsMerlin: false,
     knowsTeammates: false, // Doesn't know evil teammates
-    required: false,
     maxPerGame: 1,
   },
   minion: {
@@ -176,7 +167,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: false,
     appearsAsMerlin: false,
     knowsTeammates: true,
-    required: false,
     maxPerGame: 10,
   },
   // Feature 020: Big Box Expansion Roles
@@ -190,7 +180,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: false,
     appearsAsMerlin: false,
     knowsTeammates: true,     // Knows evil teammates
-    required: false,
     maxPerGame: 1,
   },
   brute: {
@@ -203,7 +192,6 @@ export const SPECIAL_ROLES: Record<SpecialRole, SpecialRoleInfo> = {
     knowsMerlin: false,
     appearsAsMerlin: false,
     knowsTeammates: true,     // Knows evil teammates
-    required: false,
     maxPerGame: 1,
   },
 };

@@ -7,11 +7,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   getRoleRatio,
   shuffleArray,
+  generateRolePool,
   distributeRoles,
   getRoleInfo,
   validateRoleDistribution,
   type RoleAssignment,
 } from '@/lib/domain/roles';
+import { getDefaultConfig } from '@/lib/domain/role-config';
 import { ROLE_RATIOS } from '@/lib/utils/constants';
 
 describe('roles', () => {
@@ -89,7 +91,7 @@ describe('roles', () => {
   describe('distributeRoles', () => {
     it('should assign correct number of good/evil roles for 5 players', () => {
       const players = ['p1', 'p2', 'p3', 'p4', 'p5'];
-      const assignments = distributeRoles(players);
+      const assignments = distributeRoles(players, { merlin: true });
 
       expect(assignments.length).toBe(5);
       const goodCount = assignments.filter((a) => a.role === 'good').length;
@@ -100,7 +102,7 @@ describe('roles', () => {
 
     it('should assign correct number of good/evil roles for 10 players', () => {
       const players = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10'];
-      const assignments = distributeRoles(players);
+      const assignments = distributeRoles(players, { merlin: true });
 
       expect(assignments.length).toBe(10);
       const goodCount = assignments.filter((a) => a.role === 'good').length;
@@ -112,7 +114,7 @@ describe('roles', () => {
     it('should assign correct ratios for all player counts', () => {
       for (let count = 5; count <= 10; count++) {
         const players = Array.from({ length: count }, (_, i) => `player-${i}`);
-        const assignments = distributeRoles(players);
+        const assignments = distributeRoles(players, { merlin: true });
         const expectedRatio = ROLE_RATIOS[count];
 
         const goodCount = assignments.filter((a) => a.role === 'good').length;
@@ -125,7 +127,7 @@ describe('roles', () => {
 
     it('should assign a role to each player exactly once', () => {
       const players = ['alice', 'bob', 'charlie', 'diana', 'eve'];
-      const assignments = distributeRoles(players);
+      const assignments = distributeRoles(players, { merlin: true });
 
       const assignedPlayers = assignments.map((a) => a.playerId);
       const uniquePlayers = new Set(assignedPlayers);
@@ -138,7 +140,7 @@ describe('roles', () => {
 
     it('should only assign valid roles (good or evil)', () => {
       const players = ['p1', 'p2', 'p3', 'p4', 'p5'];
-      const assignments = distributeRoles(players);
+      const assignments = distributeRoles(players, { merlin: true });
 
       assignments.forEach((a) => {
         expect(['good', 'evil']).toContain(a.role);
@@ -151,7 +153,7 @@ describe('roles', () => {
 
       // Run 30 distributions
       for (let i = 0; i < 30; i++) {
-        const assignments = distributeRoles(players);
+        const assignments = distributeRoles(players, { merlin: true });
         // Create a signature of who got which role
         const signature = assignments
           .map((a) => `${a.playerId}:${a.role}`)
@@ -165,10 +167,60 @@ describe('roles', () => {
     });
 
     it('should throw for invalid player counts', () => {
-      expect(() => distributeRoles(['p1', 'p2', 'p3', 'p4'])).toThrow();
+      expect(() => distributeRoles(['p1', 'p2', 'p3', 'p4'], { merlin: true })).toThrow();
       expect(() =>
-        distributeRoles(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'p11'])
+        distributeRoles(
+          ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'p11'],
+          { merlin: true }
+        )
       ).toThrow();
+    });
+
+    it('should deal Merlin and the Assassin with the default setup at every player count', () => {
+      for (let count = 5; count <= 10; count++) {
+        const players = Array.from({ length: count }, (_, i) => `player-${i}`);
+        const assignments = distributeRoles(players, getDefaultConfig());
+
+        const merlins = assignments.filter((a) => a.specialRole === 'merlin');
+        const assassins = assignments.filter((a) => a.specialRole === 'assassin');
+        expect(merlins).toHaveLength(1);
+        expect(merlins[0].role).toBe('good');
+        expect(assassins).toHaveLength(1);
+        expect(assassins[0].role).toBe('evil');
+      }
+    });
+
+    it('should never deal Merlin or the Assassin without Merlin (5 players, 100 deals)', () => {
+      const players = ['p1', 'p2', 'p3', 'p4', 'p5'];
+      for (let i = 0; i < 100; i++) {
+        const assignments = distributeRoles(players, { merlin: false });
+
+        expect(assignments.some((a) => a.specialRole === 'merlin')).toBe(false);
+        expect(assignments.some((a) => a.specialRole === 'assassin')).toBe(false);
+        expect(assignments.filter((a) => a.role === 'good')).toHaveLength(3);
+        expect(assignments.filter((a) => a.role === 'evil')).toHaveLength(2);
+        expect(validateRoleDistribution(assignments, 5).valid).toBe(true);
+      }
+    });
+  });
+
+  describe('generateRolePool', () => {
+    it('should deal Merlin, the Assassin and the configured roles with Merlin', () => {
+      const pool = generateRolePool({ merlin: true, percival: true, morgana: true }, 7);
+      expect(pool.good.sort()).toEqual(['merlin', 'percival', 'servant', 'servant']);
+      expect(pool.evil.sort()).toEqual(['assassin', 'minion', 'morgana']);
+    });
+
+    it('should deal plain Servants and Minions without Merlin', () => {
+      const pool = generateRolePool({ merlin: false }, 5);
+      expect(pool.good).toEqual(['servant', 'servant', 'servant']);
+      expect(pool.evil).toEqual(['minion', 'minion']);
+    });
+
+    it('should give the Assassin seat to a Minion without Merlin', () => {
+      const pool = generateRolePool({ merlin: false, oberon: 'standard', lunatic: true }, 7);
+      expect(pool.good).toEqual(['servant', 'servant', 'servant', 'servant']);
+      expect(pool.evil.sort()).toEqual(['lunatic', 'minion', 'oberon_standard']);
     });
   });
 
@@ -267,7 +319,7 @@ describe('roles', () => {
     it('should validate distributions created by distributeRoles', () => {
       for (let count = 5; count <= 10; count++) {
         const players = Array.from({ length: count }, (_, i) => `p${i}`);
-        const assignments = distributeRoles(players);
+        const assignments = distributeRoles(players, { merlin: true });
         const result = validateRoleDistribution(assignments, count);
         expect(result.valid).toBe(true);
       }
@@ -288,7 +340,7 @@ describe('roles', () => {
       ];
 
       // Distribute roles
-      const assignments = distributeRoles(players);
+      const assignments = distributeRoles(players, { merlin: true });
 
       // Validate distribution
       const validation = validateRoleDistribution(assignments, 7);

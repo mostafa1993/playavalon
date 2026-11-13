@@ -48,7 +48,7 @@ function createFullAssignments(): RoleAssignment[] {
 describe('getMerlinVisibility', () => {
   it('sees all evil except Mordred', () => {
     const assignments = createFullAssignments();
-    const config: RoleConfig = { percival: true, morgana: true, mordred: true };
+    const config: RoleConfig = { merlin: true, percival: true, morgana: true, mordred: true };
 
     const result = getMerlinVisibility(assignments, config);
 
@@ -63,7 +63,7 @@ describe('getMerlinVisibility', () => {
       { playerId: 'p2', playerName: 'Bob', role: 'evil', specialRole: 'assassin' },
       { playerId: 'p3', playerName: 'Carol', role: 'evil', specialRole: 'oberon_chaos' },
     ];
-    const config: RoleConfig = { oberon: 'chaos' };
+    const config: RoleConfig = { merlin: true, oberon: 'chaos' };
 
     const result = getMerlinVisibility(assignments, config);
 
@@ -77,7 +77,7 @@ describe('getMerlinVisibility', () => {
       { playerId: 'p2', playerName: 'Bob', role: 'evil', specialRole: 'assassin' },
       { playerId: 'p3', playerName: 'Carol', role: 'evil', specialRole: 'oberon_standard' },
     ];
-    const config: RoleConfig = { oberon: 'standard' };
+    const config: RoleConfig = { merlin: true, oberon: 'standard' };
 
     const result = getMerlinVisibility(assignments, config);
 
@@ -85,7 +85,7 @@ describe('getMerlinVisibility', () => {
   });
 
   it('counts hidden evil correctly', () => {
-    const config: RoleConfig = { mordred: true, oberon: 'chaos' };
+    const config: RoleConfig = { merlin: true, mordred: true, oberon: 'chaos' };
     const result = getMerlinVisibility([], config);
 
     expect(result.hiddenEvilCount).toBe(2);
@@ -93,7 +93,7 @@ describe('getMerlinVisibility', () => {
   });
 
   it('has correct label', () => {
-    const result = getMerlinVisibility([], {});
+    const result = getMerlinVisibility([], { merlin: true });
     expect(result.knownPlayersLabel).toBe('Evil Players Known to You');
   });
 });
@@ -101,7 +101,7 @@ describe('getMerlinVisibility', () => {
 describe('getPercivalVisibility', () => {
   it('sees both Merlin and Morgana', () => {
     const assignments = createAssignments();
-    const config: RoleConfig = { percival: true, morgana: true };
+    const config: RoleConfig = { merlin: true, percival: true, morgana: true };
 
     const result = getPercivalVisibility(assignments, config);
 
@@ -116,7 +116,7 @@ describe('getPercivalVisibility', () => {
       { playerId: 'p2', playerName: 'Bob', role: 'good', specialRole: 'percival' },
       { playerId: 'p3', playerName: 'Carol', role: 'evil', specialRole: 'assassin' },
     ];
-    const config: RoleConfig = { percival: true };
+    const config: RoleConfig = { merlin: true, percival: true };
 
     const result = getPercivalVisibility(assignments, config);
 
@@ -127,7 +127,7 @@ describe('getPercivalVisibility', () => {
 
   it('shows ambiguous label when multiple candidates', () => {
     const assignments = createAssignments();
-    const config: RoleConfig = { percival: true, morgana: true };
+    const config: RoleConfig = { merlin: true, percival: true, morgana: true };
 
     const result = getPercivalVisibility(assignments, config);
 
@@ -136,7 +136,7 @@ describe('getPercivalVisibility', () => {
 
   it('warns about Morgana when present', () => {
     const assignments = createAssignments();
-    const config: RoleConfig = { morgana: true };
+    const config: RoleConfig = { merlin: true, morgana: true };
 
     const result = getPercivalVisibility(assignments, config);
 
@@ -151,7 +151,7 @@ describe('getEvilVisibility', () => {
       { playerId: 'p2', playerName: 'Bob', role: 'evil', specialRole: 'morgana' },
       { playerId: 'p3', playerName: 'Carol', role: 'evil', specialRole: 'oberon_standard' },
     ];
-    const config: RoleConfig = {};
+    const config: RoleConfig = { merlin: true };
 
     const result = getEvilVisibility('p1', 'assassin', assignments, config);
 
@@ -161,7 +161,7 @@ describe('getEvilVisibility', () => {
   });
 
   it('morgana shows disguise ability note when Percival present', () => {
-    const config: RoleConfig = { percival: true, morgana: true };
+    const config: RoleConfig = { merlin: true, percival: true, morgana: true };
 
     const result = getEvilVisibility('p1', 'morgana', [], config);
 
@@ -169,7 +169,7 @@ describe('getEvilVisibility', () => {
   });
 
   it('morgana shows no effect note when no Percival', () => {
-    const config: RoleConfig = { morgana: true };
+    const config: RoleConfig = { merlin: true, morgana: true };
 
     const result = getEvilVisibility('p1', 'morgana', [], config);
 
@@ -177,7 +177,7 @@ describe('getEvilVisibility', () => {
   });
 
   it('mordred shows hidden from Merlin note', () => {
-    const config: RoleConfig = { mordred: true };
+    const config: RoleConfig = { merlin: true, mordred: true };
 
     const result = getEvilVisibility('p1', 'mordred', [], config);
 
@@ -185,7 +185,7 @@ describe('getEvilVisibility', () => {
   });
 
   it('assassin shows assassination ability note', () => {
-    const result = getEvilVisibility('p1', 'assassin', [], {});
+    const result = getEvilVisibility('p1', 'assassin', [], { merlin: true });
 
     expect(result.abilityNote).toContain('identify Merlin');
   });
@@ -193,14 +193,14 @@ describe('getEvilVisibility', () => {
 
 describe('getOberonVisibility', () => {
   it('standard mode shows Merlin can see you', () => {
-    const result = getOberonVisibility('standard', {});
+    const result = getOberonVisibility('standard', { merlin: true });
 
     expect(result.knownPlayers).toHaveLength(0);
     expect(result.abilityNote).toContain('Merlin can see you');
   });
 
   it('chaos mode shows complete isolation', () => {
-    const result = getOberonVisibility('chaos', {});
+    const result = getOberonVisibility('chaos', { merlin: true });
 
     expect(result.knownPlayers).toHaveLength(0);
     expect(result.abilityNote).toContain('not even Merlin');
@@ -210,7 +210,7 @@ describe('getOberonVisibility', () => {
 describe('getVisibilityForRole', () => {
   it('returns correct visibility for each role type', () => {
     const assignments = createAssignments();
-    const config: RoleConfig = { percival: true, morgana: true };
+    const config: RoleConfig = { merlin: true, percival: true, morgana: true };
 
     // Test Merlin
     const merlinResult = getVisibilityForRole('p1', 'merlin', assignments, config);
@@ -278,19 +278,19 @@ describe('utility functions', () => {
 
   describe('countHiddenEvilFromMerlin', () => {
     it('counts Mordred as hidden', () => {
-      expect(countHiddenEvilFromMerlin({ mordred: true })).toBe(1);
+      expect(countHiddenEvilFromMerlin({ merlin: true, mordred: true })).toBe(1);
     });
 
     it('counts Oberon Chaos as hidden', () => {
-      expect(countHiddenEvilFromMerlin({ oberon: 'chaos' })).toBe(1);
+      expect(countHiddenEvilFromMerlin({ merlin: true, oberon: 'chaos' })).toBe(1);
     });
 
     it('does not count Oberon Standard', () => {
-      expect(countHiddenEvilFromMerlin({ oberon: 'standard' })).toBe(0);
+      expect(countHiddenEvilFromMerlin({ merlin: true, oberon: 'standard' })).toBe(0);
     });
 
     it('counts both Mordred and Oberon Chaos', () => {
-      expect(countHiddenEvilFromMerlin({ mordred: true, oberon: 'chaos' })).toBe(2);
+      expect(countHiddenEvilFromMerlin({ merlin: true, mordred: true, oberon: 'chaos' })).toBe(2);
     });
   });
 
@@ -380,7 +380,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
   describe('Combination 1: Decoy Only (No Hidden Roles)', () => {
     it('Merlin sees all evil + 1 decoy = 4 players', () => {
       const assignments = createDecoyTestAssignments();
-      const config: RoleConfig = { merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, merlin_decoy_enabled: true };
       const decoyPlayerId = 'p2'; // Bob (Percival)
 
       const result = getMerlinVisibility(assignments, config, decoyPlayerId);
@@ -395,7 +395,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
 
     it('shows correct warning for 0 hidden', () => {
       const assignments = createDecoyTestAssignments();
-      const config: RoleConfig = { merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, merlin_decoy_enabled: true };
 
       const result = getMerlinVisibility(assignments, config, 'p2');
 
@@ -417,7 +417,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
         { playerId: 'p6', playerName: 'Frank', role: 'evil', specialRole: 'mordred' },
         { playerId: 'p7', playerName: 'Grace', role: 'evil', specialRole: 'minion' },
       ];
-      const config: RoleConfig = { mordred: true, merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, mordred: true, merlin_decoy_enabled: true };
       const decoyPlayerId = 'p2'; // Bob
 
       const result = getMerlinVisibility(assignments, config, decoyPlayerId);
@@ -437,7 +437,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
         { playerId: 'p3', playerName: 'Eve', role: 'evil', specialRole: 'assassin' },
         { playerId: 'p4', playerName: 'Frank', role: 'evil', specialRole: 'mordred' },
       ];
-      const config: RoleConfig = { mordred: true, merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, mordred: true, merlin_decoy_enabled: true };
 
       const result = getMerlinVisibility(assignments, config, 'p2');
 
@@ -457,7 +457,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
         { playerId: 'p6', playerName: 'Frank', role: 'evil', specialRole: 'oberon_standard' },
         { playerId: 'p7', playerName: 'Grace', role: 'evil', specialRole: 'minion' },
       ];
-      const config: RoleConfig = { oberon: 'standard', merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, oberon: 'standard', merlin_decoy_enabled: true };
       const decoyPlayerId = 'p2'; // Bob
 
       const result = getMerlinVisibility(assignments, config, decoyPlayerId);
@@ -484,7 +484,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
         { playerId: 'p6', playerName: 'Frank', role: 'evil', specialRole: 'oberon_chaos' },
         { playerId: 'p7', playerName: 'Grace', role: 'evil', specialRole: 'minion' },
       ];
-      const config: RoleConfig = { oberon: 'chaos', merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, oberon: 'chaos', merlin_decoy_enabled: true };
       const decoyPlayerId = 'p2'; // Bob
 
       const result = getMerlinVisibility(assignments, config, decoyPlayerId);
@@ -504,7 +504,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
         { playerId: 'p3', playerName: 'Eve', role: 'evil', specialRole: 'assassin' },
         { playerId: 'p4', playerName: 'Frank', role: 'evil', specialRole: 'oberon_chaos' },
       ];
-      const config: RoleConfig = { oberon: 'chaos', merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, oberon: 'chaos', merlin_decoy_enabled: true };
 
       const result = getMerlinVisibility(assignments, config, 'p2');
 
@@ -524,7 +524,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
         { playerId: 'p6', playerName: 'Frank', role: 'evil', specialRole: 'oberon_standard' },
         { playerId: 'p7', playerName: 'Grace', role: 'evil', specialRole: 'minion' },
       ];
-      const config: RoleConfig = { mordred: true, oberon: 'standard', merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, mordred: true, oberon: 'standard', merlin_decoy_enabled: true };
       const decoyPlayerId = 'p2'; // Bob
 
       const result = getMerlinVisibility(assignments, config, decoyPlayerId);
@@ -552,7 +552,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
         { playerId: 'p6', playerName: 'Frank', role: 'evil', specialRole: 'oberon_chaos' },
         { playerId: 'p7', playerName: 'Grace', role: 'evil', specialRole: 'minion' },
       ];
-      const config: RoleConfig = { mordred: true, oberon: 'chaos', merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, mordred: true, oberon: 'chaos', merlin_decoy_enabled: true };
       const decoyPlayerId = 'p2'; // Bob
 
       const result = getMerlinVisibility(assignments, config, decoyPlayerId);
@@ -575,7 +575,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
         { playerId: 'p4', playerName: 'Frank', role: 'evil', specialRole: 'oberon_chaos' },
         { playerId: 'p5', playerName: 'Grace', role: 'evil', specialRole: 'minion' },
       ];
-      const config: RoleConfig = { mordred: true, oberon: 'chaos', merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, mordred: true, oberon: 'chaos', merlin_decoy_enabled: true };
 
       const result = getMerlinVisibility(assignments, config, 'p2');
 
@@ -586,7 +586,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
   describe('Decoy mode edge cases', () => {
     it('does not add decoy if decoy mode disabled', () => {
       const assignments = createDecoyTestAssignments();
-      const config: RoleConfig = { merlin_decoy_enabled: false };
+      const config: RoleConfig = { merlin: true, merlin_decoy_enabled: false };
 
       const result = getMerlinVisibility(assignments, config, 'p2');
 
@@ -598,7 +598,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
 
     it('does not add decoy if decoyPlayerId is null', () => {
       const assignments = createDecoyTestAssignments();
-      const config: RoleConfig = { merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, merlin_decoy_enabled: true };
 
       const result = getMerlinVisibility(assignments, config, null);
 
@@ -608,7 +608,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
 
     it('does not add decoy if decoyPlayerId not found', () => {
       const assignments = createDecoyTestAssignments();
-      const config: RoleConfig = { merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, merlin_decoy_enabled: true };
 
       const result = getMerlinVisibility(assignments, config, 'unknown-player');
 
@@ -618,7 +618,7 @@ describe('Merlin Decoy Mode Visibility Combinations', () => {
 
     it('shuffles the player list when decoy is added', () => {
       const assignments = createDecoyTestAssignments();
-      const config: RoleConfig = { merlin_decoy_enabled: true };
+      const config: RoleConfig = { merlin: true, merlin_decoy_enabled: true };
 
       // Run multiple times and check for different orderings
       const orderings = new Set<string>();

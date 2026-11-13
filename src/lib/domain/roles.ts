@@ -6,6 +6,7 @@
 
 import { ROLE_RATIOS } from '@/lib/utils/constants';
 import type { RoleDistribution } from '@/types/role';
+import type { RoleConfig } from '@/types/role-config';
 
 // Base alignment
 export type Alignment = 'good' | 'evil';
@@ -70,29 +71,6 @@ export function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
-import type { RoleConfig } from '@/types/role-config';
-
-/**
- * Get special roles for a given player count (MVP default - no config)
- */
-function getSpecialRolesForCount(playerCount: number): { good: SpecialRole[]; evil: SpecialRole[] } {
-  const ratio = getRoleRatio(playerCount);
-
-  // Always include Merlin and Assassin
-  const goodRoles: SpecialRole[] = ['merlin'];
-  const evilRoles: SpecialRole[] = ['assassin'];
-
-  // Fill remaining slots with basic roles
-  while (goodRoles.length < ratio.good) {
-    goodRoles.push('servant');
-  }
-  while (evilRoles.length < ratio.evil) {
-    evilRoles.push('minion');
-  }
-
-  return { good: goodRoles, evil: evilRoles };
-}
-
 /**
  * T019: Generate role pool based on configuration
  * Uses roleConfig to determine which special roles to include
@@ -104,7 +82,8 @@ export function generateRolePool(
   const ratio = getRoleRatio(playerCount);
 
   // Build good team roles
-  const goodRoles: SpecialRole[] = ['merlin']; // Always included
+  const goodRoles: SpecialRole[] = [];
+  if (roleConfig.merlin) goodRoles.push('merlin');
   if (roleConfig.percival) goodRoles.push('percival');
 
   // Fill remaining good slots with servants
@@ -113,7 +92,9 @@ export function generateRolePool(
   }
 
   // Build evil team roles
-  const evilRoles: SpecialRole[] = ['assassin']; // Always included
+  // The Assassin comes with Merlin; without Merlin that seat is a plain Minion
+  const evilRoles: SpecialRole[] = [];
+  if (roleConfig.merlin) evilRoles.push('assassin');
   if (roleConfig.morgana) evilRoles.push('morgana');
   if (roleConfig.mordred) evilRoles.push('mordred');
   if (roleConfig.oberon === 'standard') evilRoles.push('oberon_standard');
@@ -132,19 +113,12 @@ export function generateRolePool(
 
 /**
  * T018: Distribute roles to players based on configuration
- * Supports optional roleConfig parameter for Phase 2 special roles
- * Falls back to MVP behavior (Merlin + Assassin) if no config provided
  */
 export function distributeRoles(
   playerIds: string[],
-  roleConfig?: RoleConfig
+  roleConfig: RoleConfig
 ): RoleAssignment[] {
-  const playerCount = playerIds.length;
-
-  // Use config-based role pool if provided, otherwise use MVP default
-  const specialRoles = roleConfig
-    ? generateRolePool(roleConfig, playerCount)
-    : getSpecialRolesForCount(playerCount);
+  const specialRoles = generateRolePool(roleConfig, playerIds.length);
 
   // Create role pool with special roles
   const allRoles: { role: Role; specialRole: SpecialRole }[] = [

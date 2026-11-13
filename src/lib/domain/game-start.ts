@@ -8,6 +8,7 @@ import type { Game, GameInsert } from '@/types/game';
 import { createGame, gameExistsForRoom, setMerlinDecoyPlayer } from '@/lib/supabase/games';
 import { logGameStarted } from '@/lib/supabase/game-events';
 import { updateRoomStatus } from '@/lib/supabase/rooms';
+import { isValidRoleConfig } from '@/types/role-config';
 import { initializeSeating } from './seating';
 import { getQuestRequirementsMap } from './quest-config';
 
@@ -46,10 +47,25 @@ export async function initializeGame(
     throw new Error('Game already exists for this room');
   }
 
+  // The room's setup is read and checked before the game exists, so a room
+  // with an invalid setup never starts.
+  const { data: roomData, error: roomError } = await client
+    .from('rooms')
+    .select('lady_of_lake_enabled, lady_of_lake_holder_id, role_config, intro_phase_enabled')
+    .eq('id', roomId)
+    .single();
+  if (roomError || !roomData) {
+    throw new Error(`Room ${roomId} could not be read: ${roomError?.message ?? 'not found'}`);
+  }
+  if (!isValidRoleConfig(roomData.role_config)) {
+    throw new Error(`Room ${roomId} has an invalid role setup`);
+  }
+  const roleConfig: Record<string, unknown> = { ...roomData.role_config };
+
   // Initialize seating (randomize order and select first leader)
   const { seatingOrder, leaderIndex, leaderId } = initializeSeating(playerIds);
 
-  // Create base game record (Lady fields added via separate update if columns exist)
+  // Create base game record (the Lady fields are set by the update below)
   const gameInsert: GameInsert = {
     room_id: roomId,
     player_count: playerCount,
@@ -64,80 +80,67 @@ export async function initializeGame(
 
   const game = await createGame(client, gameInsert);
 
-  // Try to set Lady of the Lake fields (only works if migration 009 applied)
-  try {
-    const { data: roomData } = await client
-      .from('rooms')
-      .select('lady_of_lake_enabled, lady_of_lake_holder_id, role_config, intro_phase_enabled')
-      .eq('id', roomId)
-      .single();
+  // Lady of the Lake, the intro phase and the setup's hidden assignments
+  // move from the room to the game.
+  await client
+    .from('games')
+    .update({
+      lady_enabled: roomData.lady_of_lake_enabled || false,
+      lady_holder_id: roomData.lady_of_lake_holder_id || null,
+    })
+    .eq('id', game.id);
 
-    if (roomData?.lady_of_lake_enabled !== undefined) {
-      await client
-        .from('games')
-        .update({
-          lady_enabled: roomData.lady_of_lake_enabled || false,
-          lady_holder_id: roomData.lady_of_lake_holder_id || null,
-        })
-        .eq('id', game.id);
-    }
+  // Feature 023: copy intro_phase flag from room → game so the UI gates
+  // the first proposal until the manager explicitly ends the intro round.
+  if (roomData.intro_phase_enabled === true) {
+    await client
+      .from('games')
+      .update({ in_intro_phase: true })
+      .eq('id', game.id);
+  }
 
-    // Feature 023: copy intro_phase flag from room → game so the UI gates
-    // the first proposal until the manager explicitly ends the intro round.
-    if (roomData?.intro_phase_enabled === true) {
-      await client
-        .from('games')
-        .update({ in_intro_phase: true })
-        .eq('id', game.id);
-    }
+  // Feature 009: Copy Merlin Decoy player ID from role_config to game
+  if (roleConfig.merlin_decoy_enabled && roleConfig._merlin_decoy_player_id) {
+    // Copy the decoy player ID that was selected during distribution
+    const decoyPlayerId = roleConfig._merlin_decoy_player_id as string;
+    await setMerlinDecoyPlayer(client, game.id, decoyPlayerId);
+    console.log(`Merlin Decoy copied to game: ${decoyPlayerId}`);
+  }
 
-    // Feature 009: Copy Merlin Decoy player ID from role_config to game
-    const roleConfig = roomData?.role_config as Record<string, unknown> || {};
-    if (roleConfig.merlin_decoy_enabled && roleConfig._merlin_decoy_player_id) {
-      // Copy the decoy player ID that was selected during distribution
-      const decoyPlayerId = roleConfig._merlin_decoy_player_id as string;
-      await setMerlinDecoyPlayer(client, game.id, decoyPlayerId);
-      console.log(`Merlin Decoy copied to game: ${decoyPlayerId}`);
-    }
+  // Feature 011: Copy Split Intel groups from role_config to game
+  if (roleConfig.merlin_split_intel_enabled && roleConfig._split_intel_certain_evil_ids) {
+    await client
+      .from('games')
+      .update({
+        split_intel_certain_evil_ids: roleConfig._split_intel_certain_evil_ids,
+        split_intel_mixed_evil_id: roleConfig._split_intel_mixed_evil_id,
+        split_intel_mixed_good_id: roleConfig._split_intel_mixed_good_id,
+      })
+      .eq('id', game.id);
+    console.log('Split Intel groups copied to game');
+  }
 
-    // Feature 011: Copy Split Intel groups from role_config to game
-    if (roleConfig.merlin_split_intel_enabled && roleConfig._split_intel_certain_evil_ids) {
-      await client
-        .from('games')
-        .update({
-          split_intel_certain_evil_ids: roleConfig._split_intel_certain_evil_ids,
-          split_intel_mixed_evil_id: roleConfig._split_intel_mixed_evil_id,
-          split_intel_mixed_good_id: roleConfig._split_intel_mixed_good_id,
-        })
-        .eq('id', game.id);
-      console.log('Split Intel groups copied to game');
-    }
+  // Feature 018: Copy Oberon Split Intel groups from role_config to game
+  if (roleConfig.oberon_split_intel_enabled && roleConfig._oberon_split_intel_certain_evil_ids) {
+    await client
+      .from('games')
+      .update({
+        oberon_split_intel_certain_evil_ids: roleConfig._oberon_split_intel_certain_evil_ids,
+        oberon_split_intel_mixed_good_id: roleConfig._oberon_split_intel_mixed_good_id,
+      })
+      .eq('id', game.id);
+    console.log('Oberon Split Intel groups copied to game');
+  }
 
-    // Feature 018: Copy Oberon Split Intel groups from role_config to game
-    if (roleConfig.oberon_split_intel_enabled && roleConfig._oberon_split_intel_certain_evil_ids) {
-      await client
-        .from('games')
-        .update({
-          oberon_split_intel_certain_evil_ids: roleConfig._oberon_split_intel_certain_evil_ids,
-          oberon_split_intel_mixed_good_id: roleConfig._oberon_split_intel_mixed_good_id,
-        })
-        .eq('id', game.id);
-      console.log('Oberon Split Intel groups copied to game');
-    }
-
-    // Feature 019: Copy Evil Ring assignments from role_config to game
-    if (roleConfig.evil_ring_visibility_enabled && roleConfig._evil_ring_assignments) {
-      await client
-        .from('games')
-        .update({
-          evil_ring_assignments: roleConfig._evil_ring_assignments,
-        })
-        .eq('id', game.id);
-      console.log('Evil Ring assignments copied to game');
-    }
-  } catch (error) {
-    // Migration 009 not applied yet - Lady of the Lake features disabled
-    console.log('Lady of the Lake or feature columns not available - skipping', error);
+  // Feature 019: Copy Evil Ring assignments from role_config to game
+  if (roleConfig.evil_ring_visibility_enabled && roleConfig._evil_ring_assignments) {
+    await client
+      .from('games')
+      .update({
+        evil_ring_assignments: roleConfig._evil_ring_assignments,
+      })
+      .eq('id', game.id);
+    console.log('Evil Ring assignments copied to game');
   }
 
   // Update room status to 'started'

@@ -4,18 +4,53 @@
  */
 
 import { ROLE_RATIOS, SPECIAL_ROLES, LADY_OF_LAKE_MIN_RECOMMENDED } from '@/lib/utils/constants';
+import { isValidRoleConfig } from '@/types/role-config';
 import type { RoleConfig, RoleConfigValidation } from '@/types/role-config';
 import type { SpecialRole } from '@/types/database';
-import type { RoleDistribution } from '@/types/role';
 import { canEnableEvilRingVisibility } from './evil-ring-visibility';
 
 /**
- * T009: Get default role configuration (MVP behavior)
- * Empty config means Merlin + Assassin only
+ * T009: Get default role configuration
+ * Merlin and the Assassin, no other special roles
  */
 export function getDefaultConfig(): RoleConfig {
-  return {};
+  return { merlin: true };
 }
+
+/**
+ * Setup options that need Merlin in the game, each refused while Merlin is off
+ * with a message naming both.
+ */
+const NEEDS_MERLIN: { isOn: (config: RoleConfig) => boolean; error: string }[] = [
+  {
+    isOn: (c) => !!c.percival,
+    error: 'Percival requires Merlin (Percival knows who Merlin is).',
+  },
+  {
+    isOn: (c) => !!c.morgana,
+    error: "Morgana requires Merlin (Morgana's only power is to appear as Merlin to Percival).",
+  },
+  {
+    isOn: (c) => !!c.mordred,
+    error: "Mordred requires Merlin (Mordred's only power is being hidden from Merlin).",
+  },
+  {
+    isOn: (c) => c.oberon === 'chaos',
+    error: 'Oberon (Chaos) requires Merlin (Oberon (Chaos) differs from Oberon (Standard) only in being hidden from Merlin).',
+  },
+  {
+    isOn: (c) => !!c.merlin_decoy_enabled,
+    error: 'Merlin Decoy Mode requires Merlin.',
+  },
+  {
+    isOn: (c) => !!c.merlin_split_intel_enabled,
+    error: 'Split Intel Mode requires Merlin.',
+  },
+  {
+    isOn: (c) => !!c.oberon_split_intel_enabled,
+    error: 'Oberon Split Intel Mode requires Merlin.',
+  },
+];
 
 /**
  * T007: Validate role configuration against player count
@@ -28,6 +63,12 @@ export function validateRoleConfig(
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // A setup must state whether Merlin is in the game, and every option must have its type
+  if (!isValidRoleConfig(config)) {
+    errors.push('Invalid role setup: merlin must be true or false, and each option must have a valid value.');
+    return { valid: false, errors, warnings };
+  }
+
   // Validate player count
   if (playerCount < 5 || playerCount > 10) {
     errors.push(`Invalid player count: ${playerCount}. Must be between 5 and 10.`);
@@ -38,6 +79,13 @@ export function validateRoleConfig(
   if (!ratio) {
     errors.push(`No role ratio defined for ${playerCount} players.`);
     return { valid: false, errors, warnings };
+  }
+
+  // Without Merlin, the options that need him are refused
+  if (!config.merlin) {
+    for (const option of NEEDS_MERLIN) {
+      if (option.isOn(config)) errors.push(option.error);
+    }
   }
 
   // Feature 011 + 018: Check triple mutual exclusivity of Merlin intel modes
@@ -73,22 +121,17 @@ export function validateRoleConfig(
     errors.push('Lunatic and Brute require 7+ players (need 3+ evil slots).');
   }
 
-  // Count special roles by team
-  const goodSpecials = countGoodSpecials(config);
-  const evilSpecials = countEvilSpecials(config);
+  // Validate team slots against the special roles dealt
+  const specials = countSpecialRoles(config);
 
-  // Validate good team slots
-  // Merlin is always included (1 slot), plus optionally Percival (1 slot)
-  const goodSlotsNeeded = 1 + (config.percival ? 1 : 0);
+  const goodSlotsNeeded = specials.good;
   if (goodSlotsNeeded > ratio.good) {
     errors.push(
       `Too many Good special roles (${goodSlotsNeeded}) for ${playerCount}-player game (max ${ratio.good} Good).`
     );
   }
 
-  // Validate evil team slots
-  // Assassin is always included (1 slot), plus optional evil roles
-  const evilSlotsNeeded = 1 + evilSpecials;
+  const evilSlotsNeeded = specials.evil;
   if (evilSlotsNeeded > ratio.evil) {
     errors.push(
       `Too many Evil special roles (${evilSlotsNeeded}) for ${playerCount}-player game (max ${ratio.evil} Evil).`
@@ -130,66 +173,22 @@ export function validateRoleConfig(
 }
 
 /**
- * Count optional good special roles in config (excluding Merlin which is always included)
+ * Count the special roles a setup deals on each team.
+ * Merlin brings the Assassin; without Merlin neither is dealt.
  */
-function countGoodSpecials(config: RoleConfig): number {
-  let count = 0;
-  if (config.percival) count++;
-  return count;
-}
-
-/**
- * Count optional evil special roles in config (excluding Assassin which is always included)
- */
-function countEvilSpecials(config: RoleConfig): number {
-  let count = 0;
-  if (config.morgana) count++;
-  if (config.mordred) count++;
-  if (config.oberon) count++;
-  // Feature 020: Big Box roles
-  if (config.lunatic) count++;
-  if (config.brute) count++;
-  return count;
-}
-
-/**
- * T008: Get list of special roles for a configuration
- * Returns the complete list of roles to distribute
- */
-export function getRolesForConfig(
-  config: RoleConfig,
-  playerCount: number
-): { good: SpecialRole[]; evil: SpecialRole[] } {
-  const ratio = ROLE_RATIOS[playerCount];
-  if (!ratio) {
-    throw new Error(`Invalid player count: ${playerCount}`);
-  }
-
-  // Build good team roles
-  const goodRoles: SpecialRole[] = ['merlin']; // Always included
-  if (config.percival) goodRoles.push('percival');
-
-  // Fill remaining good slots with servants
-  while (goodRoles.length < ratio.good) {
-    goodRoles.push('servant');
-  }
-
-  // Build evil team roles
-  const evilRoles: SpecialRole[] = ['assassin']; // Always included
-  if (config.morgana) evilRoles.push('morgana');
-  if (config.mordred) evilRoles.push('mordred');
-  if (config.oberon === 'standard') evilRoles.push('oberon_standard');
-  if (config.oberon === 'chaos') evilRoles.push('oberon_chaos');
-  // Feature 020: Big Box roles
-  if (config.lunatic) evilRoles.push('lunatic');
-  if (config.brute) evilRoles.push('brute');
-
-  // Fill remaining evil slots with minions
-  while (evilRoles.length < ratio.evil) {
-    evilRoles.push('minion');
-  }
-
-  return { good: goodRoles, evil: evilRoles };
+function countSpecialRoles(config: RoleConfig): { good: number; evil: number } {
+  const merlin = config.merlin ? 1 : 0;
+  return {
+    good: merlin + (config.percival ? 1 : 0),
+    evil:
+      merlin + // the Assassin
+      (config.morgana ? 1 : 0) +
+      (config.mordred ? 1 : 0) +
+      (config.oberon ? 1 : 0) +
+      // Feature 020: Big Box roles
+      (config.lunatic ? 1 : 0) +
+      (config.brute ? 1 : 0),
+  };
 }
 
 /**
@@ -199,12 +198,12 @@ export function getRolesForConfig(
 export function computeRolesInPlay(config: RoleConfig): string[] {
   const roles: string[] = [];
 
-  // Good team (always Merlin)
-  roles.push('Merlin');
+  // Good team
+  if (config.merlin) roles.push('Merlin');
   if (config.percival) roles.push('Percival');
 
-  // Evil team (always Assassin)
-  roles.push('Assassin');
+  // Evil team (the Assassin comes with Merlin)
+  if (config.merlin) roles.push('Assassin');
   if (config.morgana) roles.push('Morgana');
   if (config.mordred) roles.push('Mordred');
   if (config.oberon === 'standard') roles.push('Oberon');
@@ -235,49 +234,16 @@ export function getRoleDetails(
     throw new Error(`Invalid player count: ${playerCount}`);
   }
 
-  // Count special roles
-  const goodSpecialCount = 1 + (config.percival ? 1 : 0); // Merlin + optional Percival
-  const evilSpecialCount =
-    1 + // Assassin
-    (config.morgana ? 1 : 0) +
-    (config.mordred ? 1 : 0) +
-    (config.oberon ? 1 : 0);
+  const specials = countSpecialRoles(config);
 
   return {
     goodCount: ratio.good,
     evilCount: ratio.evil,
-    goodSpecialCount,
-    evilSpecialCount,
-    servantCount: ratio.good - goodSpecialCount,
-    minionCount: ratio.evil - evilSpecialCount,
+    goodSpecialCount: specials.good,
+    evilSpecialCount: specials.evil,
+    servantCount: ratio.good - specials.good,
+    minionCount: ratio.evil - specials.evil,
   };
-}
-
-/**
- * Get role distribution ratio for player count
- */
-export function getRoleRatioForCount(playerCount: number): RoleDistribution | null {
-  return ROLE_RATIOS[playerCount] || null;
-}
-
-/**
- * Check if a role configuration is empty (MVP default)
- */
-export function isDefaultConfig(config: RoleConfig): boolean {
-  return (
-    !config.percival &&
-    !config.morgana &&
-    !config.mordred &&
-    !config.oberon &&
-    !config.ladyOfLake &&
-    !config.merlin_decoy_enabled &&
-    !config.merlin_split_intel_enabled &&
-    !config.oberon_split_intel_enabled &&
-    !config.evil_ring_visibility_enabled &&
-    // Feature 020: Big Box roles
-    !config.lunatic &&
-    !config.brute
-  );
 }
 
 /**

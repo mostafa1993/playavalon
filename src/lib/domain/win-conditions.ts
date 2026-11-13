@@ -37,7 +37,7 @@ export function countQuestResults(
 export function checkWinConditions(
   questResults: QuestResult[],
   voteTrack: number,
-  hasMerlin: boolean = true
+  hasMerlin: boolean
 ): WinConditionResult {
   // Check 5 rejections first (immediate Evil win)
   if (voteTrack >= 5) {
@@ -169,17 +169,6 @@ export function checkAssassinGuess(
     winner: assassinFoundMerlin ? 'evil' : 'good',
     reason: assassinFoundMerlin ? 'assassin_found_merlin' : '3_quest_successes',
   };
-}
-
-/**
- * Check if game should continue to next quest
- */
-export function shouldContinueToNextQuest(
-  questResults: QuestResult[],
-  voteTrack: number
-): boolean {
-  const result = checkWinConditions(questResults, voteTrack);
-  return !result.gameOver;
 }
 
 /**

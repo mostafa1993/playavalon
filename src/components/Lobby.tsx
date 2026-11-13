@@ -322,7 +322,7 @@ export function Lobby({
       {isManager && room.room.status === 'waiting' && onUpdateConfig && (
         <RoomConfigEditor
           expectedPlayers={room.room.expected_players}
-          roleConfig={room.room.role_config ?? {}}
+          roleConfig={room.room.role_config}
           introPhaseEnabled={room.room.intro_phase_enabled}
           seatedPlayers={room.players.length}
           isSaving={isUpdatingConfig}

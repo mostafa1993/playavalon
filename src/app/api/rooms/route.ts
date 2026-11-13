@@ -9,11 +9,11 @@ import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getPlayerCurrentRoom, cleanupPlayerStartedRooms } from '@/lib/supabase/players';
 import { createRoom, addPlayerToRoom, getWaitingRooms } from '@/lib/supabase/rooms';
 import { validatePlayerCount } from '@/lib/domain/validation';
-import { validateRoleConfig, computeRolesInPlay, getDefaultConfig } from '@/lib/domain/role-config';
+import { validateRoleConfig, computeRolesInPlay } from '@/lib/domain/role-config';
 import { generateSecureRoomCode } from '@/lib/utils/room-code';
 import { errors, handleError } from '@/lib/utils/errors';
+import { isValidRoleConfig, pickRoleConfig } from '@/types/role-config';
 import type { CreateRoomPayload, CreateRoomResponse } from '@/types/room';
-import type { RoleConfig } from '@/types/role-config';
 
 /**
  * POST /api/rooms - Create a new room
@@ -34,8 +34,13 @@ export async function POST(request: Request) {
       return errors.invalidPlayerCount();
     }
 
-    // Validate role configuration if provided
-    const roleConfig: RoleConfig = body.role_config || getDefaultConfig();
+    // Validate role configuration (required: it states whether Merlin is in the game)
+    if (!isValidRoleConfig(body.role_config)) {
+      return errors.invalidRequest(
+        'role_config must be a role setup with merlin set to true or false'
+      );
+    }
+    const roleConfig = pickRoleConfig(body.role_config);
     const configValidation = validateRoleConfig(roleConfig, body.expected_players);
     if (!configValidation.valid) {
       return NextResponse.json(

@@ -8,14 +8,13 @@ import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { findRoomByCode, getRoomPlayerCount, updateRoomStatus, updateLadyOfLakeHolder } from '@/lib/supabase/rooms';
 import { insertRoleAssignments, rolesDistributed, setLadyOfLakeForPlayer, getRoleAssignments } from '@/lib/supabase/roles';
 import { distributeRoles, getRoleRatio } from '@/lib/domain/roles';
-import { computeRolesInPlay, designateLadyOfLakeHolder } from '@/lib/domain/role-config';
+import { computeRolesInPlay, designateLadyOfLakeHolder, validateRoleConfig } from '@/lib/domain/role-config';
 import { selectDecoyPlayer } from '@/lib/domain/decoy-selection';
 import { canUseSplitIntelMode, distributeSplitIntelGroups } from '@/lib/domain/split-intel';
 import { canUseOberonSplitIntelMode, distributeOberonSplitIntelGroups } from '@/lib/domain/oberon-split-intel';
 import { canEnableEvilRingVisibility, formEvilRing, getNonOberonEvilIds } from '@/lib/domain/evil-ring-visibility';
 import { validateRoomCode } from '@/lib/domain/validation';
 import { errors, handleError } from '@/lib/utils/errors';
-import type { RoleConfig } from '@/types/role-config';
 import type { RoleAssignment } from '@/lib/domain/visibility';
 
 interface RouteParams {
@@ -86,8 +85,16 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const playerIds = (roomPlayers || []).map((rp: { player_id: string }) => rp.player_id);
 
-    // Get role configuration from room
-    const roleConfig: RoleConfig = room.role_config || {};
+    // Get role configuration from room; re-check it before dealing, since a
+    // setup takes effect here
+    const roleConfig = room.role_config;
+    const configValidation = validateRoleConfig(roleConfig, playerCount);
+    if (!configValidation.valid) {
+      return NextResponse.json(
+        { error: { code: 'INVALID_ROLE_CONFIG', message: configValidation.errors.join('; ') } },
+        { status: 400 }
+      );
+    }
 
     // Distribute roles using role configuration
     const assignments = distributeRoles(playerIds, roleConfig);
@@ -275,16 +282,15 @@ export async function POST(request: Request, { params }: RouteParams) {
 
       const ringAssignments = formEvilRing(nonOberonEvilIds);
 
-      const currentRoleConfig = (
-        await supabase
-          .from('rooms')
-          .select('role_config')
-          .eq('id', room.id)
-          .single()
-      ).data?.role_config || {};
+      const { data: currentRoom, error: currentRoomErr } = await supabase
+        .from('rooms')
+        .select('role_config')
+        .eq('id', room.id)
+        .single();
+      if (currentRoomErr) throw currentRoomErr;
 
       const updatedRoleConfig = {
-        ...currentRoleConfig,
+        ...currentRoom.role_config,
         _evil_ring_assignments: ringAssignments,
       };
 

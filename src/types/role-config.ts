@@ -12,10 +12,13 @@ export type OberonMode = 'standard' | 'chaos';
 
 /**
  * Role configuration stored in rooms.role_config JSONB column
- * Empty object {} = MVP behavior (Merlin + Assassin only)
- * Merlin and Assassin are always implicitly included
+ * Every setup states whether Merlin is in the game; the other options are optional.
  */
 export interface RoleConfig {
+  // Merlin, who brings the Assassin. false = neither is dealt (that evil seat is
+  // a plain Minion) and Good wins on its third successful quest.
+  merlin: boolean;
+
   // Optional Good roles (max 1 each)
   percival?: boolean;
 
@@ -57,16 +60,6 @@ export interface RoleConfig {
 }
 
 /**
- * Default role configuration (MVP behavior)
- */
-export const DEFAULT_ROLE_CONFIG: RoleConfig = {
-  merlin_decoy_enabled: false,
-  merlin_split_intel_enabled: false,
-  oberon_split_intel_enabled: false,
-  evil_ring_visibility_enabled: false,
-};
-
-/**
  * Role configuration validation result
  */
 export interface RoleConfigValidation {
@@ -76,48 +69,32 @@ export interface RoleConfigValidation {
 }
 
 /**
- * Role configuration with computed properties
- */
-export interface RoleConfigDetails extends RoleConfig {
-  // Computed: list of all roles that will be in play
-  rolesInPlay: string[];
-
-  // Computed: counts by team
-  goodSpecialCount: number;  // Merlin + Percival (if enabled)
-  evilSpecialCount: number;  // Assassin + Morgana + Mordred + Oberon
-
-  // Computed: total slots needed
-  goodSlotsNeeded: number;
-  evilSlotsNeeded: number;
-}
-
-/**
- * Role configuration for API requests
- */
-export interface RoleConfigRequest {
-  percival?: boolean;
-  morgana?: boolean;
-  mordred?: boolean;
-  oberon?: OberonMode;
-  ladyOfLake?: boolean;
-}
-
-/**
- * Role configuration for API responses (includes computed fields)
- */
-export interface RoleConfigResponse {
-  config: RoleConfig;
-  rolesInPlay: string[];
-  ladyOfLakeEnabled: boolean;
-  ladyOfLakeHolderId: string | null;
-  ladyOfLakeHolderName: string | null;
-}
-
-/**
  * Type guard to check if oberon mode is valid
  */
 export function isValidOberonMode(mode: unknown): mode is OberonMode {
   return mode === 'standard' || mode === 'chaos';
+}
+
+/**
+ * The public options of a setup, and nothing else. A setup sent by a client is
+ * stored through this, so it can't carry the `_`-prefixed assignments that role
+ * distribution writes into a room's setup (who the decoy is, the Split Intel
+ * groups, the Evil Ring), or anything unknown.
+ */
+export function pickRoleConfig(config: RoleConfig): RoleConfig {
+  const picked: RoleConfig = { merlin: config.merlin };
+  if (config.percival !== undefined) picked.percival = config.percival;
+  if (config.morgana !== undefined) picked.morgana = config.morgana;
+  if (config.mordred !== undefined) picked.mordred = config.mordred;
+  if (config.oberon !== undefined) picked.oberon = config.oberon;
+  if (config.ladyOfLake !== undefined) picked.ladyOfLake = config.ladyOfLake;
+  if (config.merlin_decoy_enabled !== undefined) picked.merlin_decoy_enabled = config.merlin_decoy_enabled;
+  if (config.merlin_split_intel_enabled !== undefined) picked.merlin_split_intel_enabled = config.merlin_split_intel_enabled;
+  if (config.oberon_split_intel_enabled !== undefined) picked.oberon_split_intel_enabled = config.oberon_split_intel_enabled;
+  if (config.evil_ring_visibility_enabled !== undefined) picked.evil_ring_visibility_enabled = config.evil_ring_visibility_enabled;
+  if (config.lunatic !== undefined) picked.lunatic = config.lunatic;
+  if (config.brute !== undefined) picked.brute = config.brute;
+  return picked;
 }
 
 /**
@@ -129,6 +106,9 @@ export function isValidRoleConfig(config: unknown): config is RoleConfig {
   }
 
   const c = config as Record<string, unknown>;
+
+  // Merlin in or out must be stated
+  if (typeof c.merlin !== 'boolean') return false;
 
   // Check optional boolean fields
   if (c.percival !== undefined && typeof c.percival !== 'boolean') return false;

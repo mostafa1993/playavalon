@@ -12,7 +12,7 @@ import { validateRoomCode } from '@/lib/domain/validation';
 import { validateRoleConfig } from '@/lib/domain/role-config';
 import { MIN_PLAYERS, MAX_PLAYERS } from '@/lib/utils/constants';
 import { errors, handleError } from '@/lib/utils/errors';
-import type { RoleConfig } from '@/types/role-config';
+import { isValidRoleConfig, pickRoleConfig } from '@/types/role-config';
 
 interface RouteParams {
   params: Promise<{ code: string }>;
@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const body = (await request.json().catch(() => null)) as {
-      role_config?: RoleConfig;
+      role_config?: unknown;
       expected_players?: unknown;
       intro_phase_enabled?: unknown;
     } | null;
@@ -55,16 +55,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Resolve the effective values: a field that's omitted keeps the current one.
     // Both are validated together so a change to either stays internally consistent
     // (e.g. lowering player count can't leave a now-invalid role config behind).
-    if (
-      body.role_config !== undefined &&
-      (typeof body.role_config !== 'object' ||
-        body.role_config === null ||
-        Array.isArray(body.role_config))
-    ) {
-      return errors.invalidRequest('role_config must be an object');
+    if (body.role_config !== undefined && !isValidRoleConfig(body.role_config)) {
+      return errors.invalidRequest(
+        'role_config must be a role setup with merlin set to true or false'
+      );
     }
-    const newConfig: RoleConfig =
-      body.role_config !== undefined ? body.role_config : (room.role_config ?? {});
+    const newConfig = body.role_config !== undefined ? pickRoleConfig(body.role_config) : room.role_config;
 
     let newExpected = room.expected_players;
     if (body.expected_players !== undefined) {

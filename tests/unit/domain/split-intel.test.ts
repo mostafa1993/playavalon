@@ -38,7 +38,7 @@ describe('canUseSplitIntelMode', () => {
       { id: '7', name: 'Minion', role: 'evil', specialRole: 'minion' },
     ]);
 
-    const result = canUseSplitIntelMode(assignments, {});
+    const result = canUseSplitIntelMode(assignments, { merlin: true });
     expect(result.viable).toBe(true);
     expect(result.visibleEvilCount).toBe(3);
   });
@@ -52,7 +52,7 @@ describe('canUseSplitIntelMode', () => {
       { id: '5', name: 'Minion', role: 'evil', specialRole: 'minion' },
     ]);
 
-    const result = canUseSplitIntelMode(assignments, {});
+    const result = canUseSplitIntelMode(assignments, { merlin: true });
     expect(result.viable).toBe(true);
     expect(result.visibleEvilCount).toBe(2);
   });
@@ -66,7 +66,7 @@ describe('canUseSplitIntelMode', () => {
       { id: '5', name: 'Mordred', role: 'evil', specialRole: 'mordred' },
     ]);
 
-    const result = canUseSplitIntelMode(assignments, { mordred: true });
+    const result = canUseSplitIntelMode(assignments, { merlin: true, mordred: true });
     expect(result.viable).toBe(true);
     expect(result.visibleEvilCount).toBe(1);
   });
@@ -80,7 +80,7 @@ describe('canUseSplitIntelMode', () => {
       { id: '5', name: 'OberonChaos', role: 'evil', specialRole: 'oberon_chaos' },
     ]);
 
-    const result = canUseSplitIntelMode(assignments, { mordred: true, oberon: 'chaos' });
+    const result = canUseSplitIntelMode(assignments, { merlin: true, mordred: true, oberon: 'chaos' });
     expect(result.viable).toBe(false);
     expect(result.visibleEvilCount).toBe(0);
     expect(result.reason).toContain('Cannot use Split Intel Mode');
@@ -97,7 +97,7 @@ describe('canUseSplitIntelMode', () => {
       { id: '7', name: 'Mordred', role: 'evil', specialRole: 'mordred' },
     ]);
 
-    const result = canUseSplitIntelMode(assignments, { mordred: true });
+    const result = canUseSplitIntelMode(assignments, { merlin: true, mordred: true });
     expect(result.viable).toBe(true);
     expect(result.visibleEvilCount).toBe(2); // Assassin + Morgana (Mordred excluded)
   });
@@ -113,7 +113,7 @@ describe('canUseSplitIntelMode', () => {
       { id: '7', name: 'OberonChaos', role: 'evil', specialRole: 'oberon_chaos' },
     ]);
 
-    const result = canUseSplitIntelMode(assignments, { oberon: 'chaos' });
+    const result = canUseSplitIntelMode(assignments, { merlin: true, oberon: 'chaos' });
     expect(result.viable).toBe(true);
     expect(result.visibleEvilCount).toBe(2); // Assassin + Morgana (Oberon Chaos excluded)
   });
@@ -129,7 +129,7 @@ describe('distributeSplitIntelGroups', () => {
       { id: '5', name: 'OberonChaos', role: 'evil', specialRole: 'oberon_chaos' },
     ]);
 
-    const result = distributeSplitIntelGroups(assignments, { mordred: true, oberon: 'chaos' });
+    const result = distributeSplitIntelGroups(assignments, { merlin: true, mordred: true, oberon: 'chaos' });
     expect(result).toBeNull();
   });
 
@@ -144,7 +144,7 @@ describe('distributeSplitIntelGroups', () => {
       { id: '7', name: 'Minion', role: 'evil', specialRole: 'minion' },
     ]);
 
-    const result = distributeSplitIntelGroups(assignments, {});
+    const result = distributeSplitIntelGroups(assignments, { merlin: true });
     expect(result).not.toBeNull();
     expect(result!.certainEvilIds.length).toBe(2);
     expect(result!.mixedEvilId).toBeDefined();
@@ -165,7 +165,7 @@ describe('distributeSplitIntelGroups', () => {
       { id: '5', name: 'Minion', role: 'evil', specialRole: 'minion' },
     ]);
 
-    const result = distributeSplitIntelGroups(assignments, {});
+    const result = distributeSplitIntelGroups(assignments, { merlin: true });
     expect(result).not.toBeNull();
     expect(result!.certainEvilIds.length).toBe(1);
     expect(result!.mixedEvilId).toBeDefined();
@@ -184,7 +184,7 @@ describe('distributeSplitIntelGroups', () => {
       { id: '5', name: 'Mordred', role: 'evil', specialRole: 'mordred' },
     ]);
 
-    const result = distributeSplitIntelGroups(assignments, { mordred: true });
+    const result = distributeSplitIntelGroups(assignments, { merlin: true, mordred: true });
     expect(result).not.toBeNull();
     expect(result!.certainEvilIds.length).toBe(0);
     expect(result!.mixedEvilId).toBe('4'); // Only visible evil is Assassin
@@ -203,7 +203,7 @@ describe('distributeSplitIntelGroups', () => {
 
     // Run multiple times to check randomness never picks Merlin
     for (let i = 0; i < 10; i++) {
-      const result = distributeSplitIntelGroups(assignments, {});
+      const result = distributeSplitIntelGroups(assignments, { merlin: true });
       expect(result).not.toBeNull();
       expect(result!.mixedGoodId).not.toBe('1'); // Merlin ID
     }
@@ -371,11 +371,11 @@ describe('edge cases', () => {
       { id: '5', name: 'Mordred', role: 'evil', specialRole: 'mordred' },
     ]);
 
-    const viability = canUseSplitIntelMode(assignments, { mordred: true });
+    const viability = canUseSplitIntelMode(assignments, { merlin: true, mordred: true });
     expect(viability.viable).toBe(true);
     expect(viability.visibleEvilCount).toBe(1);
 
-    const result = distributeSplitIntelGroups(assignments, { mordred: true });
+    const result = distributeSplitIntelGroups(assignments, { merlin: true, mordred: true });
     expect(result).not.toBeNull();
     expect(result!.certainEvilIds.length).toBe(0); // 0 in certain for 1 visible
     expect(result!.mixedEvilId).toBe('4'); // Only Assassin is visible
@@ -393,11 +393,11 @@ describe('edge cases', () => {
       { id: '7', name: 'OberonChaos', role: 'evil', specialRole: 'oberon_chaos' },
     ]);
 
-    const viability = canUseSplitIntelMode(assignments, { mordred: true, oberon: 'chaos' });
+    const viability = canUseSplitIntelMode(assignments, { merlin: true, mordred: true, oberon: 'chaos' });
     expect(viability.viable).toBe(true);
     expect(viability.visibleEvilCount).toBe(1);
 
-    const result = distributeSplitIntelGroups(assignments, { mordred: true, oberon: 'chaos' });
+    const result = distributeSplitIntelGroups(assignments, { merlin: true, mordred: true, oberon: 'chaos' });
     expect(result).not.toBeNull();
     expect(result!.certainEvilIds.length).toBe(0);
     expect(result!.mixedEvilId).toBe('5'); // Only Assassin is visible

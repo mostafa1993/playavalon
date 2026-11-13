@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { RoleConfigPanel } from '@/components/RoleConfigPanel';
 import { RoleConfigSummary } from '@/components/RoleConfigSummary';
 import { MAX_PLAYERS, ROLE_RATIOS } from '@/lib/utils/constants';
-import { validateRoleConfig } from '@/lib/domain/role-config';
+import { getDefaultConfig, validateRoleConfig } from '@/lib/domain/role-config';
 import type { RoleConfig } from '@/types/role-config';
 
 export interface RoomConfigUpdate {
@@ -59,7 +59,7 @@ export function RoomConfigEditor({
     // Match the create modal: if the current config is invalid at the new
     // count, reset it rather than letting the manager save an invalid setup.
     if (!validateRoleConfig(draftConfig, count).valid) {
-      setDraftConfig({});
+      setDraftConfig(getDefaultConfig());
     }
   };
 

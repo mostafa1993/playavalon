@@ -97,8 +97,8 @@ export interface RoomPlayerInfo {
  */
 export interface CreateRoomPayload {
   expected_players: number;
-  // Phase 2: Optional role configuration
-  role_config?: RoleConfig;
+  // Phase 2: role configuration (states whether Merlin is in the game)
+  role_config: RoleConfig;
   // Feature 023: opt into a one-time intro round at game start
   intro_phase_enabled?: boolean;
   // Feature 024: number of bot players to auto-fill with the agent engine.

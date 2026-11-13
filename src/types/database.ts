@@ -66,7 +66,7 @@ export interface Database {
           created_at?: string;
           last_activity_at?: string;
           // Phase 2 additions
-          role_config?: RoleConfig;
+          role_config: RoleConfig;
           lady_of_lake_enabled?: boolean;
           lady_of_lake_holder_id?: string | null;
           // Feature 022

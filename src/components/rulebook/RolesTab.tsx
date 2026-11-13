@@ -34,7 +34,6 @@ export function RolesTab() {
                 name={role.name}
                 description={role.description}
                 team="good"
-                isRequired={role.required}
               />
             );
           })}
@@ -57,7 +56,6 @@ export function RolesTab() {
                 name={role.name}
                 description={role.description}
                 team="evil"
-                isRequired={role.required}
               />
             );
           })}
@@ -72,10 +70,9 @@ interface RoleCardProps {
   name: string;
   description: string;
   team: 'good' | 'evil';
-  isRequired?: boolean;
 }
 
-function RoleCard({ emoji, name, description, team, isRequired }: RoleCardProps) {
+function RoleCard({ emoji, name, description, team }: RoleCardProps) {
   const teamColors = team === 'good'
     ? 'bg-good/10 border-good/30 hover:border-good/50'
     : 'bg-evil/10 border-evil/30 hover:border-evil/50';
@@ -89,14 +86,7 @@ function RoleCard({ emoji, name, description, team, isRequired }: RoleCardProps)
     `}>
       <span className="text-2xl flex-shrink-0">{emoji}</span>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <h4 className={`font-semibold ${textColor}`}>{name}</h4>
-          {isRequired && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-avalon-gold/20 text-avalon-gold">
-              Required
-            </span>
-          )}
-        </div>
+        <h4 className={`font-semibold ${textColor}`}>{name}</h4>
         <p className="text-sm text-avalon-text-muted mt-1">{description}</p>
       </div>
     </div>

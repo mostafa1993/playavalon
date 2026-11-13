@@ -9,6 +9,7 @@ import { findRoomByCode, getRoomDetails, isPlayerInRoom } from '@/lib/supabase/r
 import { validateRoomCode } from '@/lib/domain/validation';
 import { computeRolesInPlay } from '@/lib/domain/role-config';
 import { errors, handleError } from '@/lib/utils/errors';
+import { isValidRoleConfig } from '@/types/role-config';
 
 interface RouteParams {
   params: Promise<{ code: string }>;
@@ -57,8 +58,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Compute roles in play from room configuration
-    const roleConfig = room.role_config || {};
-    const rolesInPlay = computeRolesInPlay(roleConfig);
+    if (!isValidRoleConfig(room.role_config)) {
+      return errors.internalError('Room has an invalid role setup');
+    }
+    const rolesInPlay = computeRolesInPlay(room.role_config);
 
     // Get Lady of Lake holder info if applicable
     let ladyOfLakeHolder = null;
