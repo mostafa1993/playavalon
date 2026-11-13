@@ -39,26 +39,21 @@ export function hasPlayerVoted(votes: MerlinQuizVote[], playerId: string): boole
  */
 export interface QuizVoteValidation {
   valid: boolean;
-  error?: 'CANNOT_VOTE_SELF' | 'INVALID_PLAYER' | 'VOTER_NOT_IN_GAME';
+  error?: 'CANNOT_VOTE_SELF' | 'INVALID_PLAYER';
 }
 
 /**
- * Validate a quiz vote
+ * Validate a quiz vote. The voter has already been checked to be a player of
+ * the game (playedInGame) by the route.
  * - Player cannot vote for themselves
  * - Suspected player must be in the game (in seating order)
- * - Voter must be in the game
- * - Null vote (skip) is always valid if voter is in game
+ * - Null vote (skip) is always valid
  */
 export function validateQuizVote(
   voterId: string,
   suspectedId: string | null,
   seatingOrder: string[]
 ): QuizVoteValidation {
-  // Voter must be in the game
-  if (!seatingOrder.includes(voterId)) {
-    return { valid: false, error: 'VOTER_NOT_IN_GAME' };
-  }
-
   // Null vote (skip) is valid
   if (suspectedId === null) {
     return { valid: true };

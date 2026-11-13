@@ -273,6 +273,7 @@ export const ERROR_CODES = {
   // Game errors
   NOT_ALL_CONFIRMED: 'NOT_ALL_CONFIRMED',
   ALREADY_STARTED: 'ALREADY_STARTED',
+  NOT_IN_GAME: 'NOT_IN_GAME',
 
   // Feature 020: Lunatic/Brute quest action errors
   LUNATIC_MUST_FAIL: 'LUNATIC_MUST_FAIL',

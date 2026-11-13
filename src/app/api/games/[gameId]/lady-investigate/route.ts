@@ -18,6 +18,7 @@ import {
 } from '@/lib/domain/lady-of-lake';
 import { isLadyPhase } from '@/lib/domain/game-state-machine';
 import type { LadyInvestigateResponse } from '@/types/game';
+import { playedInGame } from '@/lib/domain/game-membership';
 
 export async function POST(
   request: Request,
@@ -60,7 +61,7 @@ export async function POST(
     }
 
     // Verify the player exists in the game
-    if (!game.seating_order.includes(user.id)) {
+    if (!playedInGame(game, user.id)) {
       return NextResponse.json(
         { error: 'Player not in this game' },
         { status: 403 }

@@ -11,6 +11,7 @@ import { validateDraftSelection, normalizeDraftTeam } from '@/lib/domain/team-se
 import { errors, handleError } from '@/lib/utils/errors';
 import { broadcastDraftUpdate } from '@/lib/broadcast';
 import type { UpdateDraftTeamRequest, UpdateDraftTeamResponse } from '@/types/game';
+import { playedInGame } from '@/lib/domain/game-membership';
 
 interface RouteParams {
   params: Promise<{ gameId: string }>;
@@ -52,11 +53,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     // Verify player is in this game
-    if (!game.seating_order.includes(user.id)) {
-      return NextResponse.json(
-        { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
-        { status: 403 }
-      );
+    if (!playedInGame(game, user.id)) {
+      return errors.notInGame();
     }
 
     // Check game phase - can only update draft during team_building

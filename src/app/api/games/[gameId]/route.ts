@@ -14,6 +14,7 @@ import { getPlayerRole } from '@/lib/supabase/roles';
 import { getQuestRequirementsMap } from '@/lib/domain/quest-config';
 import { isLadyPhase } from '@/lib/domain/game-state-machine';
 import { getConnectionStatus } from '@/lib/domain/connection-status';
+import { playedInGame } from '@/lib/domain/game-membership';
 import { errors, handleError } from '@/lib/utils/errors';
 import type { GameState, GamePlayer, LadyOfLakeState } from '@/types/game';
 
@@ -55,11 +56,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     const isManager = room?.manager_id === user.id;
 
     // Verify player is in this game
-    if (!game.seating_order.includes(user.id)) {
-      return NextResponse.json(
-        { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
-        { status: 403 }
-      );
+    if (!playedInGame(game, user.id)) {
+      return errors.notInGame();
     }
 
     // Get current proposal - use active proposal for quest phases

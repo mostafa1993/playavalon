@@ -12,6 +12,7 @@ import { getQuizVotes } from '@/lib/supabase/merlin-quiz';
 import { calculateQuizResults } from '@/lib/domain/merlin-quiz';
 import { errors, handleError } from '@/lib/utils/errors';
 import type { GamePlayer } from '@/types/game';
+import { playedInGame } from '@/lib/domain/game-membership';
 
 interface RouteParams {
   params: Promise<{ gameId: string }>;
@@ -42,11 +43,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Verify player is in this game
-    if (!game.seating_order.includes(user.id)) {
-      return NextResponse.json(
-        { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
-        { status: 403 }
-      );
+    if (!playedInGame(game, user.id)) {
+      return errors.notInGame();
     }
 
     // Check if Merlin exists in this game

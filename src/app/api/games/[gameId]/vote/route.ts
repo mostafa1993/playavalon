@@ -18,6 +18,7 @@ import {
   broadcastGameOver,
 } from '@/lib/broadcast';
 import type { VoteRequest, VoteResponse, VoteInfo } from '@/types/game';
+import { playedInGame } from '@/lib/domain/game-membership';
 
 interface RouteParams {
   params: Promise<{ gameId: string }>;
@@ -59,11 +60,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Verify player is in this game
-    if (!game.seating_order.includes(user.id)) {
-      return NextResponse.json(
-        { error: { code: 'NOT_IN_GAME', message: 'You are not in this game' } },
-        { status: 403 }
-      );
+    if (!playedInGame(game, user.id)) {
+      return errors.notInGame();
     }
 
     // Check game phase

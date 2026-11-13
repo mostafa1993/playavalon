@@ -92,6 +92,9 @@ export const errors = {
   notRoomMember: () =>
     errorResponse(ERROR_CODES.NOT_ROOM_MEMBER, 'You are not a member of this room', 403),
 
+  notInGame: () =>
+    errorResponse(ERROR_CODES.NOT_IN_GAME, 'You are not in this game', 403),
+
   notRoomManager: () =>
     errorResponse(ERROR_CODES.NOT_ROOM_MANAGER, 'Only the room manager can perform this action', 403),
 

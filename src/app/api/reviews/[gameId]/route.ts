@@ -3,7 +3,7 @@
  * Returns the AI game review status and, when ready, the full summary JSON
  * for the requested language (default: fa).
  *
- * Auth: caller must be a member of the room this game belongs to.
+ * Auth: caller must have played this game (be in its seating order).
  *
  * The summary files live on a shared Docker volume (`game_reviews_data`)
  * mounted read-only at /data/games on the app container. The agent writes
@@ -15,7 +15,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById } from '@/lib/supabase/games';
-import { isPlayerInRoom } from '@/lib/supabase/rooms';
+import { playedInGame } from '@/lib/domain/game-membership';
 import { errors, handleError } from '@/lib/utils/errors';
 
 interface RouteParams {
@@ -40,9 +40,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     const game = await getGameById(supabase, gameId);
     if (!game) return errors.notFound('Game');
 
-    // Membership gate: the caller must be in this game's room.
-    const member = await isPlayerInRoom(supabase, game.room_id, user.id);
-    if (!member) return errors.notRoomMember();
+    // The caller must have played this game. Room membership is not used: it
+    // is cleared when a player creates another room.
+    if (!playedInGame(game, user.id)) return errors.notInGame();
 
     const { data: review, error: reviewErr } = await supabase
       .from('game_reviews')

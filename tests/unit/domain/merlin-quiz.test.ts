@@ -92,12 +92,6 @@ describe('merlin-quiz', () => {
       expect(result.valid).toBe(false);
       expect(result.error).toBe('INVALID_PLAYER');
     });
-
-    it('should return invalid when voter not in game', () => {
-      const result = validateQuizVote('player-unknown', 'player-2', seatingOrder);
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe('VOTER_NOT_IN_GAME');
-    });
   });
 
   describe('isQuizComplete', () => {
