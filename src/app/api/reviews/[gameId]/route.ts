@@ -5,6 +5,12 @@
  *
  * Auth: caller must have played this game (be in its seating order).
  *
+ * Only once the game can't be played any more: its phase is game_over, or its
+ * room is closed (the game ended, the last human left, or the room outlived
+ * its lifetime). A god-mode report shows every role, and the reviewer can
+ * mark a review ready while the game is still live — when it is stopped, or
+ * when a newer game starts — so a live game's report is refused (409).
+ *
  * The summary files live on a shared Docker volume (`game_reviews_data`)
  * mounted read-only at /data/games on the app container. The agent writes
  * them; we only read.
@@ -15,7 +21,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
 import { getGameById } from '@/lib/supabase/games';
+import { findRoomById } from '@/lib/supabase/rooms';
 import { playedInGame } from '@/lib/domain/game-membership';
+import { validateUUID } from '@/lib/domain/validation';
 import { errors, handleError } from '@/lib/utils/errors';
 
 interface RouteParams {
@@ -35,6 +43,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const langParam = url.searchParams.get('lang') ?? 'fa';
     const language: 'fa' | 'en' = langParam === 'en' ? 'en' : 'fa';
 
+    if (!validateUUID(gameId).valid) return errors.notFound('Game');
     const supabase = createServiceClient();
 
     const game = await getGameById(supabase, gameId);
@@ -43,6 +52,11 @@ export async function GET(request: Request, { params }: RouteParams) {
     // The caller must have played this game. Room membership is not used: it
     // is cleared when a player creates another room.
     if (!playedInGame(game, user.id)) return errors.notInGame();
+
+    if (game.phase !== 'game_over') {
+      const room = await findRoomById(supabase, game.room_id);
+      if (room?.status !== 'closed') return errors.gameNotOver();
+    }
 
     const { data: review, error: reviewErr } = await supabase
       .from('game_reviews')
