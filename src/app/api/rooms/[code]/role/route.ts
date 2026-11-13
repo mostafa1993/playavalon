@@ -356,7 +356,9 @@ export async function GET(request: Request, { params }: RouteParams) {
         break;
 
       case 'assassin':
-      case 'minion': {
+      case 'minion':
+      case 'lunatic':
+      case 'brute': {
         if (roleConfig.evil_ring_visibility_enabled) {
           let ringAssignments: EvilRingAssignments | null = null;
 

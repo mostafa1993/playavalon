@@ -30,6 +30,8 @@ const ROLE_DISPLAY: Record<string, { emoji: string; label: string; color: string
   oberon_standard: { emoji: '👤', label: 'Oberon', color: 'text-gray-400' },
   oberon_chaos: { emoji: '👻', label: 'Oberon (Chaos)', color: 'text-gray-500' },
   minion: { emoji: '😈', label: 'Minion of Mordred', color: 'text-red-300' },
+  lunatic: { emoji: '🤪', label: 'Lunatic', color: 'text-orange-400' },
+  brute: { emoji: '👊', label: 'Brute', color: 'text-amber-500' },
 };
 
 interface GameOverProps {
