@@ -248,7 +248,7 @@ async function endSession(db: SupabaseClient, session: Session): Promise<void> {
   await session.bot.leave().catch((err) => log.error('bot.leave failed', err));
 
   // The game record — every fact of the game, from the database and the turn
-  // files — then the final report from it, per language.
+  // files — then the final report from it: Persian, checked, then translated.
   try {
     await updateGameReview(db, ctx.gameId, { status: 'generating' });
     const record = await writeGameRecord(ctx, dbRecordSource(db, ctx.gameId));

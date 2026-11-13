@@ -13,7 +13,8 @@ Single-VM deployment, single concurrent game.
 - **M2**: recorder bot + STT pipeline. Produces `turn_<quest>_<round>_<idx>.json` under
   `/data/games/<game_id>/`.
 - **M3**: per-turn summaries + per-player dossiers + per-quest synthesis (all since removed).
-- **M4**: final narrative (fa + en) + review UI.
+- **M4**: final narrative (fa + en) + review UI. Since plan row G the English is a
+  translation of the checked Persian report.
 - **The report from the record** (`.plans/2026-11-13-1640-reviewer-report-accuracy.md`,
   row C): the game record (`record.json`) is the source of every fact, and the report
   reads it whole, transcripts included. Dossiers, quest syntheses, the model-written
@@ -31,7 +32,8 @@ LiveKit room  →  bot (audio tracks)  →  turnSegmenter  →  STT (Azure)  →
                                                                                               │
          assassin-phase discussion  →  STT  →  proofreading  →  discussion.json               │
                                                                      │                        │
-game end:  database rows + turn files + discussion.json  →  record.json  →  final report  →  check  →  summary.<lang>.json
+game end:  database rows + turn files + discussion.json  →  record.json  →  report (fa)  →  check  →  summary.fa.json
+                                                                                                  └→  translation  →  summary.en.json
 ```
 
 - **Per turn** (`src/pipeline.ts`): STT, the proofreading pass, the turn file.
@@ -52,8 +54,8 @@ game end:  database rows + turn files + discussion.json  →  record.json  →  
   with no reads: `guess_log.json` is written each round, never read back.
 - **At the game's end**: the assassin-phase discussion is proofread into
   `discussion.json`; `record.json` is built in code (`src/gamestate/record.ts`); then
-  the final report (`src/reviewer/finalReport.ts`) — one model call per language
-  (`prompts/report-god.yml` or `prompts/report-blind.yml`, no tools) over the whole
+  the final report (`src/reviewer/finalReport.ts`) — one model call, in Persian
+  (`prompts/report-god.yml` or `prompts/report-blind.yml`, no tools), over the whole
   record as text: the roster (roles in god mode), then, in order, each proposal with
   its leader and team, the talk about it turn by turn and its vote, each mission and
   Lady of the Lake (with the result in god mode only), the assassin phase's discussion
@@ -77,6 +79,11 @@ game end:  database rows + turn files + discussion.json  →  record.json  →  
   removes the statement). A report with nothing flagged skips the rewrite; a rewrite
   is not checked again; a failed check keeps the report as written. The check's
   prompt is its own, not the judge's (`agents/review-judge`).
+- **One report, translated** (plan row G): the report is reasoned and written once,
+  in Persian, which the players read, and checked; the English report is one call
+  (`prompts/translate-report.yml`) translating the checked Persian narrative, quest
+  commentary and performance notes, around the same record and reads. A translation
+  that leaves out a quest or a player fails the report.
 
 ## Environment
 
@@ -137,7 +144,7 @@ $DATA_DIR/<game_id>/
   guess_log.json                   # blind mode: the detective's read per round (never read back)
   record.json                      # the game record (written at game end)
   summary.fa.json, summary.en.json # the final report, from the record
-  check.fa.json, check.en.json     # the report's check: each statement, what it rests on, rewrites
+  check.fa.json                    # the report's check: each statement, what it rests on, rewrites
 ```
 
 `record.json` holds every fact of the game, built in code from the database and
@@ -159,7 +166,7 @@ talk (the facts the page renders); `narrative`; `quest_commentary`, one
 `final_guesses` (blind). The review page reads only this format; any other summary
 shows "This report is no longer available".
 
-`check.<lang>.json` (`ReportCheck`) holds every statement of that report as written,
+`check.fa.json` (`ReportCheck`) holds every statement of the Persian report as written,
 with the check's kind, record lines (as numbered in the check's prompt), verdict and
 problem, and for a flagged statement the rewrite that took its place.
 
@@ -202,8 +209,8 @@ only the inputs — the turn files and `discussion.json` as speech-to-text left 
 and a `meta.json` built from the export (role-free in blind mode). The pipeline
 then writes what the service writes: turn files with the corrected transcript,
 `guess_log.json` (blind), `discussion.json`, `record.json` (in
-the run's mode), `summary.fa.json` and `summary.en.json`, and the checks
-`check.fa.json` and `check.en.json`. Last
+the run's mode), `summary.fa.json`, its check `check.fa.json`, and
+`summary.en.json`. Last
 comes `record.god.json`, the god record with roles that the judge
 (`agents/review-judge`) scores every report against, written after every model
 step so no blind step can see it. Each run's log ends with its time and its LLM
@@ -230,7 +237,8 @@ Regression tests verify prompt YAML files parse, declare the right
 `response_mime_type`, and reference exactly the variables the agent code
 passes in — catching drift between a prompt and its caller. Plus unit tests
 for the silence detector, the low-confidence flag, the game record, the final report (the record as its
-prompt reads it, and the summary built around a stub model's answer), the
+prompt reads it, the summary built around a stub model's answer, and the English
+translated from the checked Persian report), the
 report's check (flagged statements rewritten, a clean report left alone), the
 blind detective (its read checked against the setup's roles and counts, the re-ask,
 the record cut per round), the watcher, and the replay (on a stub model).

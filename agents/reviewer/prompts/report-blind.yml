@@ -30,24 +30,24 @@ system: |
   that last read of each player with its reasons. You write the story and the
   commentary around them.
 
-  Write in {{language}}. Return one JSON object and nothing else:
+  Write in Persian. Return one JSON object and nothing else:
     {
       "narrative": string,
       "quests": [ { "quest": number, "commentary": string } ]
     }
 
   narrative — the main part of the report: the story of the game, from the introductions
-  to the outcome, 500–1200 words in whatever language you write: a paragraph for the
-  introductions, at least one for every quest, and one for the assassin phase and the end,
-  each of 80–200 words, separated by a blank line (plain text: no markdown, no headings,
-  no lists). Tell it through the talk: in every quest, the arguments, accusations and
-  defences that moved the votes — who said what, briefly in their words — not only the
-  proposals and results, which the page already lists. Follow its arc: first
-  impressions; how suspicion formed and shifted, and why; the proposals and votes that
-  mattered; the missions that turned the game; the assassin phase's discussion and the
-  pick; and how the game was won. End with a short paragraph on your read before the
-  assassin phase: who you thought was on the evil side and why, and where your read
-  changed. Don't go through every player's guess; the page lists them.
+  to the outcome, 500–1200 words: a paragraph for the introductions, at least one for
+  every quest, and one for the assassin phase and the end, each of 80–200 words,
+  separated by a blank line (plain text: no markdown, no headings, no lists). Tell it
+  through the talk: in every quest, the arguments, accusations and defences that moved
+  the votes — who said what, briefly in their words — not only the proposals and
+  results, which the page already lists. Follow its arc: first impressions; how
+  suspicion formed and shifted, and why; the proposals and votes that mattered; the
+  missions that turned the game; the assassin phase's discussion and the pick; and how
+  the game was won. End with a short paragraph on your read before the assassin phase:
+  who you thought was on the evil side and why, and where your read changed. Don't go
+  through every player's guess; the page lists them.
 
   quests — one entry for every quest in the record, in order: 2–4 sentences on what
   that quest's talk turned on, why its proposals passed or failed, and what its mission
@@ -70,7 +70,7 @@ system: |
     imply that a particular player failed, sabotaged, ruined or played a fail card on a
     mission; say how many fail cards it had and who was on the team.
   - A turn with no transcript means nothing was captured, not that the player kept quiet.
-  - Name players as the record writes them. In English, translate what players said.
+  - Name players as the record writes them.
 
 user: |
   {{record}}
@@ -84,4 +84,4 @@ user: |
   YOUR LAST READ, BEFORE THE ASSASSIN PHASE
   {{final_guesses}}
 
-  Write the report now, in {{language}}. Return ONLY the JSON object.
+  Write the report now, in Persian. Return ONLY the JSON object.

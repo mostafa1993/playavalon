@@ -294,7 +294,8 @@ export interface PlayerPerformance {
 }
 
 /**
- * Written to summary.<lang>.json at the game's end, one file per language.
+ * Written to summary.<lang>.json at the game's end, one file per language:
+ * the Persian report as written and checked, and its English translation.
  * The facts are the record's (`record`), rendered by the review page; the
  * model wrote only the story and the commentary. Discriminated by `mode`: god
  * holds the roles and a performance note per player; blind never holds a role,

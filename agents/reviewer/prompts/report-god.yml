@@ -23,7 +23,7 @@ system: |
   for each quest every proposal's leader, team and votes, the mission's result and
   Lady of the Lake. You write the story and the commentary around them.
 
-  Write in {{language}}. Return one JSON object and nothing else:
+  Write in Persian. Return one JSON object and nothing else:
     {
       "narrative": string,
       "quests": [ { "quest": number, "commentary": string } ],
@@ -31,16 +31,16 @@ system: |
     }
 
   narrative — the main part of the report: the story of the game, from the introductions
-  to the outcome, 600–1500 words in whatever language you write: a paragraph for the
-  introductions, at least one for every quest, and one for the assassin phase and the end,
-  each of 80–200 words, separated by a blank line (plain text: no markdown, no headings,
-  no lists). Tell it through the talk: in every quest, the arguments, accusations and
-  defences that moved the votes — who said what, briefly in their words — not only the
-  proposals and results, which the page already lists. Follow its arc: first
-  impressions; how suspicion formed and shifted, and why; the proposals and votes that
-  mattered; the missions that turned the game; who deceived whom and how, now that the
-  roles are known; the assassin phase's discussion and the pick; and how the game was
-  won. Don't list the roster; the page shows it.
+  to the outcome, 600–1500 words: a paragraph for the introductions, at least one for
+  every quest, and one for the assassin phase and the end, each of 80–200 words,
+  separated by a blank line (plain text: no markdown, no headings, no lists). Tell it
+  through the talk: in every quest, the arguments, accusations and defences that moved
+  the votes — who said what, briefly in their words — not only the proposals and
+  results, which the page already lists. Follow its arc: first impressions; how
+  suspicion formed and shifted, and why; the proposals and votes that mattered; the
+  missions that turned the game; who deceived whom and how, now that the roles are
+  known; the assassin phase's discussion and the pick; and how the game was won. Don't
+  list the roster; the page shows it.
 
   quests — one entry for every quest in the record, in order: 2–4 sentences on what
   that quest's talk turned on, why its proposals passed or failed, and what its mission
@@ -66,9 +66,9 @@ system: |
     sabotaged, ruined or played a fail card on a mission; say how many fail cards it had,
     who was on the team, and which of them were evil.
   - A turn with no transcript means nothing was captured, not that the player kept quiet.
-  - Name players as the record writes them. In English, translate what players said.
+  - Name players as the record writes them.
 
 user: |
   {{record}}
 
-  Write the report now, in {{language}}. Return ONLY the JSON object.
+  Write the report now, in Persian. Return ONLY the JSON object.

@@ -8,9 +8,10 @@
  *   per round:       the blind detective's guess update (GuessTracker), from
  *                    the public record so far
  *   assassin phase:  the discussion (reviewer/discussionProcessor.ts)
- *   at the end:      record.json, then the final report from it
+ *   at the end:      record.json, then the final report from it, in Persian
  *                    (reviewer/finalReport.ts), checked against the record
- *                    (reviewer/checkReport.ts) → summary.<lang>.json
+ *                    (reviewer/checkReport.ts), then translated into English
+ *                    → summary.fa.json, summary.en.json
  */
 
 import { createLLMClient, isSilent, transcribe, type LLMClient } from '@avalon/shared';
@@ -22,7 +23,7 @@ import { checkPath, recordPath, summaryPath, turnPath } from './storage/layout.j
 import { checkReport } from './reviewer/checkReport.js';
 import { isLowConfidence } from './reviewer/confidence.js';
 import { correctTranscript } from './reviewer/transcriptCorrector.js';
-import { writeBlindReport, writeGodReport } from './reviewer/finalReport.js';
+import { translateReport, writeBlindReport, writeGodReport } from './reviewer/finalReport.js';
 import type { GuessTracker } from './reviewer/guessTracker.js';
 import type {
   GameMetaSnapshot,
@@ -199,7 +200,7 @@ export async function writeGameRecord(
 /**
  * A written report checked against the record it was written from: the
  * statements the check flags are rewritten once, and the check is written to
- * check.<lang>.json. A failed check keeps the report as written.
+ * check.fa.json. A failed check keeps the report as written.
  */
 async function checkedReport(
   ctx: PipelineContext,
@@ -222,11 +223,12 @@ async function checkedReport(
 }
 
 /**
- * The final report from the game record, per language → summary.fa.json and
- * summary.en.json (two runs of the same prompt), each checked against the
- * record. God mode: the narrative, quest commentary and performance notes.
- * Blind mode: the narrative and quest commentary from the blind record, with
- * the detective's reads, its scored read last. Returns the two paths.
+ * The final report from the game record: written once, in Persian, checked
+ * against the record, then translated into English from the checked Persian
+ * report → summary.fa.json and summary.en.json. God mode: the narrative,
+ * quest commentary and performance notes. Blind mode: the narrative and quest
+ * commentary from the blind record, with the detective's reads, its scored
+ * read last. Returns the two paths.
  */
 export async function generateFinalReport(
   ctx: PipelineContext,
@@ -234,12 +236,12 @@ export async function generateFinalReport(
   guessTracker: GuessTracker | null
 ): Promise<{ faPath: string; enPath: string }> {
   const { llm, log, meta } = ctx;
-  log.info(`writing the ${record.mode} report from the record (fa + en)`);
+  log.info(`writing the ${record.mode} report from the record`);
 
-  const write = (language: 'fa' | 'en'): Promise<SummaryJson> =>
+  const written: SummaryJson =
     record.mode === 'god'
-      ? writeGodReport(llm, record, meta.roomCode, language)
-      : writeBlindReport(
+      ? await writeGodReport(llm, record, meta.roomCode)
+      : await writeBlindReport(
           llm,
           record,
           {
@@ -247,12 +249,11 @@ export async function generateFinalReport(
             timeline: guessTracker?.getTimeline() ?? [],
             finalGuesses: guessTracker?.scoredRead() ?? [],
           },
-          meta.roomCode,
-          language
+          meta.roomCode
         );
-  const report = async (language: 'fa' | 'en') =>
-    checkedReport(ctx, record, await write(language));
-  const [fa, en] = await Promise.all([report('fa'), report('en')]);
+  const fa = await checkedReport(ctx, record, written);
+  log.info('translating the checked report into English');
+  const en = await translateReport(llm, record, fa);
 
   const faPath = summaryPath(ctx.dir, 'fa');
   const enPath = summaryPath(ctx.dir, 'en');

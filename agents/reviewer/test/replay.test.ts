@@ -264,12 +264,24 @@ function stubLlm(runDir: () => string) {
       case 'report-god.yml':
       case 'report-blind.yml':
         return {
-          narrative: `narrative in ${vars.language}`,
+          narrative: 'روایت',
           quests: [{ quest: 1, commentary: 'commentary' }],
           performance: [{ player: 'Ana', assessment: 'assessment' }],
         };
       case 'check-report.yml':
         return { statements: [] };
+      case 'translate-report.yml': {
+        const report = JSON.parse(vars.report as string) as {
+          narrative: string;
+          quests: Array<{ quest: number; commentary: string }>;
+          performance: Array<{ player: string; assessment: string }>;
+        };
+        return {
+          narrative: `English of ${report.narrative}`,
+          quests: report.quests.map((q) => ({ ...q, commentary: `English of ${q.commentary}` })),
+          performance: report.performance.map((p) => ({ ...p, assessment: `English of ${p.assessment}` })),
+        };
+      }
       default:
         return `text from ${file}`;
     }
@@ -396,13 +408,13 @@ test('a run folder starts with the inputs only', async () => {
     const text = await fs.readFile(path.join(runDir, file), 'utf8');
     assert.ok(!text.includes(SHIPPED), `${file} carries a shipped derived value`);
   }
-  for (const file of ['summary.fa.json', 'summary.en.json', 'check.fa.json', 'check.en.json', 'record.json', GOD_RECORD_FILE]) {
+  for (const file of ['summary.fa.json', 'summary.en.json', 'check.fa.json', 'record.json', GOD_RECORD_FILE]) {
     assert.ok(files.includes(file), `${file} written`);
   }
   assert.ok(!files.includes('guess_log.json'), 'no guess log in god mode');
 });
 
-test('god mode: the report reads the whole record, once per language', async () => {
+test('god mode: the report reads the whole record, once, in Persian; the English is its translation', async () => {
   const { calls, read } = await replay('god');
   const turn = read('turn_1_0_0.json') as Record<string, unknown>;
   assert.equal(turn.transcript, 'fixed raw 1_0_0');
@@ -417,7 +429,7 @@ test('god mode: the report reads the whole record, once per language', async () 
   }
 
   const reports = calls.filter((c) => c.file === 'report-god.yml');
-  assert.deepEqual(reports.map((c) => c.vars.language).sort(), ['English', 'Persian (فارسی)']);
+  assert.equal(reports.length, 1);
   const record = reports[0]!.vars.record as string;
   // Each proposal with its own leader, the talk under it, its vote; the
   // proofread talk; the discussion; the pick.
@@ -427,15 +439,24 @@ test('god mode: the report reads the whole record, once per language', async () 
   assert.match(record, /Eve: fixed raw discussion/);
   assert.match(record, /The assassin's pick \(named as Merlin\): Ana/);
 
-  // Each report is checked against the record it was written from.
+  // The Persian report is checked against the record it was written from,
+  // then translated.
   const checks = calls.filter((c) => c.file === 'check-report.yml');
-  assert.equal(checks.length, 2);
-  for (const c of checks) assert.match(c.vars.record as string, /^\[1\] PLAYERS \(seat: name — true role\)\n/);
+  assert.equal(checks.length, 1);
+  assert.match(checks[0]!.vars.record as string, /^\[1\] PLAYERS \(seat: name — true role\)\n/);
+  assert.deepEqual(calls.slice(-2).map((c) => c.file), ['check-report.yml', 'translate-report.yml']);
 
   const summary = read('summary.fa.json') as Record<string, unknown>;
   assert.equal(summary.format, 2);
-  assert.equal(summary.narrative, 'narrative in Persian (فارسی)');
+  assert.equal(summary.language, 'fa');
+  assert.equal(summary.narrative, 'روایت');
   assert.deepEqual(summary.performance, [{ playerId: 'p1', assessment: 'assessment' }]);
+  const english = read('summary.en.json') as Record<string, unknown>;
+  assert.equal(english.language, 'en');
+  assert.equal(english.narrative, 'English of روایت');
+  assert.deepEqual(english.quest_commentary, [{ quest: 1, commentary: 'English of commentary' }]);
+  assert.deepEqual(english.performance, [{ playerId: 'p1', assessment: 'English of assessment' }]);
+  assert.deepEqual(english.record, summary.record);
 });
 
 test('the detective updates round by round, each from the public record cut at its round', async () => {

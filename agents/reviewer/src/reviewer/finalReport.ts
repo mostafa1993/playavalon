@@ -1,12 +1,14 @@
 /**
- * The final report, from the whole game record (plan row C).
+ * The final report, from the whole game record (plan rows C and G).
  *
- * One model call per language reads the record as text — the roster, then
- * every proposal with its leader, team, talk and vote, every mission, Lady of
- * the Lake, the assassin phase and the outcome, in order (`recordText`) — and
- * writes only the story and the commentary: the narrative, a short commentary
- * per quest, and in god mode a performance note per player. No tools: the
- * record is all in the prompt.
+ * One model call reads the record as text — the roster, then every proposal
+ * with its leader, team, talk and vote, every mission, Lady of the Lake, the
+ * assassin phase and the outcome, in order (`recordText`) — and writes, in
+ * Persian, only the story and the commentary: the narrative, a short
+ * commentary per quest, and in god mode a performance note per player. No
+ * tools: the record is all in the prompt. Once checked (checkReport.ts), the
+ * Persian report is translated into English (`translateReport`), so the two
+ * say the same thing.
  *
  * The facts the page shows — roles, leaders, teams, votes, missions, Lady of
  * the Lake, the assassin's pick — are the record's own, carried in the summary
@@ -30,14 +32,8 @@ import {
   type RecordTurn,
   type ReportRecord,
   type RoleGuess,
+  type SummaryJson,
 } from '../types.js';
-
-export type ReportLanguage = 'fa' | 'en';
-
-const LANGUAGE_NAME: Record<ReportLanguage, string> = {
-  fa: 'Persian (فارسی)',
-  en: 'English',
-};
 
 /** The quests a record has anything for, in order (the intro, quest 0, aside). */
 export function recordQuests(record: GameRecord): number[] {
@@ -257,21 +253,17 @@ async function runReport(
   return { ...out, narrative };
 }
 
-/** God mode: the report in one language, with a performance note per player. */
+/** God mode: the report, in Persian, with a performance note per player. */
 export async function writeGodReport(
   llm: LLMClient,
   record: GodGameRecord,
-  roomCode: string,
-  language: ReportLanguage
+  roomCode: string
 ): Promise<GodSummaryJson> {
-  const out = await runReport(llm, 'report-god.yml', {
-    language: LANGUAGE_NAME[language],
-    record: recordText(record),
-  });
+  const out = await runReport(llm, 'report-god.yml', { record: recordText(record) });
   return {
     format: SUMMARY_FORMAT,
     mode: 'god',
-    language,
+    language: 'fa',
     gameId: record.gameId,
     roomCode,
     generatedAt: new Date().toISOString(),
@@ -290,16 +282,14 @@ export interface DetectiveRead {
   finalGuesses: RoleGuess[];
 }
 
-/** Blind mode: the report in one language, from the blind record. */
+/** Blind mode: the report, in Persian, from the blind record. */
 export async function writeBlindReport(
   llm: LLMClient,
   record: BlindGameRecord,
   detective: DetectiveRead,
-  roomCode: string,
-  language: ReportLanguage
+  roomCode: string
 ): Promise<BlindSummaryJson> {
   const out = await runReport(llm, 'report-blind.yml', {
-    language: LANGUAGE_NAME[language],
     record: recordText(record),
     roles_in_play: formatRolesInPlay(detective.rolesInPlay),
     guess_timeline: guessTimelineText(detective.timeline),
@@ -308,7 +298,7 @@ export async function writeBlindReport(
   return {
     format: SUMMARY_FORMAT,
     mode: 'blind',
-    language,
+    language: 'fa',
     gameId: record.gameId,
     roomCode,
     generatedAt: new Date().toISOString(),
@@ -318,4 +308,52 @@ export async function writeBlindReport(
     guess_timeline: detective.timeline,
     final_guesses: detective.finalGuesses,
   };
+}
+
+/**
+ * The English report: the (checked) Persian report's narrative, quest
+ * commentary and performance notes translated by one call
+ * (`prompts/translate-report.yml`), around the same record and, in blind mode,
+ * the same reads. Every quest and player of the Persian report must come back.
+ */
+export async function translateReport(
+  llm: LLMClient,
+  record: GameRecord,
+  persian: SummaryJson
+): Promise<SummaryJson> {
+  const nameById = new Map(record.players.map((p) => [p.id, p.display_name]));
+  const report = {
+    narrative: persian.narrative,
+    quests: persian.quest_commentary,
+    performance:
+      persian.mode === 'god'
+        ? persian.performance.map((p) => ({
+            player: nameById.get(p.playerId) ?? p.playerId,
+            assessment: p.assessment,
+          }))
+        : [],
+  };
+  const out = await runReport(llm, 'translate-report.yml', {
+    players: record.players.map((p) => `- ${p.display_name}`).join('\n'),
+    report: JSON.stringify(report, null, 2),
+  });
+
+  const quest_commentary = questCommentary(out.quests, record);
+  const missingQuests = persian.quest_commentary
+    .map((c) => c.quest)
+    .filter((q) => !quest_commentary.some((c) => c.quest === q));
+  if (missingQuests.length > 0) {
+    throw new Error(`translate-report.yml left out quest ${missingQuests.join(', ')}`);
+  }
+  const translated = { language: 'en' as const, narrative: out.narrative, quest_commentary };
+  if (persian.mode === 'blind' || record.mode === 'blind') return { ...persian, ...translated };
+
+  const performance = performanceNotes(out.performance, record);
+  const missingPlayers = persian.performance
+    .filter((p) => !performance.some((n) => n.playerId === p.playerId))
+    .map((p) => nameById.get(p.playerId) ?? p.playerId);
+  if (missingPlayers.length > 0) {
+    throw new Error(`translate-report.yml left out the note on ${missingPlayers.join(', ')}`);
+  }
+  return { ...persian, ...translated, performance };
 }

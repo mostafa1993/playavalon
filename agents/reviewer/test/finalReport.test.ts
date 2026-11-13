@@ -1,21 +1,36 @@
 /**
- * The final report from the record: the record as the prompt reads it, and
- * the summary built around the model's answer. The model is a stub that
- * records what it was given.
+ * The final report from the record: the record as the prompt reads it, the
+ * summary built around the model's answer, and the English report translated
+ * from the checked Persian one. The model is a stub that records what it was
+ * given.
  */
 
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import type { LLMClient, PromptVars } from '@avalon/shared';
+import { generateFinalReport, type PipelineContext } from '../src/pipeline.js';
 import {
   finalGuessesText,
   guessTimelineText,
   recordText,
+  translateReport,
   writeBlindReport,
   writeGodReport,
 } from '../src/reviewer/finalReport.js';
 import { summarizeRoleConfig } from '../src/gamestate/roleConfig.js';
-import type { BlindGameRecord, GodGameRecord, GuessRound, RecordTurn } from '../src/types.js';
+import type {
+  BlindGameRecord,
+  GameMetaSnapshot,
+  GodGameRecord,
+  GodSummaryJson,
+  GuessRound,
+  RecordTurn,
+  ReportCheck,
+  SummaryJson,
+} from '../src/types.js';
 
 const at = (time: string) => `2026-01-01T${time}.000Z`;
 
@@ -241,12 +256,11 @@ test('the god summary: the record without its talk, the commentary per quest, a 
       { player: 'Ed', assessment: 'again' },
     ],
   });
-  const summary = await writeGodReport(llm, GOD, 'ROOM01', 'fa');
+  const summary = await writeGodReport(llm, GOD, 'ROOM01');
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0]!.file, 'report-god.yml');
-  assert.deepEqual(Object.keys(calls[0]!.vars).sort(), ['language', 'record']);
-  assert.equal(calls[0]!.vars.language, 'Persian (فارسی)');
+  assert.deepEqual(Object.keys(calls[0]!.vars), ['record']);
   assert.equal(calls[0]!.vars.record, recordText(GOD));
 
   assert.equal(summary.format, 2);
@@ -294,19 +308,16 @@ test('the blind summary carries the detective\'s guesses and no role', async () 
       timeline,
       finalGuesses: timeline[1]!.guesses,
     },
-    'ROOM01',
-    'en'
+    'ROOM01'
   );
 
   assert.equal(calls[0]!.file, 'report-blind.yml');
   assert.deepEqual(Object.keys(calls[0]!.vars).sort(), [
     'final_guesses',
     'guess_timeline',
-    'language',
     'record',
     'roles_in_play',
   ]);
-  assert.equal(calls[0]!.vars.language, 'English');
   assert.match(calls[0]!.vars.roles_in_play as string, /Special roles in play: Merlin, Percival, Assassin, Morgana/);
   assert.equal(
     calls[0]!.vars.guess_timeline,
@@ -316,6 +327,7 @@ test('the blind summary carries the detective\'s guesses and no role', async () 
 
   assert.equal(summary.format, 2);
   assert.equal(summary.mode, 'blind');
+  assert.equal(summary.language, 'fa');
   assert.deepEqual(summary.quest_commentary, [{ quest: 1, commentary: 'c' }]);
   assert.deepEqual(summary.guess_timeline, timeline);
   assert.deepEqual(summary.final_guesses, timeline[1]!.guesses);
@@ -331,5 +343,161 @@ test('the guesses read as "none yet" when the detective has none', () => {
 
 test('a report with no narrative fails', async () => {
   const { llm } = stub({ narrative: ' ', quests: [] });
-  await assert.rejects(writeGodReport(llm, GOD, 'ROOM01', 'en'), /report-god\.yml returned no narrative/);
+  await assert.rejects(writeGodReport(llm, GOD, 'ROOM01'), /report-god\.yml returned no narrative/);
+});
+
+// ── One report, translated ──────────────────────────────────────────────────
+
+const PERSIAN: GodSummaryJson = {
+  format: 2,
+  mode: 'god',
+  language: 'fa',
+  gameId: 'g1',
+  roomCode: 'ROOM01',
+  generatedAt: at('11:00:00'),
+  narrative: 'آنا تیم را چید.\n\nبو کارت زد.',
+  quest_commentary: [
+    { quest: 1, commentary: 'اول' },
+    { quest: 2, commentary: 'دوم' },
+  ],
+  record: (({ turns: _t, cut: _c, ...facts }) => facts)(GOD),
+  performance: [
+    { playerId: 'a', assessment: 'آنا خوب بود.' },
+    { playerId: 'b', assessment: 'بو زیرک بود.' },
+  ],
+};
+
+/** Answers each prompt from `answers`, recording every call. */
+function stubByFile(answers: Record<string, unknown>) {
+  const calls: Call[] = [];
+  const llm: LLMClient = {
+    runText: async () => {
+      throw new Error('the report asks for JSON');
+    },
+    runJson: async <T>(file: string, vars: PromptVars) => {
+      calls.push({ file, vars });
+      if (!(file in answers)) throw new Error(`unexpected prompt ${file}`);
+      return answers[file] as T;
+    },
+  };
+  return { llm, calls };
+}
+
+test('the translation reads the Persian report and the names, and keeps every quest and player', async () => {
+  const { llm, calls } = stubByFile({
+    'translate-report.yml': {
+      narrative: ' Ana picked the team.\n\nBo played a card. ',
+      quests: [
+        { quest: 2, commentary: 'Second' },
+        { quest: 1, commentary: 'First' },
+      ],
+      performance: [
+        { player: 'ٔBo', assessment: 'Bo was clever.' },
+        { player: 'Ana', assessment: 'Ana was good.' },
+      ],
+    },
+  });
+  const english = (await translateReport(llm, GOD, PERSIAN)) as GodSummaryJson;
+
+  assert.deepEqual(calls.map((c) => c.file), ['translate-report.yml']);
+  assert.equal(calls[0]!.vars.players, '- Ana\n- ٔBo\n- Cy\n- Di\n- Ed');
+  assert.deepEqual(JSON.parse(calls[0]!.vars.report as string), {
+    narrative: PERSIAN.narrative,
+    quests: PERSIAN.quest_commentary,
+    performance: [
+      { player: 'Ana', assessment: 'آنا خوب بود.' },
+      { player: 'ٔBo', assessment: 'بو زیرک بود.' },
+    ],
+  });
+  assert.equal(english.language, 'en');
+  assert.equal(english.narrative, 'Ana picked the team.\n\nBo played a card.');
+  assert.deepEqual(english.quest_commentary, [
+    { quest: 1, commentary: 'First' },
+    { quest: 2, commentary: 'Second' },
+  ]);
+  assert.deepEqual(english.performance, [
+    { playerId: 'a', assessment: 'Ana was good.' },
+    { playerId: 'b', assessment: 'Bo was clever.' },
+  ]);
+  // The facts are the same record's.
+  assert.deepEqual(english.record, PERSIAN.record);
+  assert.equal(english.generatedAt, PERSIAN.generatedAt);
+});
+
+test('a translation that leaves out a quest or a player fails', async () => {
+  const answer = {
+    narrative: 'story',
+    quests: [{ quest: 1, commentary: 'First' }],
+    performance: [{ player: 'Ana', assessment: 'good' }, { player: 'Bo', assessment: 'clever' }],
+  };
+  await assert.rejects(
+    translateReport(stubByFile({ 'translate-report.yml': answer }).llm, GOD, PERSIAN),
+    /translate-report\.yml left out quest 2/
+  );
+  await assert.rejects(
+    translateReport(
+      stubByFile({ 'translate-report.yml': { ...answer, quests: [...answer.quests, { quest: 2, commentary: 'Second' }], performance: [answer.performance[0]] } }).llm,
+      GOD,
+      PERSIAN
+    ),
+    /left out the note on ٔBo/
+  );
+});
+
+const tempDirs: string[] = [];
+after(() => Promise.all(tempDirs.map((d) => fs.rm(d, { recursive: true, force: true }))));
+
+test('the report is written once, in Persian, checked, and the English is built from the checked Persian report', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'final-report-test-'));
+  tempDirs.push(dir);
+  const { llm, calls } = stubByFile({
+    'report-god.yml': {
+      narrative: 'آنا رهبر بود. بو کارت شکست زد.',
+      quests: [{ quest: 1, commentary: 'اول' }],
+      performance: [{ player: 'Ana', assessment: 'خوب' }],
+    },
+    'check-report.yml': {
+      statements: [
+        { id: 1, kind: 'fact', lines: [7], verdict: 'ok', problem: '' },
+        { id: 2, kind: 'fact', lines: [], verdict: 'unsupported', problem: 'No one is known to have failed it.' },
+        { id: 3, kind: 'opinion', lines: [], verdict: 'ok', problem: '' },
+        { id: 4, kind: 'opinion', lines: [], verdict: 'ok', problem: '' },
+      ],
+    },
+    'rewrite-report.yml': { rewrites: [{ id: 2, text: 'ماموریت یک کارت شکست داشت.' }] },
+    'translate-report.yml': {
+      narrative: 'Ana led. The mission had one fail card.',
+      quests: [{ quest: 1, commentary: 'First' }],
+      performance: [{ player: 'Ana', assessment: 'Good' }],
+    },
+  });
+  const meta = { roomCode: 'ROOM01', players: [], rolesInPlay: null } as unknown as GameMetaSnapshot;
+  const ctx: PipelineContext = {
+    llm,
+    correction: false,
+    lowConfidenceThreshold: 0.5,
+    gameId: 'g1',
+    dir,
+    mode: 'god',
+    meta,
+    log: { info: () => {}, error: () => {} },
+  };
+  const { faPath, enPath } = await generateFinalReport(ctx, GOD, null);
+
+  assert.deepEqual(calls.map((c) => c.file), ['report-god.yml', 'check-report.yml', 'rewrite-report.yml', 'translate-report.yml']);
+  // The translation read the checked Persian report: the rewrite, not the flagged statement.
+  const report = JSON.parse(calls[3]!.vars.report as string) as { narrative: string };
+  assert.equal(report.narrative, 'آنا رهبر بود. ماموریت یک کارت شکست داشت.');
+
+  const fa = JSON.parse(await fs.readFile(faPath, 'utf8')) as SummaryJson;
+  const en = JSON.parse(await fs.readFile(enPath, 'utf8')) as SummaryJson;
+  assert.equal(fa.language, 'fa');
+  assert.equal(fa.narrative, 'آنا رهبر بود. ماموریت یک کارت شکست داشت.');
+  assert.equal(en.language, 'en');
+  assert.equal(en.narrative, 'Ana led. The mission had one fail card.');
+  assert.deepEqual(en.record, fa.record);
+  const check = JSON.parse(await fs.readFile(path.join(dir, 'check.fa.json'), 'utf8')) as ReportCheck;
+  assert.equal(check.language, 'fa');
+  assert.deepEqual(check.statements.filter((s) => s.flagged).map((s) => s.rewrite), ['ماموریت یک کارت شکست داشت.']);
+  await assert.rejects(fs.access(path.join(dir, 'check.en.json')), 'the English is not checked again');
 });

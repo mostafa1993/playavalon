@@ -39,12 +39,17 @@ const prompts: Array<{
   {
     file: 'report-god.yml',
     mime: 'application/json',
-    expectedVars: ['language', 'record'],
+    expectedVars: ['record'],
   },
   {
     file: 'report-blind.yml',
     mime: 'application/json',
-    expectedVars: ['language', 'record', 'roles_in_play', 'guess_timeline', 'final_guesses'],
+    expectedVars: ['record', 'roles_in_play', 'guess_timeline', 'final_guesses'],
+  },
+  {
+    file: 'translate-report.yml',
+    mime: 'application/json',
+    expectedVars: ['players', 'report'],
   },
   {
     file: 'check-report.yml',
