@@ -16,6 +16,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import url from 'node:url';
 import { loadPrompt, fill, type PromptFile } from '@avalon/shared';
+import { formatRolesInPlay, summarizeRoleConfig } from '../src/gamestate/roleConfig.js';
 
 const promptsDir = path.resolve(
   path.dirname(url.fileURLToPath(import.meta.url)),
@@ -168,6 +169,17 @@ test('every prompt YAML in prompts/ is covered by the expectations above', async
     'Unexpected or missing prompt files. Update the `prompts` list in this test.'
   );
 });
+
+for (const file of ['role-guess-update.yml', 'final-narrative-blind-en.yml', 'final-narrative-blind-fa.yml']) {
+  test(`prompt ${file}, filled for a game without Merlin, assumes no Merlin`, async () => {
+    const p = await loadPrompt(promptsDir, file);
+    const vars = { roles_in_play: formatRolesInPlay(summarizeRoleConfig(5, { merlin: false })) };
+    const filled = `${fill(p.system, vars)}\n${fill(p.user, vars)}`;
+    assert.ok(filled.includes('No Merlin and no Assassin in this game'));
+    assert.ok(!filled.includes('exactly one Merlin'));
+    assert.ok(!filled.includes('دقیقاً یک مرلین'));
+  });
+}
 
 test('fill() substitutes {{var}} and preserves unknown placeholders', () => {
   const out = fill('hello {{name}}, missing {{other}}', { name: 'world' });

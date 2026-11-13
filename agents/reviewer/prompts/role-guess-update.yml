@@ -31,9 +31,10 @@ system: |
 
   Rules:
   - Include EVERY player from the roster, every round.
-  - Your guesses must use ONLY roles listed in the game setup. The total of each role
-    cannot exceed what the setup allows (e.g. exactly one Merlin, one Assassin; generic
-    players are Loyal Servants or Minions). Never guess a role that is not in play.
+  - Your guesses must use ONLY roles listed in the game setup, and respect its counts:
+    each special role it lists is held by exactly one player, the good and evil totals
+    are as it states, and every other player is a Loyal Servant or a Minion. Never guess
+    a role that is not in play.
   - When a round adds nothing new about a player, carry their prior guess forward.
   - Reason ONLY from public behavior (claims, suspicions, defenses, stance, vote talk).
     You have no access to the true roles — this is pure deduction.

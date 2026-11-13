@@ -48,7 +48,7 @@ const GAME = {
   current_leader_id: 'p1',
   created_at: '2026-01-01T00:00:00Z',
 };
-const ROOM = { id: 'room-1', code: 'ABCDEF' };
+const ROOM = { id: 'room-1', code: 'ABCDEF', role_config: { merlin: true } };
 const PLAYERS = [
   { id: 'p1', display_name: 'Alice' },
   { id: 'p2', display_name: 'Bob' },

@@ -15,7 +15,8 @@ system: |
 
   You are told the GAME SETUP (which roles are in play + good/evil counts) — this is
   public knowledge, NOT who has which role. Confine your guesses to roles that are in
-  play, and respect their counts (e.g. exactly one Merlin, one Assassin).
+  play, and respect the setup's counts: each special role it lists is held by exactly
+  one player, and the good and evil totals are as it states.
 
   Important: always frame your guesses as GUESSES, never as confirmed truth. Never claim
   to know anyone's real role — everything is your deduction. Write flowing English prose

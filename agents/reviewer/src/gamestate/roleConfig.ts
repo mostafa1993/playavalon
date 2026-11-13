@@ -24,6 +24,9 @@ const ROLE_RATIOS: Record<number, { good: number; evil: number }> = {
 
 /** The subset of rooms.role_config fields that affect which roles are in play. */
 export interface ReviewerRoleConfig {
+  /** True: Merlin and the Assassin are dealt. False: neither is; the
+   *  Assassin's seat is a plain Minion. */
+  merlin: boolean;
   percival?: boolean;
   morgana?: boolean;
   mordred?: boolean;
@@ -32,9 +35,19 @@ export interface ReviewerRoleConfig {
   brute?: boolean;
 }
 
+/** A stored rooms.role_config, refused unless `merlin` is a boolean. */
+export function readRoleConfig(raw: unknown): ReviewerRoleConfig {
+  if (typeof raw !== 'object' || raw === null || typeof (raw as { merlin?: unknown }).merlin !== 'boolean') {
+    throw new Error(`role_config has no boolean merlin: ${JSON.stringify(raw)}`);
+  }
+  return raw as ReviewerRoleConfig;
+}
+
 export interface RolesInPlay {
   goodCount: number;
   evilCount: number;
+  /** Whether Merlin and the Assassin are dealt. */
+  merlinInPlay: boolean;
   /** Named special roles present (generic Servants/Minions are not listed). */
   specialRoles: string[];
 }
@@ -45,28 +58,27 @@ export interface RolesInPlay {
  */
 export function summarizeRoleConfig(
   playerCount: number,
-  config: ReviewerRoleConfig | null | undefined
+  config: ReviewerRoleConfig
 ): RolesInPlay | null {
   const ratio = ROLE_RATIOS[playerCount];
   if (!ratio) return null;
 
-  const c = config ?? {};
   const specialRoles: string[] = [];
 
-  // Good team (Merlin is always present).
-  specialRoles.push('Merlin');
-  if (c.percival) specialRoles.push('Percival');
+  // Good team.
+  if (config.merlin) specialRoles.push('Merlin');
+  if (config.percival) specialRoles.push('Percival');
 
-  // Evil team (Assassin is always present).
-  specialRoles.push('Assassin');
-  if (c.morgana) specialRoles.push('Morgana');
-  if (c.mordred) specialRoles.push('Mordred');
-  if (c.oberon === 'standard') specialRoles.push('Oberon');
-  if (c.oberon === 'chaos') specialRoles.push('Oberon (Chaos)');
-  if (c.lunatic) specialRoles.push('Lunatic');
-  if (c.brute) specialRoles.push('Brute');
+  // Evil team (the Assassin comes with Merlin).
+  if (config.merlin) specialRoles.push('Assassin');
+  if (config.morgana) specialRoles.push('Morgana');
+  if (config.mordred) specialRoles.push('Mordred');
+  if (config.oberon === 'standard') specialRoles.push('Oberon');
+  if (config.oberon === 'chaos') specialRoles.push('Oberon (Chaos)');
+  if (config.lunatic) specialRoles.push('Lunatic');
+  if (config.brute) specialRoles.push('Brute');
 
-  return { goodCount: ratio.good, evilCount: ratio.evil, specialRoles };
+  return { goodCount: ratio.good, evilCount: ratio.evil, merlinInPlay: config.merlin, specialRoles };
 }
 
 /**
@@ -76,10 +88,12 @@ export function summarizeRoleConfig(
 export function formatRolesInPlay(roles: RolesInPlay | null | undefined): string {
   if (!roles) return '(role configuration unavailable)';
   const total = roles.goodCount + roles.evilCount;
+  const special = roles.specialRoles.length > 0 ? roles.specialRoles.join(', ') : 'none';
   return [
     "This game's setup (public knowledge — NOT a role assignment):",
     `- ${total} players: ${roles.goodCount} good, ${roles.evilCount} evil.`,
-    `- Special roles in play: ${roles.specialRoles.join(', ')}.`,
+    `- Special roles in play: ${special}.`,
+    ...(roles.merlinInPlay ? [] : ['- No Merlin and no Assassin in this game.']),
     '- Any remaining players are generic Loyal Servants (good) or Minions of Mordred (evil).',
     '- Only these roles exist in this game — never guess a role that is not in this list.',
   ].join('\n');

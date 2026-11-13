@@ -6,7 +6,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { GameMetaSnapshot } from '../types.js';
-import { summarizeRoleConfig, type ReviewerRoleConfig } from './roleConfig.js';
+import { readRoleConfig, summarizeRoleConfig } from './roleConfig.js';
 
 export function createDbClient(url: string, serviceRoleKey: string): SupabaseClient {
   return createClient(url, serviceRoleKey, {
@@ -180,10 +180,7 @@ export function buildMetaSnapshot(
   // Public game setup (good/evil counts + enabled special roles). Safe for both
   // modes — it's the configuration, not who-has-what. Lets the blind detective
   // constrain its guesses to roles that actually exist in this match.
-  const rolesInPlay = summarizeRoleConfig(
-    game.player_count,
-    (room.role_config ?? null) as ReviewerRoleConfig | null
-  );
+  const rolesInPlay = summarizeRoleConfig(game.player_count, readRoleConfig(room.role_config));
 
   // Build seat-number map from seating_order + leader_index (role-free).
   const order = Array.isArray(game.seating_order) ? game.seating_order : [];

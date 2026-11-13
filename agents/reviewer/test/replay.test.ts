@@ -105,7 +105,7 @@ function makeExport(mode: ReplayMode): ExportedGame {
       player_count: 5,
       created_at: at('09:45:00'),
     },
-    room: { id: ROOM_ID, code: 'ROOM01', role_config: { percival: true, morgana: true }, ai_review_mode: mode },
+    room: { id: ROOM_ID, code: 'ROOM01', role_config: { merlin: true, percival: true, morgana: true }, ai_review_mode: mode },
     players: [
       { id: 'p1', display_name: 'Ana' },
       { id: 'p2', display_name: 'Ben' },
