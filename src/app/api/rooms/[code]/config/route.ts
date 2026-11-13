@@ -97,7 +97,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const { error: updateErr } = await supabase
+    // Only while the room still waits: a save racing role distribution must not
+    // change the setup (Merlin in or out) after the roles were dealt.
+    const { data: updated, error: updateErr } = await supabase
       .from('rooms')
       .update({
         role_config: newConfig,
@@ -105,8 +107,11 @@ export async function POST(request: Request, { params }: RouteParams) {
         lady_of_lake_enabled: newConfig.ladyOfLake || false,
         intro_phase_enabled: newIntro,
       })
-      .eq('id', room.id);
+      .eq('id', room.id)
+      .eq('status', 'waiting')
+      .select('id');
     if (updateErr) throw updateErr;
+    if (!updated || updated.length === 0) return errors.roomNotWaiting();
 
     return NextResponse.json({
       data: {

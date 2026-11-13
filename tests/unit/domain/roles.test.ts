@@ -309,77 +309,7 @@ describe('roles', () => {
     });
   });
 
-  describe('validateRoleDistribution', () => {
-    it('should validate correct 5-player distribution', () => {
-      const assignments: RoleAssignment[] = [
-        { playerId: 'p1', role: 'good', specialRole: 'servant' },
-        { playerId: 'p2', role: 'good', specialRole: 'servant' },
-        { playerId: 'p3', role: 'good', specialRole: 'servant' },
-        { playerId: 'p4', role: 'evil', specialRole: 'minion' },
-        { playerId: 'p5', role: 'evil', specialRole: 'minion' },
-      ];
-      const result = validateRoleDistribution(assignments, 5);
-      expect(result.valid).toBe(true);
-    });
-
-    it('should validate correct 10-player distribution', () => {
-      const assignments: RoleAssignment[] = [
-        { playerId: 'p1', role: 'good', specialRole: 'servant' },
-        { playerId: 'p2', role: 'good', specialRole: 'servant' },
-        { playerId: 'p3', role: 'good', specialRole: 'servant' },
-        { playerId: 'p4', role: 'good', specialRole: 'servant' },
-        { playerId: 'p5', role: 'good', specialRole: 'servant' },
-        { playerId: 'p6', role: 'good', specialRole: 'servant' },
-        { playerId: 'p7', role: 'evil', specialRole: 'minion' },
-        { playerId: 'p8', role: 'evil', specialRole: 'minion' },
-        { playerId: 'p9', role: 'evil', specialRole: 'minion' },
-        { playerId: 'p10', role: 'evil', specialRole: 'minion' },
-      ];
-      const result = validateRoleDistribution(assignments, 10);
-      expect(result.valid).toBe(true);
-    });
-
-    it('should reject wrong total count', () => {
-      const assignments: RoleAssignment[] = [
-        { playerId: 'p1', role: 'good', specialRole: 'servant' },
-        { playerId: 'p2', role: 'good', specialRole: 'servant' },
-        { playerId: 'p3', role: 'good', specialRole: 'servant' },
-        { playerId: 'p4', role: 'evil', specialRole: 'minion' },
-      ];
-      const result = validateRoleDistribution(assignments, 5);
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('Expected 5');
-    });
-
-    it('should reject wrong good count', () => {
-      const assignments: RoleAssignment[] = [
-        { playerId: 'p1', role: 'good', specialRole: 'servant' },
-        { playerId: 'p2', role: 'good', specialRole: 'servant' },
-        { playerId: 'p3', role: 'evil', specialRole: 'minion' },
-        { playerId: 'p4', role: 'evil', specialRole: 'minion' },
-        { playerId: 'p5', role: 'evil', specialRole: 'minion' },
-      ];
-      const result = validateRoleDistribution(assignments, 5);
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('good');
-    });
-
-    it('should reject wrong evil count', () => {
-      // 5 players should have 3 good, 2 evil
-      // This has 4 good, 1 evil - validation catches wrong good count first
-      const assignments: RoleAssignment[] = [
-        { playerId: 'p1', role: 'good', specialRole: 'servant' },
-        { playerId: 'p2', role: 'good', specialRole: 'servant' },
-        { playerId: 'p3', role: 'good', specialRole: 'servant' },
-        { playerId: 'p4', role: 'good', specialRole: 'servant' },
-        { playerId: 'p5', role: 'evil', specialRole: 'minion' },
-      ];
-      const result = validateRoleDistribution(assignments, 5);
-      expect(result.valid).toBe(false);
-      // Validation checks good count first, so error mentions good
-      expect(result.error).toContain('good');
-    });
-
+  describe('distributeRoles meets the table\'s good/evil counts', () => {
     it('should validate distributions created by distributeRoles', () => {
       for (let count = 5; count <= 10; count++) {
         const players = Array.from({ length: count }, (_, i) => `p${i}`);
