@@ -51,7 +51,31 @@ function floatEnv(name: string, fallback: number, min?: number): number {
   return min !== undefined ? Math.max(min, parsed) : parsed;
 }
 
-export interface AgentConfig {
+/** What the steps after speech-to-text need: the model and its prompts,
+ *  retries, proofreading. The replay (cli/replay.ts) reads only this. */
+export interface PipelineConfig {
+  gemini: {
+    project: string;
+    location: string;
+    model: string;
+  };
+  /** YAML prompts dir. */
+  promptsDir: string;
+  retry: {
+    /** Total attempts (including the first) for retriable external calls. */
+    maxAttempts: number;
+    /** Base delay in ms; doubled each attempt with jitter. */
+    baseDelayMs: number;
+  };
+  correction: {
+    /** If true, run an LLM proofreading pass on each raw STT transcript before
+     *  it reaches the summarizer. Improves quality for Persian; costs one
+     *  extra LLM call (Gemini Flash by default) per non-empty turn. */
+    enabled: boolean;
+  };
+}
+
+export interface AgentConfig extends PipelineConfig {
   supabase: {
     url: string;
     serviceRoleKey: string;
@@ -67,14 +91,8 @@ export interface AgentConfig {
     region: string;
     language: string;
   };
-  gemini: {
-    project: string;
-    location: string;
-    model: string;
-  };
   storage: {
     dataDir: string;
-    promptsDir: string;
   };
   polling: {
     gameWatcherMs: number;
@@ -85,18 +103,6 @@ export interface AgentConfig {
     channels: number;
     /** RMS threshold (PCM16 units) below which a turn is considered silent and STT is skipped. */
     silenceRmsThreshold: number;
-  };
-  retry: {
-    /** Total attempts (including the first) for retriable external calls. */
-    maxAttempts: number;
-    /** Base delay in ms; doubled each attempt with jitter. */
-    baseDelayMs: number;
-  };
-  correction: {
-    /** If true, run an LLM proofreading pass on each raw STT transcript before
-     *  it reaches the summarizer. Improves quality for Persian; costs one
-     *  extra LLM call (Gemini Flash by default) per non-empty turn. */
-    enabled: boolean;
   };
 }
 
@@ -118,19 +124,8 @@ export function loadConfig(): AgentConfig {
       region: required('AZURE_SPEECH_REGION'),
       language: optional('AZURE_SPEECH_LANGUAGE', 'fa-IR'),
     },
-    gemini: {
-      project: required('GCP_PROJECT_ID'),
-      location: optional('GCP_LLM_LOCATION', 'us-central1'),
-      // Currently only Gemini models work here (the SDK is @google-cloud/vertexai).
-      // The env var is named generically so we can swap to a different Vertex-hosted
-      // model family later without renaming config.
-      model: optional('GCP_LLM_MODEL', 'gemini-3.1-pro-preview'),
-    },
     storage: {
       dataDir: optional('DATA_DIR', '/data/games'),
-      // Relative path resolves to CWD: /app/prompts in the Docker image
-      // (WORKDIR /app) and ./prompts locally when running `npm run dev`.
-      promptsDir: optional('PROMPTS_DIR', './prompts'),
     },
     polling: {
       gameWatcherMs: intEnv('GAME_WATCHER_INTERVAL_MS', 3000, 500),
@@ -140,6 +135,23 @@ export function loadConfig(): AgentConfig {
       channels: 1,
       silenceRmsThreshold: floatEnv('SILENCE_RMS_THRESHOLD', 250, 0),
     },
+    ...loadPipelineConfig(),
+  };
+}
+
+export function loadPipelineConfig(): PipelineConfig {
+  return {
+    gemini: {
+      project: required('GCP_PROJECT_ID'),
+      location: optional('GCP_LLM_LOCATION', 'us-central1'),
+      // Currently only Gemini models work here (the SDK is @google-cloud/vertexai).
+      // The env var is named generically so we can swap to a different Vertex-hosted
+      // model family later without renaming config.
+      model: optional('GCP_LLM_MODEL', 'gemini-3.1-pro-preview'),
+    },
+    // Relative path resolves to CWD: /app/prompts in the Docker image
+    // (WORKDIR /app) and ./prompts locally when running `npm run dev`.
+    promptsDir: optional('PROMPTS_DIR', './prompts'),
     retry: {
       maxAttempts: intEnv('RETRY_MAX_ATTEMPTS', 3, 1),
       baseDelayMs: intEnv('RETRY_BASE_DELAY_MS', 500, 0),

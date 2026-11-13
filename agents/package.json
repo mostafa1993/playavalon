@@ -6,7 +6,8 @@
   "workspaces": [
     "shared",
     "reviewer",
-    "bot-supervisor"
+    "bot-supervisor",
+    "review-judge"
   ],
   "scripts": {
     "build": "npm run build -w @avalon/shared && npm run build -w playavalon-agent",

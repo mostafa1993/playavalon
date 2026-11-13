@@ -153,19 +153,33 @@ export function dbRecordSource(db: SupabaseClient, gameId: string): RecordSource
 
 /**
  * One element of an export file, a JSON array of games. Each holds the game's
- * rows: `game` (the `games` row), `players` ({id, display_name}), `roles`
- * ({player_id, role, special_role}), `proposals` (`team_proposals` rows),
- * `votes` ({proposal_id, player_id, vote}) and `lady` (`lady_investigations`
- * rows). A list with no rows is null. Other keys (room, events, review) are
- * not read.
+ * rows: `game` (the `games` row), `room` (the `rooms` row), `players` ({id,
+ * display_name}), `roles` ({player_id, role, special_role}), `proposals`
+ * (`team_proposals` rows), `votes` ({proposal_id, player_id, vote}) and `lady`
+ * (`lady_investigations` rows). A list with no rows is null. Other keys
+ * (events, review) are not read.
  */
 export interface ExportedGame {
-  game: GameRow;
+  game: ExportedGameRow;
+  room: ExportedRoomRow;
   players: PlayerRow[] | null;
   roles: RoleRow[] | null;
   proposals: ProposalRow[] | null;
   votes: VoteRow[] | null;
   lady: LadyResultRow[] | null;
+}
+
+/** The exported `games` row: the game as it ended. */
+export interface ExportedGameRow extends GameRow {
+  player_count: number;
+  created_at: string;
+}
+
+export interface ExportedRoomRow {
+  id: string;
+  code: string;
+  role_config: unknown;
+  ai_review_mode: 'blind' | 'god';
 }
 
 /** Read one game out of an export file. */

@@ -7,7 +7,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { LLMClient } from '@avalon/shared';
-import { discussionPath, gameDir } from '../storage/layout.js';
+import { discussionPath } from '../storage/layout.js';
 import type {
   DiscussionJson,
   DossierJson,
@@ -17,11 +17,7 @@ import type {
 import type { GameOutcome } from '../gamestate/db.js';
 
 /** Load every quest_<n>.json for a game, ordered by quest number. */
-export async function loadAllQuestJsons(
-  dataDir: string,
-  gameId: string
-): Promise<QuestJson[]> {
-  const dir = gameDir(dataDir, gameId);
+export async function loadAllQuestJsons(dir: string): Promise<QuestJson[]> {
   let entries: string[] = [];
   try {
     entries = await fs.readdir(dir);
@@ -47,11 +43,7 @@ export async function loadAllQuestJsons(
 }
 
 /** Load every dossier_<playerId>.json for a game. */
-export async function loadAllDossiers(
-  dataDir: string,
-  gameId: string
-): Promise<DossierJson[]> {
-  const dir = gameDir(dataDir, gameId);
+export async function loadAllDossiers(dir: string): Promise<DossierJson[]> {
   let entries: string[] = [];
   try {
     entries = await fs.readdir(dir);
@@ -80,12 +72,9 @@ export async function loadAllDossiers(
  * didn't reach the assassin phase or the manager never started a discussion
  * timer — both are valid and the narrative prompt handles that case.
  */
-export async function loadDiscussion(
-  dataDir: string,
-  gameId: string
-): Promise<DiscussionJson | null> {
+export async function loadDiscussion(dir: string): Promise<DiscussionJson | null> {
   try {
-    const raw = await fs.readFile(discussionPath(dataDir, gameId), 'utf8');
+    const raw = await fs.readFile(discussionPath(dir), 'utf8');
     return JSON.parse(raw) as DiscussionJson;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;

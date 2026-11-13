@@ -8,36 +8,32 @@
  *      of analysis we want is the same: key points, claims, quotes),
  * then writes a single discussion.json at the game's directory root.
  *
+ * Steps 3–4 are `finishSpeaker`; the replay runs them alone on a discussion's
+ * stored transcripts (`processRawDiscussion`).
+ *
  * Every step fails-soft: an error on one speaker's clip doesn't block the
  * others, and a full processing failure produces no file at all (the final
  * narrative loader treats "no discussion.json" as "no discussion happened",
  * which is correct).
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentConfig } from '../config.js';
+import type { PipelineContext } from '../pipeline.js';
 import { transcribe } from '@avalon/shared';
 import { isSilent } from '@avalon/shared';
 import { writeJsonAtomic } from '../storage/atomicWrite.js';
 import { discussionPath } from '../storage/layout.js';
-import type { LLMClient } from '@avalon/shared';
 import { correctTranscript } from './transcriptCorrector.js';
 import { summarizeTurn } from './turnSummarizer.js';
 import type {
   DiscussionJson,
   DiscussionSpeakerRecord,
   GameMetaSnapshot,
+  RawDiscussionJson,
+  RawDiscussionSpeaker,
   TurnSummary,
 } from '../types.js';
 import type { RecordedDiscussion } from '../bot/discussionRecorder.js';
-
-export interface DiscussionProcessorContext {
-  config: AgentConfig;
-  db: SupabaseClient;
-  llm: LLMClient;
-  gameId: string;
-  meta: GameMetaSnapshot;
-}
 
 function buildSeatTable(meta: GameMetaSnapshot): string {
   return meta.players
@@ -47,34 +43,23 @@ function buildSeatTable(meta: GameMetaSnapshot): string {
     .join('\n');
 }
 
-async function processSpeaker(
-  ctx: DiscussionProcessorContext,
-  log: (msg: string, err?: unknown) => void,
-  seg: RecordedDiscussion['speakers'][number],
-  leaderDisplayName: string
-): Promise<DiscussionSpeakerRecord> {
-  const { config, llm, meta } = ctx;
-
-  const speakerMeta = meta.players.find((p) => p.id === seg.identity);
-  const seatTable = buildSeatTable(meta);
-
-  const silent = isSilent(seg.pcm, config.audio.silenceRmsThreshold);
-  const base: DiscussionSpeakerRecord = {
+/** Silence check + STT. A silent clip or a failed STT gives an empty transcript. */
+async function transcribeSpeaker(
+  config: AgentConfig,
+  ctx: PipelineContext,
+  seg: RecordedDiscussion['speakers'][number]
+): Promise<RawDiscussionSpeaker> {
+  const base: RawDiscussionSpeaker = {
     identity: seg.identity,
     display_name: seg.displayName,
     durationSec: Number(seg.durationSec.toFixed(2)),
     sampleRate: seg.sampleRate,
-    transcript: '',
     transcript_raw: '',
-    transcript_corrected: false,
     confidence: null,
   };
 
-  if (silent) return base;
+  if (isSilent(seg.pcm, config.audio.silenceRmsThreshold)) return base;
 
-  // STT
-  let transcriptRaw = '';
-  let confidence: number | null = null;
   try {
     const res = await transcribe(
       {
@@ -86,21 +71,29 @@ async function processSpeaker(
       seg.sampleRate,
       { retry: { maxAttempts: config.retry.maxAttempts, baseDelayMs: config.retry.baseDelayMs } }
     );
-    transcriptRaw = res.transcript;
-    confidence = res.confidence;
+    return { ...base, transcript_raw: res.transcript, confidence: res.confidence };
   } catch (err) {
-    log(`discussion STT failed for ${seg.displayName}`, err);
+    ctx.log.error(`discussion STT failed for ${seg.displayName}`, err);
     return base;
   }
+}
 
-  let transcript = transcriptRaw;
+/** Correction + summary for one speaker's transcribed clip. */
+async function finishSpeaker(
+  ctx: PipelineContext,
+  raw: RawDiscussionSpeaker,
+  leaderDisplayName: string
+): Promise<DiscussionSpeakerRecord> {
+  const { llm, meta } = ctx;
+
+  let transcript = raw.transcript_raw;
   let corrected = false;
-  if (config.correction.enabled && transcriptRaw.trim().length > 0) {
+  if (ctx.correction && raw.transcript_raw.trim().length > 0) {
     try {
-      transcript = await correctTranscript(llm, transcriptRaw);
+      transcript = await correctTranscript(llm, raw.transcript_raw);
       corrected = true;
     } catch (err) {
-      log(`discussion correction failed for ${seg.displayName}, using raw STT`, err);
+      ctx.log.error(`discussion correction failed for ${raw.display_name}, using raw STT`, err);
     }
   }
 
@@ -113,62 +106,97 @@ async function processSpeaker(
         questNumber: 0,
         roundIndex: 0,
         turnIndex: 0,
-        speakerDisplayName: seg.displayName,
-        speakerSeat: speakerMeta?.seat_number ?? null,
+        speakerDisplayName: raw.display_name,
+        speakerSeat: meta.players.find((p) => p.id === raw.identity)?.seat_number ?? null,
         leaderDisplayName,
         proposedTeam: 'assassin phase — no team',
-        seatTable,
+        seatTable: buildSeatTable(meta),
         transcript,
       });
     } catch (err) {
-      log(`discussion summarizer failed for ${seg.displayName}`, err);
+      ctx.log.error(`discussion summarizer failed for ${raw.display_name}`, err);
     }
   }
 
   return {
-    ...base,
+    identity: raw.identity,
+    display_name: raw.display_name,
+    durationSec: raw.durationSec,
+    sampleRate: raw.sampleRate,
     transcript,
-    transcript_raw: transcriptRaw,
+    transcript_raw: raw.transcript_raw,
     transcript_corrected: corrected,
-    confidence,
+    confidence: raw.confidence,
     summary,
   };
 }
 
-export async function processDiscussion(
-  ctx: DiscussionProcessorContext,
-  recording: RecordedDiscussion,
-  log: { info: (msg: string) => void; error: (msg: string, err?: unknown) => void }
+function assassinOf(ctx: PipelineContext, assassinIdentity: string | null) {
+  return assassinIdentity ? ctx.meta.players.find((p) => p.id === assassinIdentity) : null;
+}
+
+async function writeDiscussion(
+  ctx: PipelineContext,
+  head: Omit<RawDiscussionJson, 'gameId' | 'speakers'>,
+  speakers: DiscussionSpeakerRecord[]
 ): Promise<void> {
-  log.info(
-    `processing discussion: ${recording.speakers.length} speaker(s), ${recording.durationSec}s window`
-  );
-
-  const assassinMeta = recording.assassinIdentity
-    ? ctx.meta.players.find((p) => p.id === recording.assassinIdentity)
-    : null;
-  const leaderDisplayName = assassinMeta?.display_name ?? 'the assassin';
-
-  const speakers = await Promise.all(
-    recording.speakers.map((seg) =>
-      processSpeaker(
-        ctx,
-        (msg, err) => log.error(msg, err),
-        seg,
-        leaderDisplayName
-      )
-    )
-  );
-
   const out: DiscussionJson = {
     gameId: ctx.gameId,
-    startedAt: recording.startedAt.toISOString(),
-    durationSec: recording.durationSec,
-    assassinIdentity: recording.assassinIdentity,
-    assassinDisplayName: assassinMeta?.display_name ?? null,
+    startedAt: head.startedAt,
+    durationSec: head.durationSec,
+    assassinIdentity: head.assassinIdentity,
+    assassinDisplayName: assassinOf(ctx, head.assassinIdentity)?.display_name ?? null,
     speakers,
   };
 
-  await writeJsonAtomic(discussionPath(ctx.config.storage.dataDir, ctx.gameId), out);
-  log.info('discussion.json written');
+  await writeJsonAtomic(discussionPath(ctx.dir), out);
+  ctx.log.info('discussion.json written');
+}
+
+/** Live: every speaker's clip through STT, then correction and summary. */
+export async function processDiscussion(
+  config: AgentConfig,
+  ctx: PipelineContext,
+  recording: RecordedDiscussion
+): Promise<void> {
+  ctx.log.info(
+    `processing discussion: ${recording.speakers.length} speaker(s), ${recording.durationSec}s window`
+  );
+
+  const leaderDisplayName =
+    assassinOf(ctx, recording.assassinIdentity)?.display_name ?? 'the assassin';
+
+  const speakers = await Promise.all(
+    recording.speakers.map(async (seg) =>
+      finishSpeaker(ctx, await transcribeSpeaker(config, ctx, seg), leaderDisplayName)
+    )
+  );
+
+  await writeDiscussion(
+    ctx,
+    {
+      startedAt: recording.startedAt.toISOString(),
+      durationSec: recording.durationSec,
+      assassinIdentity: recording.assassinIdentity,
+    },
+    speakers
+  );
+}
+
+/** Replay: correction and summary on a discussion's stored transcripts. */
+export async function processRawDiscussion(
+  ctx: PipelineContext,
+  raw: RawDiscussionJson
+): Promise<void> {
+  ctx.log.info(
+    `processing discussion: ${raw.speakers.length} speaker(s), ${raw.durationSec}s window`
+  );
+
+  const leaderDisplayName = assassinOf(ctx, raw.assassinIdentity)?.display_name ?? 'the assassin';
+
+  const speakers = await Promise.all(
+    raw.speakers.map((speaker) => finishSpeaker(ctx, speaker, leaderDisplayName))
+  );
+
+  await writeDiscussion(ctx, raw, speakers);
 }

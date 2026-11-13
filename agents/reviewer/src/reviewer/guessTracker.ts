@@ -19,7 +19,7 @@ import type {
   TurnJson,
   TurnSummary,
 } from '../types.js';
-import { gameDir, guessLogPath } from '../storage/layout.js';
+import { guessLogPath } from '../storage/layout.js';
 import { writeJsonAtomic } from '../storage/atomicWrite.js';
 import { formatRolesInPlay } from '../gamestate/roleConfig.js';
 
@@ -35,15 +35,14 @@ export class GuessTracker {
 
   constructor(
     private readonly llm: LLMClient,
-    private readonly dataDir: string,
+    /** The game's folder. */
+    private readonly dir: string,
     private readonly meta: GameMetaSnapshot
   ) {
     // Resume from a persisted log if the reviewer restarted mid-game, so the
     // evolving memory + round numbering continue rather than starting over.
     try {
-      const existing = JSON.parse(
-        readFileSync(guessLogPath(dataDir, meta.gameId), 'utf8')
-      ) as GuessLog;
+      const existing = JSON.parse(readFileSync(guessLogPath(dir), 'utf8')) as GuessLog;
       if (Array.isArray(existing.rounds) && existing.rounds.length > 0) {
         this.rounds = existing.rounds;
         this.globalRound =
@@ -73,10 +72,9 @@ export class GuessTracker {
 
   /** Read the per-turn summaries for one (quest, proposalRound) from disk. */
   private roundTurns(quest: number, proposalRound: number): Array<{ speaker: string; summary: TurnSummary }> {
-    const dir = gameDir(this.dataDir, this.meta.gameId);
     let files: string[];
     try {
-      files = readdirSync(dir).filter(
+      files = readdirSync(this.dir).filter(
         (f) => f.startsWith(`turn_${quest}_${proposalRound}_`) && f.endsWith('.json')
       );
     } catch {
@@ -85,7 +83,7 @@ export class GuessTracker {
     const out: Array<{ speaker: string; summary: TurnSummary }> = [];
     for (const f of files.sort()) {
       try {
-        const t = JSON.parse(readFileSync(path.join(dir, f), 'utf8')) as TurnJson;
+        const t = JSON.parse(readFileSync(path.join(this.dir, f), 'utf8')) as TurnJson;
         if (t.summary) out.push({ speaker: t.speakerDisplayName, summary: t.summary });
       } catch {
         // skip unreadable/partial files
@@ -158,7 +156,7 @@ export class GuessTracker {
       updatedAt: new Date().toISOString(),
       rounds: this.rounds,
     };
-    await writeJsonAtomic(guessLogPath(this.dataDir, this.meta.gameId), log);
+    await writeJsonAtomic(guessLogPath(this.dir), log);
   }
 
   /** The full evolution timeline (for the final report). */

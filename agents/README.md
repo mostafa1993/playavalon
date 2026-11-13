@@ -8,12 +8,13 @@ The Node projects that act on games on your behalf, organized as an **npm worksp
 | [`shared/`](shared/) | **`@avalon/shared`** — common library: Gemini LLM client + YAML prompt loader, retry/backoff, Azure Speech (STT `transcribe` + TTS `synthesize`), silence detection, and LiveKit audio publish (`publishAudioTrack`, the proven "mouth"). | — (library) | — |
 | [`reviewer/`](reviewer/) | **AI post-game reviewer.** Joins games via LiveKit, records discussion audio, transcribes (Azure STT), and generates LLM reports (god: reveal + performance; blind: evolving role guesses). Imports `@avalon/shared`. | `reviewer` | `./agents` + `reviewer/Dockerfile` |
 | [`bot-supervisor/`](bot-supervisor/) | **Bot players** (`playavalon-bots`). Watches for rooms with `agent_count > 0` and spawns one agent process per bot seat; agents play via the HTTP API. Per-bot yaml `mode: stupid` (rule-based, default) or `smart` (LLMBrain — the LLM makes the strategic moves, rule fallback on any failure). | `bot-supervisor` | `./agents` + `bot-supervisor/Dockerfile` |
+| [`review-judge/`](review-judge/) | **Report judge**, a measurement tool, built into no image. Scores an AI review against the game's record: one verdict per sentence of the Persian report, the English report against the Persian, and the blind detective's guesses against the true roles. Imports `@avalon/shared`. | — | — |
 
 Each subdir has its own `README.md` with details.
 
 ## Dev notes
 - Install/build from `agents/`: `npm install`, then `npm run build` (shared builds before reviewer).
-- Reviewer tests: `npm test -w playavalon-agent` (its `pretest` rebuilds `shared/` first).
+- Reviewer tests: `npm test -w playavalon-agent` (its `pretest` rebuilds `shared/` first); judge tests: `npm test -w review-judge`.
 - The reviewer's Docker build context is **`agents/`** (so the image can see `shared/`);
   `agents/.dockerignore` keeps that context lean.
 

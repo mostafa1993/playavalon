@@ -56,30 +56,34 @@ export interface TurnSummary {
   notable_quotes: string[];
 }
 
-/** Written to turn_<q>_<r>_<i>.json after STT + summarizer complete. */
-export interface TurnJson {
+/** A turn as speech-to-text leaves it: what every later step starts from,
+ *  and all of a turn a replay copies in. */
+export interface RawTurnJson {
   gameId: string;
   questNumber: number;
   /** Proposal round within the quest (0-indexed). Bumps when the leader
    *  rotates within the same quest (= a proposal got rejected, new round
-   *  starts). Optional for backward compat with files written before this
-   *  field existed; treat absent as round 0. */
-  roundIndex?: number;
+   *  starts). */
+  roundIndex: number;
   turnIndex: number;
   speakerIdentity: string;
   speakerDisplayName: string;
   startedAt: string;
   durationSec: number;
   sampleRate: number;
+  /** The raw Azure STT output — preserved for auditing + reproducibility. */
+  transcript_raw: string;
+  confidence: number | null;
+  language: string;
+}
+
+/** Written to turn_<q>_<r>_<i>.json after STT + summarizer complete. */
+export interface TurnJson extends RawTurnJson {
   /** The text actually consumed by downstream prompts (corrected if the
    *  correction step ran and succeeded, otherwise identical to `transcript_raw`). */
   transcript: string;
-  /** The raw Azure STT output — preserved for auditing + reproducibility. */
-  transcript_raw: string;
   /** True if the LLM correction step ran successfully on this turn. */
   transcript_corrected: boolean;
-  confidence: number | null;
-  language: string;
   /** Undefined if summarization was skipped or failed. */
   summary?: TurnSummary;
 }
@@ -89,9 +93,8 @@ export interface DossierJson {
   playerId: string;
   playerDisplayName: string;
   lastQuestNumber: number;
-  /** Highest roundIndex seen for this player in lastQuestNumber. Optional
-   *  for backward compat with dossier files written before this existed. */
-  lastRoundIndex?: number;
+  /** Highest roundIndex seen for this player in lastQuestNumber. */
+  lastRoundIndex: number;
   lastTurnIndex: number;
   updatedAt: string;
   behavior_arc: string[];
@@ -130,26 +133,37 @@ export interface QuestJson extends QuestSynthesis {
   completedAt: string;
 }
 
-/** One speaker's contribution to the assassin-phase discussion. */
-export interface DiscussionSpeakerRecord {
+/** One speaker's clip from the assassin-phase discussion as speech-to-text
+ *  left it (an empty transcript when the clip was silent or STT failed). */
+export interface RawDiscussionSpeaker {
   identity: string;
   display_name: string;
   durationSec: number;
   sampleRate: number;
-  transcript: string;
   transcript_raw: string;
-  transcript_corrected: boolean;
   confidence: number | null;
+}
+
+/** One speaker's contribution to the assassin-phase discussion. */
+export interface DiscussionSpeakerRecord extends RawDiscussionSpeaker {
+  transcript: string;
+  transcript_corrected: boolean;
   /** Undefined if summarization was skipped (silent clip) or failed. */
   summary?: TurnSummary;
 }
 
-/** Written to discussion.json when the assassin-phase discussion runs. */
-export interface DiscussionJson {
+/** The assassin-phase discussion as recorded and transcribed, before any
+ *  model step: what a replay copies in. */
+export interface RawDiscussionJson {
   gameId: string;
   startedAt: string;
   durationSec: number;
   assassinIdentity: string | null;
+  speakers: RawDiscussionSpeaker[];
+}
+
+/** Written to discussion.json when the assassin-phase discussion runs. */
+export interface DiscussionJson extends Omit<RawDiscussionJson, 'speakers'> {
   assassinDisplayName: string | null;
   speakers: DiscussionSpeakerRecord[];
 }

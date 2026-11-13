@@ -4,26 +4,20 @@
  *
  * Pulls:
  *   - all turn JSONs for the quest from disk (for per-turn summaries)
- *   - proposals, votes, mission result from Supabase (structured)
+ *   - proposals, votes, mission result (structured), through GameReads
  *
  * Writes: quest_<n>.json.
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import type { LLMClient } from '@avalon/shared';
-import { loadQuestStructuredData } from '../gamestate/db.js';
+import type { GameReads } from '../gamestate/gameReads.js';
 import { writeJsonAtomic } from '../storage/atomicWrite.js';
-import { gameDir, questPath } from '../storage/layout.js';
+import { questPath } from '../storage/layout.js';
 import type { QuestJson, QuestSynthesis, TurnJson } from '../types.js';
 
-async function loadTurnSummariesForQuest(
-  dataDir: string,
-  gameId: string,
-  questNumber: number
-): Promise<TurnJson[]> {
-  const dir = gameDir(dataDir, gameId);
+async function loadTurnSummariesForQuest(dir: string, questNumber: number): Promise<TurnJson[]> {
   let entries: string[] = [];
   try {
     entries = await fs.readdir(dir);
@@ -45,21 +39,14 @@ async function loadTurnSummariesForQuest(
     }
   }
 
-  // Order by (roundIndex, turnIndex). Old files written before roundIndex
-  // existed have it undefined → treat as round 0, preserving their order
-  // relative to each other while putting newer multi-round games in true
-  // chronological order.
-  loaded.sort((a, b) => {
-    const ar = a.roundIndex ?? 0;
-    const br = b.roundIndex ?? 0;
-    if (ar !== br) return ar - br;
-    return a.turnIndex - b.turnIndex;
-  });
+  // Chronological order: by proposal round, then speaking order.
+  loaded.sort((a, b) => a.roundIndex - b.roundIndex || a.turnIndex - b.turnIndex);
   return loaded;
 }
 
 export interface QuestSynthesisContext {
-  dataDir: string;
+  /** The game's folder. */
+  dir: string;
   gameId: string;
   questNumber: number;
   playerNames: Map<string, string>;
@@ -67,20 +54,15 @@ export interface QuestSynthesisContext {
 
 export async function synthesizeQuest(
   llm: LLMClient,
-  db: SupabaseClient,
+  reads: GameReads,
   ctx: QuestSynthesisContext
 ): Promise<QuestJson | null> {
-  const structured = await loadQuestStructuredData(
-    db,
-    ctx.gameId,
-    ctx.questNumber,
-    ctx.playerNames
-  );
-  const turns = await loadTurnSummariesForQuest(ctx.dataDir, ctx.gameId, ctx.questNumber);
+  const structured = await reads.questData(ctx.questNumber, ctx.playerNames);
+  const turns = await loadTurnSummariesForQuest(ctx.dir, ctx.questNumber);
 
   // Reduce to just the summary + minimal context to keep the prompt focused.
   const turnSummaries = turns.map((t) => ({
-    round_index: t.roundIndex ?? 0,
+    round_index: t.roundIndex,
     turn_index: t.turnIndex,
     speaker: t.speakerDisplayName,
     duration_sec: t.durationSec,
@@ -101,6 +83,6 @@ export async function synthesizeQuest(
     completedAt: new Date().toISOString(),
   };
 
-  await writeJsonAtomic(questPath(ctx.dataDir, ctx.gameId, ctx.questNumber), out);
+  await writeJsonAtomic(questPath(ctx.dir, ctx.questNumber), out);
   return out;
 }

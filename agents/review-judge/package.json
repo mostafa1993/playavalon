@@ -1,0 +1,24 @@
+{
+  "name": "review-judge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Scores AI reviewer reports against the game record. A measurement tool: built into no image.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm --prefix ../shared run build",
+    "test": "node --import tsx --test test/*.test.ts",
+    "judge": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@avalon/shared": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

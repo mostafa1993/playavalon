@@ -1,21 +1,22 @@
 /**
  * Path conventions for per-game review data on disk.
- * Base dir is configured via DATA_DIR (default /data/games).
+ * Live, a game's folder is <DATA_DIR>/<gameId> (DATA_DIR defaults to
+ * /data/games); a replay uses a run folder of its own. Every step reads and
+ * writes inside the game's folder:
  *
- *   <dataDir>/<gameId>/meta.json
- *   <dataDir>/<gameId>/turn_<quest>_<round>_<idx>.json
- *   <dataDir>/<gameId>/dossier_<playerIdentity>.json   (M3+)
- *   <dataDir>/<gameId>/quest_<n>.json                  (M3+)
- *   <dataDir>/<gameId>/summary.fa.json                 (M4+)
- *   <dataDir>/<gameId>/summary.en.json                 (M4+)
- *   <dataDir>/<gameId>/record.json                     (the game record)
+ *   <dir>/meta.json
+ *   <dir>/turn_<quest>_<round>_<idx>.json
+ *   <dir>/dossier_<playerIdentity>.json
+ *   <dir>/quest_<n>.json
+ *   <dir>/discussion.json                 (the assassin-phase discussion)
+ *   <dir>/guess_log.json                  (blind mode)
+ *   <dir>/record.json                     (the game record)
+ *   <dir>/summary.fa.json
+ *   <dir>/summary.en.json
  *
- * The <round> segment is the proposal-round-within-quest counter and was
- * added to fix the bug where a rejected proposal's discussion was
- * overwritten by the next round's discussion (currentSpeakerIndex resets
- * to 0 on every leader rotation, so the old `turn_<q>_<idx>` scheme
- * collided). Old data files (3-segment names) are still readable; the
- * questSynthesizer prefix-match `turn_<q>_` matches both naming schemes.
+ * The <round> segment is the proposal-round-within-quest counter: each
+ * proposal's round of talk gets its own files (currentSpeakerIndex resets to 0
+ * on every leader rotation).
  */
 
 import path from 'node:path';
@@ -24,49 +25,41 @@ export function gameDir(dataDir: string, gameId: string): string {
   return path.join(dataDir, gameId);
 }
 
-export function metaPath(dataDir: string, gameId: string): string {
-  return path.join(gameDir(dataDir, gameId), 'meta.json');
+export function metaPath(dir: string): string {
+  return path.join(dir, 'meta.json');
 }
 
 export function turnPath(
-  dataDir: string,
-  gameId: string,
+  dir: string,
   questNumber: number,
   roundIndex: number,
   turnIndex: number
 ): string {
-  return path.join(
-    gameDir(dataDir, gameId),
-    `turn_${questNumber}_${roundIndex}_${turnIndex}.json`
-  );
+  return path.join(dir, `turn_${questNumber}_${roundIndex}_${turnIndex}.json`);
 }
 
-export function dossierPath(dataDir: string, gameId: string, playerId: string): string {
-  return path.join(gameDir(dataDir, gameId), `dossier_${playerId}.json`);
+export function dossierPath(dir: string, playerId: string): string {
+  return path.join(dir, `dossier_${playerId}.json`);
 }
 
-export function questPath(dataDir: string, gameId: string, questNumber: number): string {
-  return path.join(gameDir(dataDir, gameId), `quest_${questNumber}.json`);
+export function questPath(dir: string, questNumber: number): string {
+  return path.join(dir, `quest_${questNumber}.json`);
 }
 
-export function summaryPath(
-  dataDir: string,
-  gameId: string,
-  language: 'fa' | 'en'
-): string {
-  return path.join(gameDir(dataDir, gameId), `summary.${language}.json`);
+export function summaryPath(dir: string, language: 'fa' | 'en'): string {
+  return path.join(dir, `summary.${language}.json`);
 }
 
-export function discussionPath(dataDir: string, gameId: string): string {
-  return path.join(gameDir(dataDir, gameId), 'discussion.json');
+export function discussionPath(dir: string): string {
+  return path.join(dir, 'discussion.json');
 }
 
 /** The game record: every fact of the game, written at game end. */
-export function recordPath(dataDir: string, gameId: string): string {
-  return path.join(gameDir(dataDir, gameId), 'record.json');
+export function recordPath(dir: string): string {
+  return path.join(dir, 'record.json');
 }
 
 /** Blind-mode incremental role-guess memory (written each round of talk). */
-export function guessLogPath(dataDir: string, gameId: string): string {
-  return path.join(gameDir(dataDir, gameId), 'guess_log.json');
+export function guessLogPath(dir: string): string {
+  return path.join(dir, 'guess_log.json');
 }

@@ -17,7 +17,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { loadDiscussion } from '../reviewer/finalNarrative.js';
-import { gameDir } from '../storage/layout.js';
 import type {
   GameRecord,
   GodRecordPlayer,
@@ -37,9 +36,10 @@ import type {
 
 const TURN_FILE = /^turn_(\d+)_(\d+)_(\d+)\.json$/;
 
+/** `dir` is the game's folder, which holds its turn files and discussion. */
 export async function buildGameRecord(
   source: RecordSource,
-  dataDir: string,
+  dir: string,
   gameId: string,
   mode: 'god' | 'blind'
 ): Promise<GameRecord> {
@@ -47,8 +47,8 @@ export async function buildGameRecord(
   const [playerRows, unsortedProposals, turnFiles, discussion] = await Promise.all([
     source.players(game.seating_order),
     source.proposals(),
-    loadTurnFiles(dataDir, gameId),
-    loadDiscussion(dataDir, gameId),
+    loadTurnFiles(dir),
+    loadDiscussion(dir),
   ]);
   const proposalRows = [...unsortedProposals].sort(
     (a, b) => a.quest_number - b.quest_number || a.proposal_number - b.proposal_number
@@ -166,8 +166,7 @@ interface TurnFile {
 }
 
 /** Every `turn_<quest>_<round>_<idx>.json` in the game folder, in that order. */
-async function loadTurnFiles(dataDir: string, gameId: string): Promise<TurnFile[]> {
-  const dir = gameDir(dataDir, gameId);
+async function loadTurnFiles(dir: string): Promise<TurnFile[]> {
   let entries: string[];
   try {
     entries = await fs.readdir(dir);

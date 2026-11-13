@@ -100,45 +100,19 @@ export async function loadMetaSnapshot(
   if (roomErr) throw roomErr;
   if (!room) throw new Error(`Room for game ${gameId} not found`);
 
-  // Public game setup (good/evil counts + enabled special roles). Safe for both
-  // modes — it's the configuration, not who-has-what. Lets the blind detective
-  // constrain its guesses to roles that actually exist in this match.
-  const rolesInPlay = summarizeRoleConfig(
-    game.player_count,
-    (room.role_config ?? null) as ReviewerRoleConfig | null
-  );
-
-  // Build seat-number map from seating_order + leader_index (role-free).
   const order = Array.isArray(game.seating_order) ? (game.seating_order as string[]) : [];
-  const seatMap = new Map<string, number>();
-  {
-    const leaderIdx = typeof game.leader_index === 'number' ? game.leader_index : 0;
-    const count = order.length;
-    for (let i = 0; i < count; i += 1) {
-      const pid = order[i];
-      if (!pid) continue;
-      seatMap.set(pid, ((i - leaderIdx + count) % count) + 1);
-    }
-  }
 
-  let players: GameMetaSnapshot['players'];
+  let roster: MetaRosterEntry[];
   if (mode === 'blind') {
     // BLIND: never touch player_roles. Build the roster (names + seats) from the
     // public players table, keyed off the game's seating_order. role/special_role
     // are intentionally omitted — the reviewer deduces them from public play.
-    const { data: roster, error: rosterErr } = await db
+    const { data: rows, error: rosterErr } = await db
       .from('players')
       .select('id, display_name')
       .in('id', order);
     if (rosterErr) throw rosterErr;
-    const nameById = new Map(
-      (roster ?? []).map((r) => [r.id as string, r.display_name as string])
-    );
-    players = order.map((pid) => ({
-      id: pid,
-      display_name: nameById.get(pid) ?? 'Unknown',
-      seat_number: seatMap.get(pid) ?? null,
-    }));
+    roster = blindRoster(order, (rows ?? []) as Array<{ id: string; display_name: string }>);
   } else {
     // GOD: read the real roles.
     const { data: roleRows, error: roleErr } = await db
@@ -154,16 +128,74 @@ export async function loadMetaSnapshot(
       players: { id: string; display_name: string } | Array<{ id: string; display_name: string }>;
     };
 
-    players = (roleRows as RoleRow[] || []).map((r) => {
+    roster = (roleRows as RoleRow[] || []).map((r) => {
       const pdata = Array.isArray(r.players) ? r.players[0] : r.players;
       return {
         id: r.player_id,
         display_name: pdata?.display_name ?? 'Unknown',
         role: (r.role === 'evil' ? 'evil' : 'good') as 'good' | 'evil',
         special_role: r.special_role,
-        seat_number: seatMap.get(r.player_id) ?? null,
       };
     });
+  }
+
+  return buildMetaSnapshot(game as MetaGameRow, room as MetaRoomRow, roster);
+}
+
+/** The `games` columns the meta snapshot reads, as they stand at the game's start. */
+export interface MetaGameRow {
+  id: string;
+  room_id: string;
+  player_count: number;
+  seating_order: string[] | null;
+  leader_index: number | null;
+  current_leader_id: string;
+  created_at: string;
+}
+
+export interface MetaRoomRow {
+  id: string;
+  code: string;
+  role_config: unknown;
+}
+
+/** One roster entry before seating; roles only in god mode. */
+export type MetaRosterEntry = Omit<GameMetaSnapshot['players'][number], 'seat_number'>;
+
+/** The blind roster: the seated players' public names, in seating order. */
+export function blindRoster(
+  order: string[],
+  rows: Array<{ id: string; display_name: string }>
+): MetaRosterEntry[] {
+  const nameById = new Map(rows.map((r) => [r.id, r.display_name]));
+  return order.map((pid) => ({ id: pid, display_name: nameById.get(pid) ?? 'Unknown' }));
+}
+
+/** The meta snapshot from its rows; the database read and the replay's export read share it. */
+export function buildMetaSnapshot(
+  game: MetaGameRow,
+  room: MetaRoomRow,
+  roster: MetaRosterEntry[]
+): GameMetaSnapshot {
+  // Public game setup (good/evil counts + enabled special roles). Safe for both
+  // modes — it's the configuration, not who-has-what. Lets the blind detective
+  // constrain its guesses to roles that actually exist in this match.
+  const rolesInPlay = summarizeRoleConfig(
+    game.player_count,
+    (room.role_config ?? null) as ReviewerRoleConfig | null
+  );
+
+  // Build seat-number map from seating_order + leader_index (role-free).
+  const order = Array.isArray(game.seating_order) ? game.seating_order : [];
+  const seatMap = new Map<string, number>();
+  {
+    const leaderIdx = typeof game.leader_index === 'number' ? game.leader_index : 0;
+    const count = order.length;
+    for (let i = 0; i < count; i += 1) {
+      const pid = order[i];
+      if (!pid) continue;
+      seatMap.set(pid, ((i - leaderIdx + count) % count) + 1);
+    }
   }
 
   return {
@@ -172,9 +204,9 @@ export async function loadMetaSnapshot(
     roomCode: room.code,
     playerCount: game.player_count,
     startedAt: game.created_at,
-    seatingOrder: (game.seating_order as string[]) ?? [],
+    seatingOrder: game.seating_order ?? [],
     firstLeaderId: game.current_leader_id,
-    players,
+    players: roster.map((p) => ({ ...p, seat_number: seatMap.get(p.id) ?? null })),
     rolesInPlay,
   };
 }
@@ -260,6 +292,12 @@ export interface QuestStructuredData {
   };
 }
 
+/** The proposal a turn's summary is grounded on: its leader and team. */
+export interface LatestProposal {
+  leaderId: string;
+  teamMemberIds: string[];
+}
+
 /**
  * Return the most recent proposal for a quest (by proposal_number), or null
  * if no proposal exists yet. Used by the per-turn summarizer to ground each
@@ -269,7 +307,7 @@ export async function getLatestProposal(
   db: SupabaseClient,
   gameId: string,
   questNumber: number
-): Promise<{ leaderId: string; teamMemberIds: string[] } | null> {
+): Promise<LatestProposal | null> {
   const { data, error } = await db
     .from('team_proposals')
     .select('leader_id, team_member_ids, proposal_number')
@@ -292,8 +330,6 @@ export async function loadQuestStructuredData(
   questNumber: number,
   playerNames: Map<string, string>
 ): Promise<QuestStructuredData> {
-  const displayName = (id: string) => playerNames.get(id) ?? id;
-
   const { data: proposalRows, error: propErr } = await db
     .from('team_proposals')
     .select('id, proposal_number, leader_id, team_member_ids, status, approve_count, reject_count')
@@ -302,37 +338,93 @@ export async function loadQuestStructuredData(
     .order('proposal_number', { ascending: true });
   if (propErr) throw propErr;
 
-  type PropRow = {
-    id: string;
-    proposal_number: number;
-    leader_id: string;
-    team_member_ids: string[];
-    status: 'approved' | 'rejected' | 'pending';
-  };
-
-  // Skip proposals that are still 'pending' — they shouldn't exist at
-  // quest-synthesis time; if any do, they represent incomplete data and
-  // would just confuse the LLM (whose output schema only allows
-  // approved/rejected). The type predicate narrows `status` so the later
-  // `proposals.push` doesn't fall afoul of the 'pending' literal.
-  const rows = ((proposalRows as PropRow[]) || []).filter(
-    (p): p is PropRow & { status: 'approved' | 'rejected' } =>
-      p.status === 'approved' || p.status === 'rejected'
-  );
-  const proposals: QuestStructuredData['proposals'] = [];
-  let leaderId: string | null = null;
-
+  const rows = settledProposals((proposalRows as QuestProposalRow[]) || []);
+  const votes = new Map<string, QuestVoteRow[]>();
   for (const p of rows) {
-    leaderId = p.leader_id;
     const { data: voteRows, error: voteErr } = await db
       .from('votes')
       .select('player_id, vote')
       .eq('proposal_id', p.id);
     if (voteErr) throw voteErr;
+    votes.set(p.id, (voteRows || []) as QuestVoteRow[]);
+  }
 
+  // Mission result lives on games.quest_results[] (JSON column).
+  const { data: gameRow, error: gameErr } = await db
+    .from('games')
+    .select('quest_results')
+    .eq('id', gameId)
+    .maybeSingle();
+  if (gameErr) throw gameErr;
+
+  return buildQuestStructuredData(
+    questNumber,
+    rows,
+    votes,
+    (gameRow?.quest_results as QuestResult[] | null) || [],
+    playerNames
+  );
+}
+
+export interface QuestProposalRow {
+  id: string;
+  proposal_number: number;
+  leader_id: string;
+  team_member_ids: string[];
+  status: 'approved' | 'rejected' | 'pending';
+}
+
+export interface QuestVoteRow {
+  player_id: string;
+  vote: 'approve' | 'reject';
+}
+
+/** One entry of `games.quest_results`. */
+export interface QuestResult {
+  quest: number;
+  result: 'success' | 'fail';
+  success_count: number;
+  fail_count: number;
+  team_member_ids: string[];
+}
+
+/**
+ * Skip proposals that are still 'pending' — they shouldn't exist at
+ * quest-synthesis time; if any do, they represent incomplete data and would
+ * just confuse the LLM (whose output schema only allows approved/rejected).
+ * The type predicate narrows `status` for the builder below.
+ */
+export function settledProposals<P extends QuestProposalRow>(
+  rows: P[]
+): Array<P & { status: 'approved' | 'rejected' }> {
+  return rows.filter(
+    (p): p is P & { status: 'approved' | 'rejected' } =>
+      p.status === 'approved' || p.status === 'rejected'
+  );
+}
+
+/**
+ * A quest's data from its rows — settled proposals in proposal order, their
+ * votes, and the game's mission results. The database read and the replay's
+ * export read share it. `playerId` values are mapped to display names.
+ */
+export function buildQuestStructuredData(
+  questNumber: number,
+  rows: Array<QuestProposalRow & { status: 'approved' | 'rejected' }>,
+  votes: Map<string, QuestVoteRow[]>,
+  questResults: QuestResult[],
+  playerNames: Map<string, string>
+): QuestStructuredData {
+  const displayName = (id: string) => playerNames.get(id) ?? id;
+
+  const proposals: QuestStructuredData['proposals'] = [];
+  let leaderId: string | null = null;
+
+  for (const p of rows) {
+    leaderId = p.leader_id;
     const approvals: string[] = [];
     const rejections: string[] = [];
-    for (const v of (voteRows || []) as Array<{ player_id: string; vote: 'approve' | 'reject' }>) {
+    for (const v of votes.get(p.id) ?? []) {
       (v.vote === 'approve' ? approvals : rejections).push(displayName(v.player_id));
     }
 
@@ -345,23 +437,7 @@ export async function loadQuestStructuredData(
     });
   }
 
-  // Mission result lives on games.quest_results[] (JSON column).
-  const { data: gameRow, error: gameErr } = await db
-    .from('games')
-    .select('quest_results')
-    .eq('id', gameId)
-    .maybeSingle();
-  if (gameErr) throw gameErr;
-
-  type QR = {
-    quest: number;
-    result: 'success' | 'fail';
-    success_count: number;
-    fail_count: number;
-    team_member_ids: string[];
-  };
-  const results = (gameRow?.quest_results as QR[] | null) || [];
-  const thisQuest = results.find((r) => r.quest === questNumber) || null;
+  const thisQuest = questResults.find((r) => r.quest === questNumber) || null;
 
   const mission = thisQuest
     ? {

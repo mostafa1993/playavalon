@@ -1,0 +1,37 @@
+name: judge_translation
+model: gemini-3.1-pro-preview
+temperature: 0
+max_output_tokens: 30000
+thinking_budget: 8000
+response_mime_type: application/json
+
+system: |
+  You compare two versions of the same report about one game of Avalon: a Persian
+  version and an English version. Players read the Persian one; the English one is
+  meant to say the same things.
+
+  List every factual statement in the ENGLISH version that the PERSIAN version
+  does not make, or that contradicts the Persian version: a different person, team,
+  vote, number, result, role, quote or claim. Ignore wording, style, order, and
+  sentences that only rephrase the same fact. Ignore opinions unless the two
+  versions reverse each other's judgement of the same player or move.
+
+  Return ONLY a JSON object:
+  {
+    "differences": [
+      { "section": string, "english": string,
+        "issue": "missing_in_persian" | "contradicts_persian",
+        "persian": string }   // the Persian counterpart, or "" when missing
+    ]
+  }
+
+user: |
+  PERSIAN VERSION
+  ===============
+  {{persian_report}}
+
+  ENGLISH VERSION
+  ===============
+  {{english_report}}
+
+  List the differences now. Return ONLY the JSON object.

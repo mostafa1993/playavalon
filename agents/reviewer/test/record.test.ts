@@ -213,9 +213,9 @@ async function tempDir(): Promise<string> {
   return dir;
 }
 
+/** The game's folder, with its turn files and discussion. */
 async function makeFolder(): Promise<string> {
-  const dataDir = await tempDir();
-  const dir = path.join(dataDir, GAME_ID);
+  const dir = path.join(await tempDir(), GAME_ID);
   await fs.mkdir(dir);
   for (const [name, speaker, time] of TURNS) {
     const [, quest, round, turn] = name.split('_').map(Number);
@@ -257,7 +257,7 @@ async function makeFolder(): Promise<string> {
     ],
   };
   await fs.writeFile(path.join(dir, 'discussion.json'), JSON.stringify(discussion));
-  return dataDir;
+  return dir;
 }
 
 async function build(
@@ -377,7 +377,7 @@ test('a pending proposal: its votes are not read, and talk before its vote joins
     }),
     queries
   );
-  const dataDir = await makeFolder();
+  const dir = await makeFolder();
   const turn: TurnJson = {
     gameId: GAME_ID,
     questNumber: 4,
@@ -394,8 +394,8 @@ test('a pending proposal: its votes are not read, and talk before its vote joins
     confidence: 0.9,
     language: 'fa-IR',
   };
-  await fs.writeFile(path.join(dataDir, GAME_ID, 'turn_4_0_0.json'), JSON.stringify(turn));
-  const record = await buildGameRecord(dbRecordSource(db, GAME_ID), dataDir, GAME_ID, 'god');
+  await fs.writeFile(path.join(dir, 'turn_4_0_0.json'), JSON.stringify(turn));
+  const record = await buildGameRecord(dbRecordSource(db, GAME_ID), dir, GAME_ID, 'god');
   const last = record.proposals.at(-1)!;
   assert.equal(last.status, 'pending');
   assert.deepEqual(last.votes, []);

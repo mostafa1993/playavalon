@@ -32,13 +32,12 @@ function emptyDossier(playerId: string, playerDisplayName: string): DossierJson 
 }
 
 async function readDossier(
-  dataDir: string,
-  gameId: string,
+  dir: string,
   playerId: string,
   playerDisplayName: string
 ): Promise<DossierJson> {
   try {
-    const raw = await fs.readFile(dossierPath(dataDir, gameId, playerId), 'utf8');
+    const raw = await fs.readFile(dossierPath(dir, playerId), 'utf8');
     const parsed = JSON.parse(raw) as DossierJson;
     // Patch display name if the previous dossier had a stale one.
     if (parsed.playerDisplayName !== playerDisplayName && playerDisplayName) {
@@ -55,8 +54,8 @@ async function readDossier(
 }
 
 export interface DossierUpdateContext {
-  dataDir: string;
-  gameId: string;
+  /** The game's folder. */
+  dir: string;
   playerId: string;
   playerDisplayName: string;
   playerSeat: number | null;
@@ -69,7 +68,7 @@ export interface DossierUpdateContext {
 /**
  * Per-player lock chain. Serializes dossier updates for the same player so
  * concurrent processTurn calls can't clobber each other's read-modify-write.
- * Keys are `${gameId}:${playerId}` so locks are scoped to one game.
+ * Keys are `${dir}:${playerId}` so locks are scoped to one game folder.
  */
 const locks = new Map<string, Promise<unknown>>();
 
@@ -77,7 +76,7 @@ export async function updateDossier(
   llm: LLMClient,
   ctx: DossierUpdateContext
 ): Promise<DossierJson> {
-  const key = `${ctx.gameId}:${ctx.playerId}`;
+  const key = `${ctx.dir}:${ctx.playerId}`;
   const prev = locks.get(key) ?? Promise.resolve();
   const next = prev.then(
     () => doUpdate(llm, ctx),
@@ -96,12 +95,7 @@ async function doUpdate(
   llm: LLMClient,
   ctx: DossierUpdateContext
 ): Promise<DossierJson> {
-  const previous = await readDossier(
-    ctx.dataDir,
-    ctx.gameId,
-    ctx.playerId,
-    ctx.playerDisplayName
-  );
+  const previous = await readDossier(ctx.dir, ctx.playerId, ctx.playerDisplayName);
 
   const updated = await llm.runJson<Omit<DossierJson, 'playerId' | 'playerDisplayName' | 'lastQuestNumber' | 'lastRoundIndex' | 'lastTurnIndex' | 'updatedAt'>>(
     'dossier-update.yml',
@@ -140,6 +134,6 @@ async function doUpdate(
     key_moments: Array.isArray(updated.key_moments) ? updated.key_moments : previous.key_moments,
   };
 
-  await writeJsonAtomic(dossierPath(ctx.dataDir, ctx.gameId, ctx.playerId), next);
+  await writeJsonAtomic(dossierPath(ctx.dir, ctx.playerId), next);
   return next;
 }

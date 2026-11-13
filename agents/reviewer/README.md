@@ -9,8 +9,8 @@ Single-VM deployment, single concurrent game.
 
 ## Milestones
 
-- **M2 (this code)**: recorder bot + STT pipeline. Produces `turn_<quest>_<idx>.json` under
-  `/data/games/<game_id>/`. No summaries yet.
+- **M2**: recorder bot + STT pipeline. Produces `turn_<quest>_<round>_<idx>.json` under
+  `/data/games/<game_id>/`.
 - **M3**: per-turn summaries + per-player dossiers + per-quest synthesis.
 - **M4**: final narrative (fa + en) + review UI.
 
@@ -67,10 +67,13 @@ See repo-root `.env.example`. Required vars:
 ```
 $DATA_DIR/<game_id>/
   meta.json                        # players, roles, seating (written at game start)
-  turn_<quest>_<idx>.json          # raw + corrected transcript + summary
+  turn_<quest>_<round>_<idx>.json  # raw + corrected transcript + summary
   dossier_<playerId>.json          # evolving per-player memory
   quest_<n>.json                   # LLM synthesis of one quest
+  discussion.json                  # the assassin-phase discussion, if any
+  guess_log.json                   # blind mode: the detective's guesses per round
   record.json                      # the game record (written at game end)
+  summary.fa.json, summary.en.json # the final report
 ```
 
 `record.json` holds every fact of the game, built in code from the database and
@@ -84,7 +87,61 @@ record holds public play only: its build never reads `player_roles` or the Lady
 `result`. No record holds who played a fail card (`quest_actions` is never
 read). Nothing reads `record.json` yet.
 
-M4 will add `summary.fa.json`, `summary.en.json` + a review UI page.
+## Replay
+
+`npm run replay` runs every step after speech-to-text again on stored games, with
+the same code the service runs (`src/pipeline.ts`), each step as of the time it ran
+live. It is how the report's accuracy is measured
+(`.plans/2026-11-13-1640-reviewer-report-accuracy.md`, row B).
+
+```
+GCP_PROJECT_ID=… GCP_LLM_LOCATION=global GOOGLE_APPLICATION_CREDENTIALS=… \
+npm run replay -- --export export.json --folders folders/ --games <id>,<id> \
+  --out out/ [--runs N] [--mode god|blind] [--concurrency N]
+```
+
+Inputs:
+
+- `--export` — a JSON array of games, each `{game, room, players, roles, proposals,
+  votes, lady, events, review}`: the game's rows (`ExportedGame` in
+  `src/gamestate/recordSource.ts`). They stand in for the database
+  (`src/gamestate/gameReads.ts`).
+- `--folders` — one folder per game id, as the service left it. Only the turn files
+  and `discussion.json` are read, reduced to what speech-to-text produced: the raw
+  transcript, confidence, timing, speaker and indices. A folder with turn files
+  named without a round segment (`turn_<quest>_<idx>.json`) is refused.
+- `--games` — comma-separated game ids.
+- `--mode` — default: the game's mode (`rooms.ai_review_mode`), except god for a game
+  whose shipped `summary.fa.json` has no `mode` key (reviewed before migration 025).
+  In blind mode the roster comes from the export's `players` rows only.
+- `--runs` (default 1), `--concurrency` — turns in flight (default 6).
+- Environment: what the service reads for the model — `GCP_PROJECT_ID`,
+  `GCP_LLM_LOCATION` (`global` for the preview models), `GCP_LLM_MODEL`,
+  `GOOGLE_APPLICATION_CREDENTIALS`, `TRANSCRIPT_CORRECTION_ENABLED`, `RETRY_*`,
+  `PROMPTS_DIR`. No database, LiveKit or Azure.
+
+Outputs: each run in `<out>/<gameId>/<mode>/run-<k>/` (k = 1…N), which must be new
+or empty; every run folder is checked before the first model call. It starts with
+only the inputs — the turn files and `discussion.json` as speech-to-text left them,
+and a `meta.json` built from the export (role-free in blind mode). The pipeline
+then writes what the service writes: turn files with the corrected transcript and
+summary, dossiers, `quest_<n>.json`, `guess_log.json` (blind), `discussion.json`,
+`record.json` (in the run's mode), `summary.fa.json` and `summary.en.json`. Last
+comes `record.god.json`, the god record with roles that the judge
+(`agents/review-judge`) scores every report against, written after every model
+step so no blind step can see it. Each run's log ends with its time and its LLM
+calls and failures (after the client's retries, which are logged as
+`[llm] retry`).
+
+As of the time:
+
+- a turn's summary is grounded on the proposal standing when the turn ended — the
+  latest of its quest created by then, as `getLatestProposal` gave it live;
+- each player's dossier takes their turns in order;
+- in blind mode the detective updates after each round of talk, in order — a round
+  per proposal, and the intro — once that round's turn files are written;
+- a quest is synthesized once its turn files are written, from its rows;
+- then the discussion, `record.json` and the final report, as at game end.
 
 ## Local development
 
@@ -97,8 +154,9 @@ npm run dev
 
 Regression tests verify prompt YAML files parse, declare the right
 `response_mime_type`, and reference exactly the variables the agent code
-passes in — catching drift between a prompt and its caller. Plus a few
-unit tests for the silence detector.
+passes in — catching drift between a prompt and its caller. Plus unit tests
+for the silence detector, the game record, the watcher, and the replay (on a
+stub model).
 
 ```
 npm test
