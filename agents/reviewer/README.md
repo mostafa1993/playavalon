@@ -31,7 +31,7 @@ LiveKit room  →  bot (audio tracks)  →  turnSegmenter  →  STT (Azure)  →
                                                                                               │
          assassin-phase discussion  →  STT  →  proofreading  →  discussion.json               │
                                                                      │                        │
-game end:  database rows + turn files + discussion.json  →  record.json  →  final report  →  summary.<lang>.json
+game end:  database rows + turn files + discussion.json  →  record.json  →  final report  →  check  →  summary.<lang>.json
 ```
 
 - **Per turn** (`src/pipeline.ts`): STT, the proofreading pass, the turn file. In blind
@@ -54,6 +54,17 @@ game end:  database rows + turn files + discussion.json  →  record.json  →  
   record (without the turns' talk) and the page (`src/lib/review/summary-view.ts` in
   the app) renders the roles, each proposal's leader, team and votes, each mission,
   Lady of the Lake, the assassin's pick and each assassin-phase speaker's transcript.
+- **The check** (`src/reviewer/checkReport.ts`, plan row D): once a report is written,
+  code splits its text (narrative, quest commentary, performance notes) into numbered
+  statements and numbers the lines of the record it was written from. One call
+  (`prompts/check-report.yml`) ties each statement to the record lines it rests on:
+  its kind (fact, attribution, opinion), the lines, and a verdict. A fact or
+  attribution found wrong or unsupported, or tied to no line the record has, is
+  flagged; the flagged statements get one rewrite in one call
+  (`prompts/rewrite-report.yml`), and the report keeps the rewrites (an empty one
+  removes the statement). A report with nothing flagged skips the rewrite; a rewrite
+  is not checked again; a failed check keeps the report as written. The check's
+  prompt is its own, not the judge's (`agents/review-judge`).
 
 ## Environment
 
@@ -106,6 +117,7 @@ $DATA_DIR/<game_id>/
   guess_log.json                   # blind mode: the detective's guesses per round
   record.json                      # the game record (written at game end)
   summary.fa.json, summary.en.json # the final report, from the record
+  check.fa.json, check.en.json     # the report's check: each statement, what it rests on, rewrites
 ```
 
 `record.json` holds every fact of the game, built in code from the database and
@@ -126,6 +138,10 @@ talk (the facts the page renders); `narrative`; `quest_commentary`, one
 `{playerId, assessment}` per player, in seat order) or `guess_timeline` and
 `final_guesses` (blind). The review page reads only this format; any other summary
 shows "This report is no longer available".
+
+`check.<lang>.json` (`ReportCheck`) holds every statement of that report as written,
+with the check's kind, record lines (as numbered in the check's prompt), verdict and
+problem, and for a flagged statement the rewrite that took its place.
 
 ## Replay
 
@@ -166,7 +182,8 @@ only the inputs — the turn files and `discussion.json` as speech-to-text left 
 and a `meta.json` built from the export (role-free in blind mode). The pipeline
 then writes what the service writes: turn files with the corrected transcript (and,
 blind, the summary), `guess_log.json` (blind), `discussion.json`, `record.json` (in
-the run's mode), `summary.fa.json` and `summary.en.json`. Last
+the run's mode), `summary.fa.json` and `summary.en.json`, and the checks
+`check.fa.json` and `check.en.json`. Last
 comes `record.god.json`, the god record with roles that the judge
 (`agents/review-judge`) scores every report against, written after every model
 step so no blind step can see it. Each run's log ends with its time and its LLM
@@ -195,6 +212,7 @@ Regression tests verify prompt YAML files parse, declare the right
 passes in — catching drift between a prompt and its caller. Plus unit tests
 for the silence detector, the game record, the final report (the record as its
 prompt reads it, and the summary built around a stub model's answer), the
+report's check (flagged statements rewritten, a clean report left alone), the
 watcher, and the replay (on a stub model).
 
 ```

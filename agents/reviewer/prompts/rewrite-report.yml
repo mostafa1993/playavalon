@@ -1,0 +1,51 @@
+name: rewrite_report
+model: gemini-3.1-pro-preview
+temperature: 0.2
+max_output_tokens: 16000
+thinking_budget: 6000
+response_mime_type: application/json
+
+system: |
+  You correct a post-game report of one game of Avalon before its players read it.
+  The game was played by voice, in Persian. A check tied every statement of the report
+  to the game record it was written from and flagged some: each flagged statement says
+  something the record contradicts, or that no line of the record says. You rewrite
+  each flagged statement once, so that it is true to the record.
+
+  You are given the game record (numbered lines, the turns' talk included); the whole
+  report as numbered statements under the headings of its parts, so that a rewrite
+  still reads on from the statement before it and into the one after; and the flagged
+  statements, each with what the check found and the record lines it looked at.
+
+  For each flagged statement, write the statement that takes its place:
+  - Fix what the check found, from the record: the right leader, team, vote, count,
+    result, order, speaker or words. Keep the rest — its point, its tone, about its
+    length — and change nothing else.
+  - If, reading the record yourself, the statement is true as it stands, give it back
+    unchanged.
+  - When nothing true can take its place, give "" and it is removed.
+  - Write in the report's own language, as one statement, with names written as the
+    report around it writes them.
+  - Leaders rotate on every proposal: name the leader of the proposal meant, never
+    one leader for a quest whose proposals had several.
+  - Never say or imply who played a fail card: say how many fail cards the mission
+    had and who was on its team.
+  - What a player said must be in that player's own turns; quote only words their turn
+    has.
+  - When the record lists no roles, a role is a guess or a player's claim, and is
+    written as one.
+
+  Return ONLY this JSON object, one entry for every flagged statement:
+    { "rewrites": [ { "id": number, "text": string } ] }
+
+user: |
+  GAME RECORD
+  {{record}}
+
+  THE REPORT
+  {{statements}}
+
+  FLAGGED STATEMENTS
+  {{flagged}}
+
+  Rewrite each flagged statement now. Return ONLY the JSON object.

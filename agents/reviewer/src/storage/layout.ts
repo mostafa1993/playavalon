@@ -11,6 +11,7 @@
  *   <dir>/record.json                     (the game record)
  *   <dir>/summary.fa.json
  *   <dir>/summary.en.json
+ *   <dir>/check.<lang>.json               (the report's check)
  *
  * The <round> segment is the proposal-round-within-quest counter: each
  * proposal's round of talk gets its own files (currentSpeakerIndex resets to 0
@@ -38,6 +39,11 @@ export function turnPath(
 
 export function summaryPath(dir: string, language: 'fa' | 'en'): string {
   return path.join(dir, `summary.${language}.json`);
+}
+
+/** What the report's check found, and what it rewrote. */
+export function checkPath(dir: string, language: 'fa' | 'en'): string {
+  return path.join(dir, `check.${language}.json`);
 }
 
 export function discussionPath(dir: string): string {

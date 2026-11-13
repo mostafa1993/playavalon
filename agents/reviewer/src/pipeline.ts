@@ -8,7 +8,8 @@
  *   per round:       the blind detective's guess update (GuessTracker)
  *   assassin phase:  the discussion (reviewer/discussionProcessor.ts)
  *   at the end:      record.json, then the final report from it
- *                    (reviewer/finalReport.ts → summary.<lang>.json)
+ *                    (reviewer/finalReport.ts), checked against the record
+ *                    (reviewer/checkReport.ts) → summary.<lang>.json
  *
  * The turn summary feeds only the blind detective; god mode writes none.
  */
@@ -20,7 +21,8 @@ import { getLatestProposal, type LatestProposal } from './gamestate/db.js';
 import { buildGameRecord } from './gamestate/record.js';
 import type { RecordSource } from './gamestate/recordSource.js';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
-import { recordPath, summaryPath, turnPath } from './storage/layout.js';
+import { checkPath, recordPath, summaryPath, turnPath } from './storage/layout.js';
+import { checkReport } from './reviewer/checkReport.js';
 import { correctTranscript } from './reviewer/transcriptCorrector.js';
 import { summarizeTurn } from './reviewer/turnSummarizer.js';
 import { writeBlindReport, writeGodReport } from './reviewer/finalReport.js';
@@ -246,11 +248,36 @@ export async function writeGameRecord(
 }
 
 /**
+ * A written report checked against the record it was written from: the
+ * statements the check flags are rewritten once, and the check is written to
+ * check.<lang>.json. A failed check keeps the report as written.
+ */
+async function checkedReport(
+  ctx: PipelineContext,
+  record: GameRecord,
+  summary: SummaryJson
+): Promise<SummaryJson> {
+  const { log } = ctx;
+  try {
+    const { summary: checked, check } = await checkReport(ctx.llm, record, summary);
+    await writeJsonAtomic(checkPath(ctx.dir, summary.language), check);
+    const flagged = check.statements.filter((s) => s.flagged).length;
+    log.info(
+      `report check (${summary.language}): ${flagged} of ${check.statements.length} statements flagged and rewritten`
+    );
+    return checked;
+  } catch (err) {
+    log.error(`report check (${summary.language}) failed; the report is kept as written`, err);
+    return summary;
+  }
+}
+
+/**
  * The final report from the game record, per language → summary.fa.json and
- * summary.en.json (two runs of the same prompt). God mode: the narrative,
- * quest commentary and performance notes. Blind mode: the narrative and quest
- * commentary from the blind record, with the detective's guesses. Returns the
- * two paths.
+ * summary.en.json (two runs of the same prompt), each checked against the
+ * record. God mode: the narrative, quest commentary and performance notes.
+ * Blind mode: the narrative and quest commentary from the blind record, with
+ * the detective's guesses. Returns the two paths.
  */
 export async function generateFinalReport(
   ctx: PipelineContext,
@@ -274,7 +301,9 @@ export async function generateFinalReport(
           meta.roomCode,
           language
         );
-  const [fa, en] = await Promise.all([write('fa'), write('en')]);
+  const report = async (language: 'fa' | 'en') =>
+    checkedReport(ctx, record, await write(language));
+  const [fa, en] = await Promise.all([report('fa'), report('en')]);
 
   const faPath = summaryPath(ctx.dir, 'fa');
   const enPath = summaryPath(ctx.dir, 'en');

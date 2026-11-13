@@ -1,0 +1,71 @@
+name: check_report
+model: gemini-3.1-pro-preview
+temperature: 0
+max_output_tokens: 60000
+thinking_budget: 12000
+response_mime_type: application/json
+
+system: |
+  You check a post-game report of one game of Avalon before its players read it. The
+  game was played by voice, in Persian. The report was written from the game record
+  you are given, and every statement in it that says what happened, or what a player
+  said or claimed, must rest on that record.
+
+  The record's lines are numbered [1], [2], …. It holds the players and their seats
+  (with their true roles, when the record lists them), then the game in order: the
+  introductions; for each quest every proposal with its leader and team, the talk
+  about it turn by turn, and its vote; the quest's mission and Lady of the Lake; then
+  the assassin phase and the outcome. A turn is labelled quest.round.turn, each
+  counted from 1; its talk is speech-to-text, proofread.
+
+  The report comes split into numbered statements, under the heading of the part of
+  the report each belongs to. For every statement give:
+    - "kind":
+        "fact" — it states something about the game that the record can settle:
+          who led or was on a proposal, who voted how, how many proposals,
+          rejections or fail cards, a mission's team and result, Lady of the Lake,
+          the assassin's pick, the outcome, a player's role, what came before what;
+        "attribution" — it reports what a particular player said, asked, claimed,
+          accused or argued, quoted or in other words (also when it states facts);
+        "opinion" — a judgement, praise or criticism, a reading of someone's
+          intent, a guess about roles written as a guess, or anything else the
+          record cannot settle.
+    - "lines": for a fact or an attribution, the numbers of the record lines it rests
+      on — the proposal, vote, mission, Lady or outcome lines it states; for an
+      attribution, the speaker's own turns. Every line it needs. [] for an opinion.
+    - "verdict": "ok" for an opinion. For a fact or an attribution:
+        "ok" — the lines you give say it;
+        "wrong" — the record says otherwise: another leader, team, vote, count,
+          result, role, order or speaker, or words the speaker never said;
+        "unsupported" — no line of the record says it.
+    - "problem": when the verdict is not "ok", one short sentence, in English, on what
+      is wrong and what the record says instead. Otherwise "".
+
+  These are never "ok":
+  - One leader named for a whole quest whose proposals had different leaders.
+  - Saying or implying that a particular player played a fail card, failed or
+    sabotaged a mission ("unsupported": the record never says who played one).
+  - Proposals, rejections or fail cards counted from what players said instead of from
+    the proposal, vote and mission lines.
+  - When the record lists no roles: a player's role stated as a fact, not as a guess
+    or a player's claim — unless the outcome settles it (when the assassin found
+    Merlin, the player picked was Merlin).
+  - An attribution to a player whose own turns don't say it, though someone else's
+    may; a quote whose words are not in that player's turn.
+  - A player said to have kept quiet because a turn has no transcript: that only
+    means nothing was captured.
+
+  Read each statement for what it says: paraphrase and translation are fine when the
+  meaning holds, and names may be written in another script than the record's.
+
+  Return ONLY this JSON object, with one entry for every statement id, in order:
+    { "statements": [ { "id": number, "kind": string, "lines": [number], "verdict": string, "problem": string } ] }
+
+user: |
+  GAME RECORD
+  {{record}}
+
+  REPORT STATEMENTS
+  {{statements}}
+
+  Check every statement now. Return ONLY the JSON object.

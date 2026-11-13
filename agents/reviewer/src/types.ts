@@ -333,3 +333,33 @@ export interface BlindSummaryJson extends SummaryCommon {
 }
 
 export type SummaryJson = GodSummaryJson | BlindSummaryJson;
+
+// ── The report's check ──────────────────────────────────────────────────────
+
+/** One statement of the report as written, with what the check found. */
+export interface CheckedStatement {
+  id: number;
+  /** "narrative", "quest 2 commentary", "performance note: <name>". */
+  section: string;
+  text: string;
+  /** Null when the check gave no answer for it: it is left as written. */
+  kind: 'fact' | 'attribution' | 'opinion' | null;
+  /** The record lines it rests on, as the check numbered them. */
+  lines: number[];
+  /** The check's verdict ("ok", "wrong", "unsupported"); null when unchecked. */
+  verdict: string | null;
+  /** A fact or attribution the check found wrong or unsupported, or that rests
+   *  on no line of the record. */
+  flagged: boolean;
+  /** What the check found wrong; "" when it is not flagged. */
+  problem: string;
+  /** Flagged only: what took its place ("" removed it); null when the rewrite
+   *  gave none and it was left as written. */
+  rewrite?: string | null;
+}
+
+/** Written to check.<lang>.json beside the report it checked. */
+export interface ReportCheck {
+  language: 'fa' | 'en';
+  statements: CheckedStatement[];
+}

@@ -62,6 +62,16 @@ const prompts: Array<{
     expectedVars: ['language', 'record', 'roles_in_play', 'guess_timeline', 'final_guesses'],
   },
   {
+    file: 'check-report.yml',
+    mime: 'application/json',
+    expectedVars: ['record', 'statements'],
+  },
+  {
+    file: 'rewrite-report.yml',
+    mime: 'application/json',
+    expectedVars: ['record', 'statements', 'flagged'],
+  },
+  {
     file: 'role-guess-update.yml',
     mime: 'application/json',
     expectedVars: ['seat_table', 'roles_in_play', 'prior_guesses', 'quest_number', 'proposal_round', 'round_talk'],

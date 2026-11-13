@@ -273,6 +273,8 @@ function stubLlm(runDir: () => string) {
           quests: [{ quest: 1, commentary: 'commentary' }],
           performance: [{ player: 'Ana', assessment: 'assessment' }],
         };
+      case 'check-report.yml':
+        return { statements: [] };
       default:
         return `text from ${file}`;
     }
@@ -410,7 +412,7 @@ test('a run folder starts with the inputs only', async () => {
     const text = await fs.readFile(path.join(runDir, file), 'utf8');
     assert.ok(!text.includes(SHIPPED), `${file} carries a shipped derived value`);
   }
-  for (const file of ['summary.fa.json', 'summary.en.json', 'record.json', GOD_RECORD_FILE]) {
+  for (const file of ['summary.fa.json', 'summary.en.json', 'check.fa.json', 'check.en.json', 'record.json', GOD_RECORD_FILE]) {
     assert.ok(files.includes(file), `${file} written`);
   }
   assert.ok(!files.includes('guess_log.json'), 'no guess log in god mode');
@@ -454,6 +456,11 @@ test('god mode: no turn summaries; the report reads the whole record, once per l
   assert.match(record, /Ana — good \(merlin\)/);
   assert.match(record, /Eve: fixed raw discussion/);
   assert.match(record, /The assassin's pick \(named as Merlin\): Ana/);
+
+  // Each report is checked against the record it was written from.
+  const checks = calls.filter((c) => c.file === 'check-report.yml');
+  assert.equal(checks.length, 2);
+  for (const c of checks) assert.match(c.vars.record as string, /^\[1\] PLAYERS \(seat: name — true role\)\n/);
 
   const summary = read('summary.fa.json') as Record<string, unknown>;
   assert.equal(summary.format, 2);
