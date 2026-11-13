@@ -27,7 +27,8 @@ describe('room-state', () => {
       expect(ROOM_STATUSES).toContain('waiting');
       expect(ROOM_STATUSES).toContain('roles_distributed');
       expect(ROOM_STATUSES).toContain('started');
-      expect(ROOM_STATUSES.length).toBe(3);
+      expect(ROOM_STATUSES).toContain('closed');
+      expect(ROOM_STATUSES.length).toBe(4);
     });
   });
 
@@ -56,9 +57,15 @@ describe('room-state', () => {
       expect(isValidTransition('started', 'started')).toBe(false);
     });
 
-    it('should NOT allow any transitions from started (terminal)', () => {
+    it('should allow started → closed only', () => {
       ROOM_STATUSES.forEach((status) => {
-        expect(isValidTransition('started', status)).toBe(false);
+        expect(isValidTransition('started', status)).toBe(status === 'closed');
+      });
+    });
+
+    it('should NOT allow any transitions from closed (terminal)', () => {
+      ROOM_STATUSES.forEach((status) => {
+        expect(isValidTransition('closed', status)).toBe(false);
       });
     });
   });
@@ -72,8 +79,12 @@ describe('room-state', () => {
       expect(getValidNextStates('roles_distributed')).toEqual(['started']);
     });
 
-    it('should return empty array for started (terminal)', () => {
-      expect(getValidNextStates('started')).toEqual([]);
+    it('should return [closed] for started', () => {
+      expect(getValidNextStates('started')).toEqual(['closed']);
+    });
+
+    it('should return empty array for closed (terminal)', () => {
+      expect(getValidNextStates('closed')).toEqual([]);
     });
   });
 
@@ -86,8 +97,12 @@ describe('room-state', () => {
       expect(isTerminalState('roles_distributed')).toBe(false);
     });
 
-    it('should return true for started', () => {
-      expect(isTerminalState('started')).toBe(true);
+    it('should return false for started', () => {
+      expect(isTerminalState('started')).toBe(false);
+    });
+
+    it('should return true for closed', () => {
+      expect(isTerminalState('closed')).toBe(true);
     });
   });
 
@@ -258,6 +273,13 @@ describe('room-state', () => {
         expect(machine.isWaiting).toBe(false);
         expect(machine.isRolesDistributed).toBe(false);
         expect(machine.isStarted).toBe(true);
+        expect(machine.isTerminal).toBe(false);
+      });
+
+      it('should provide correct boolean flags for closed', () => {
+        const machine = new RoomStateMachine('closed');
+        expect(machine.isStarted).toBe(false);
+        expect(machine.isClosed).toBe(true);
         expect(machine.isTerminal).toBe(true);
       });
     });
@@ -345,8 +367,14 @@ describe('room-state', () => {
       // Game starts
       machine.transitionTo('started');
       expect(machine.isStarted).toBe(true);
-      expect(machine.isTerminal).toBe(true);
+      expect(machine.isTerminal).toBe(false);
       expect(machine.label).toBe('Game in progress');
+
+      // Game ends: the room is closed (archived)
+      machine.transitionTo('closed');
+      expect(machine.isClosed).toBe(true);
+      expect(machine.isTerminal).toBe(true);
+      expect(machine.label).toBe('Archived');
 
       // No further transitions possible
       expect(machine.getNextStates()).toEqual([]);
