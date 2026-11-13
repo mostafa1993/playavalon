@@ -6,11 +6,9 @@
 
 import { NextResponse } from 'next/server';
 import { getCurrentUser, createServiceClient } from '@/lib/supabase/server';
-import { getPlayerCurrentRoom, cleanupPlayerStartedRooms } from '@/lib/supabase/players';
-import { createRoom, addPlayerToRoom, getWaitingRooms } from '@/lib/supabase/rooms';
-import { validatePlayerCount } from '@/lib/domain/validation';
-import { validateRoleConfig, computeRolesInPlay } from '@/lib/domain/role-config';
-import { generateSecureRoomCode } from '@/lib/utils/room-code';
+import { getWaitingRooms } from '@/lib/supabase/rooms';
+import { computeRolesInPlay } from '@/lib/domain/role-config';
+import { createRoomForPlayer } from '@/lib/rooms/create-room-for-player';
 import { errors, handleError } from '@/lib/utils/errors';
 import { isValidRoleConfig, pickRoleConfig } from '@/types/role-config';
 import type { CreateRoomPayload, CreateRoomResponse } from '@/types/room';
@@ -28,98 +26,29 @@ export async function POST(request: Request) {
     // Parse body
     const body = await request.json() as CreateRoomPayload;
 
-    // Validate player count
-    const countValidation = validatePlayerCount(body.expected_players);
-    if (!countValidation.valid) {
-      return errors.invalidPlayerCount();
-    }
-
-    // Validate role configuration (required: it states whether Merlin is in the game)
+    // Role configuration is required: it states whether Merlin is in the game
     if (!isValidRoleConfig(body.role_config)) {
       return errors.invalidRequest(
         'role_config must be a role setup with merlin set to true or false'
       );
     }
-    const roleConfig = pickRoleConfig(body.role_config);
-    const configValidation = validateRoleConfig(roleConfig, body.expected_players);
-    if (!configValidation.valid) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'INVALID_ROLE_CONFIG',
-            message: configValidation.errors.join('; ')
-          }
-        },
-        { status: 400 }
-      );
-    }
 
     const supabase = createServiceClient();
 
-    // Cleanup any stale room memberships (from 'started' games)
-    await cleanupPlayerStartedRooms(supabase, user.id);
-
-    // Check if player is already in an active room (waiting or roles_distributed)
-    const currentRoom = await getPlayerCurrentRoom(supabase, user.id);
-    if (currentRoom) {
-      return errors.playerAlreadyInRoom();
-    }
-
-    // Generate unique room code
-    let code = generateSecureRoomCode();
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    // Ensure code is unique (retry if collision)
-    while (attempts < maxAttempts) {
-      const { count } = await supabase
-        .from('rooms')
-        .select('*', { count: 'exact', head: true })
-        .eq('code', code);
-
-      if (count === 0) break;
-      code = generateSecureRoomCode();
-      attempts++;
-    }
-
-    if (attempts >= maxAttempts) {
-      return errors.internalError('Failed to generate unique room code');
-    }
-
-    // Feature 024: validate agent_count (must be <= expected_players - 1 so
-    // there's at least one human seat). Defaults to 0 if not provided.
-    const agentCount = Math.max(0, Math.floor(body.agent_count ?? 0));
-    if (agentCount >= body.expected_players) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'INVALID_AGENT_COUNT',
-            message: `agent_count (${agentCount}) must be less than expected_players (${body.expected_players}) — at least one human seat required`,
-          },
-        },
-        { status: 400 }
-      );
-    }
-
-    // Create room with role_config
-    const room = await createRoom(supabase, {
-      code,
-      manager_id: user.id,
+    // Validates the settings, and refuses a player already in a waiting or dealt room
+    const room = await createRoomForPlayer(supabase, user.id, {
       expected_players: body.expected_players,
-      status: 'waiting',
-      role_config: roleConfig,
-      lady_of_lake_enabled: roleConfig.ladyOfLake || false,
-      // Feature 023: opt-in intro round at game start
+      role_config: pickRoleConfig(body.role_config),
       intro_phase_enabled: body.intro_phase_enabled === true,
-      // Feature 024: bot count to auto-fill via the agent supervisor
-      agent_count: agentCount,
+      // Feature 024: defaults to 0 (no bots) if not provided
+      agent_count: Math.max(0, Math.floor(body.agent_count ?? 0)),
+      // AI review is turned on afterwards, from the lobby
+      ai_review_enabled: false,
+      ai_review_mode: 'blind',
     });
 
-    // Add creator to room
-    await addPlayerToRoom(supabase, room.id, user.id);
-
     // Compute roles in play for response
-    const rolesInPlay = computeRolesInPlay(roleConfig);
+    const rolesInPlay = computeRolesInPlay(room.role_config);
 
     const response: CreateRoomResponse = {
       id: room.id,

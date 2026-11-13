@@ -77,8 +77,8 @@ export const errors = {
   invalidPlayerCount: () =>
     errorResponse(ERROR_CODES.INVALID_PLAYER_COUNT, 'Player count must be 5-10', 400),
 
-  playerAlreadyInRoom: () =>
-    errorResponse(ERROR_CODES.PLAYER_ALREADY_IN_ROOM, 'Player is already in a room', 409),
+  playerAlreadyInRoom: (message = 'Player is already in a room') =>
+    errorResponse(ERROR_CODES.PLAYER_ALREADY_IN_ROOM, message, 409),
 
   roomNotFound: () =>
     errorResponse(ERROR_CODES.ROOM_NOT_FOUND, 'Room not found', 404),
@@ -94,6 +94,9 @@ export const errors = {
 
   notInGame: () =>
     errorResponse(ERROR_CODES.NOT_IN_GAME, 'You are not in this game', 403),
+
+  gameNotOver: () =>
+    errorResponse(ERROR_CODES.GAME_NOT_OVER, 'The game is still in play', 409),
 
   notRoomManager: () =>
     errorResponse(ERROR_CODES.NOT_ROOM_MANAGER, 'Only the room manager can perform this action', 403),

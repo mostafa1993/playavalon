@@ -471,3 +471,104 @@ export async function getEvilRingAssignments(
   const game = await getGameById(client, gameId);
   return game?.evil_ring_assignments ?? null;
 }
+
+// ============================================
+// PLAY AGAIN: THE NEXT ROOM
+// ============================================
+
+/**
+ * How long a claim on a game's next room holds. Past it, the claimer is taken
+ * to have failed without releasing, and another player may claim.
+ */
+export const NEXT_ROOM_CLAIM_TTL_MS = 30_000;
+
+/**
+ * Whether a claim made at `claimedAt` still holds at `now`
+ */
+export function isNextRoomClaimFresh(claimedAt: string | null, now: Date): boolean {
+  if (!claimedAt) return false;
+  return now.getTime() - new Date(claimedAt).getTime() < NEXT_ROOM_CLAIM_TTL_MS;
+}
+
+/**
+ * Claim the creation of a finished game's next room. The update matches only
+ * while there is no next room and no fresh claim, and the row lock makes two
+ * concurrent claims wait for each other: one of them wins.
+ *
+ * @returns Whether this player now holds the claim
+ */
+export async function claimNextRoom(
+  client: SupabaseClient,
+  gameId: string,
+  playerId: string,
+  claimedAt: Date
+): Promise<boolean> {
+  const staleBefore = new Date(claimedAt.getTime() - NEXT_ROOM_CLAIM_TTL_MS).toISOString();
+  const { data, error } = await client
+    .from('games')
+    .update({
+      next_room_claimed_by: playerId,
+      next_room_claimed_at: claimedAt.toISOString(),
+    })
+    .eq('id', gameId)
+    .is('next_room_id', null)
+    .or(`next_room_claimed_at.is.null,next_room_claimed_at.lt."${staleBefore}"`)
+    .select('id');
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).length === 1;
+}
+
+/**
+ * Link the next room to the game, if this player's claim still holds.
+ *
+ * @returns Whether the link was made
+ */
+export async function linkNextRoom(
+  client: SupabaseClient,
+  gameId: string,
+  roomId: string,
+  playerId: string,
+  claimedAt: Date
+): Promise<boolean> {
+  const { data, error } = await client
+    .from('games')
+    .update({ next_room_id: roomId })
+    .eq('id', gameId)
+    .is('next_room_id', null)
+    .eq('next_room_claimed_by', playerId)
+    .eq('next_room_claimed_at', claimedAt.toISOString())
+    .select('id');
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).length === 1;
+}
+
+/**
+ * Release this player's claim on the next room, after creating it failed.
+ * Leaves anyone else's claim, and a made link, alone.
+ */
+export async function releaseNextRoomClaim(
+  client: SupabaseClient,
+  gameId: string,
+  playerId: string,
+  claimedAt: Date
+): Promise<void> {
+  const { error } = await client
+    .from('games')
+    .update({ next_room_claimed_by: null, next_room_claimed_at: null })
+    .eq('id', gameId)
+    .is('next_room_id', null)
+    .eq('next_room_claimed_by', playerId)
+    .eq('next_room_claimed_at', claimedAt.toISOString());
+
+  if (error) {
+    throw error;
+  }
+}

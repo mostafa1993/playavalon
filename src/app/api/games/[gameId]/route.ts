@@ -11,12 +11,13 @@ import { getPlayerVote, getVotedPlayerIds, getVotesForProposal } from '@/lib/sup
 import { getActionCount, hasPlayerSubmittedAction } from '@/lib/supabase/quest-actions';
 import { getInvestigatedPlayerIds, getLastInvestigation, getPreviousLadyHolderIds } from '@/lib/supabase/lady-investigations';
 import { getPlayerRole } from '@/lib/supabase/roles';
+import { findRoomById, isPlayerInRoom } from '@/lib/supabase/rooms';
 import { getQuestRequirementsMap } from '@/lib/domain/quest-config';
 import { isLadyPhase } from '@/lib/domain/game-state-machine';
 import { getConnectionStatus } from '@/lib/domain/connection-status';
 import { playedInGame } from '@/lib/domain/game-membership';
 import { errors, handleError } from '@/lib/utils/errors';
-import type { GameState, GamePlayer, LadyOfLakeState } from '@/types/game';
+import type { GameState, GamePlayer, LadyOfLakeState, NextRoomState } from '@/types/game';
 
 interface RouteParams {
   params: Promise<{ gameId: string }>;
@@ -265,6 +266,19 @@ export async function GET(request: Request, { params }: RouteParams) {
       };
     }
 
+    // Play again: the room opened for the next game, once a player opened it
+    let nextRoom: NextRoomState | null = null;
+    if (game.next_room_id) {
+      const next = await findRoomById(supabase, game.next_room_id);
+      if (next) {
+        nextRoom = {
+          code: next.code,
+          status: next.status,
+          is_member: await isPlayerInRoom(supabase, next.id, user.id),
+        };
+      }
+    }
+
     // Feature 007: Calculate is_draft_in_progress
     const isDraftInProgress = game.draft_team !== null && game.draft_team !== undefined && (game.draft_team as string[]).length > 0;
 
@@ -287,6 +301,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       lady_of_lake: ladyOfLake,
       draft_team: game.draft_team ?? null,
       is_draft_in_progress: isDraftInProgress,
+      next_room: nextRoom,
     };
 
     return NextResponse.json({

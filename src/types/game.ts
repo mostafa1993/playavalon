@@ -3,6 +3,8 @@
  * Defines types for game state, proposals, votes, and quest actions
  */
 
+import type { RoomStatus } from './database';
+
 // ============================================
 // ENUM TYPES
 // ============================================
@@ -71,6 +73,10 @@ export interface Game {
   evil_ring_assignments: EvilRingAssignments | null;  // Maps each evil player to their one known teammate
   // Feature 023: One-time intro round at game start
   in_intro_phase: boolean;  // True while waiting for the manager to end the intro round
+  // Play again: the room opened for the next game, and who is creating it
+  next_room_id: string | null;
+  next_room_claimed_by: string | null;
+  next_room_claimed_at: string | null;
   created_at: string;
   updated_at: string;
   ended_at: string | null;
@@ -264,6 +270,29 @@ export interface GameState {
   // Feature 007: Draft team selection
   draft_team: string[] | null;
   is_draft_in_progress: boolean;
+  // Play again: the room opened for the next game, once there is one
+  next_room: NextRoomState | null;
+}
+
+/**
+ * The room opened for the next game after this one (play again)
+ */
+export interface NextRoomState {
+  code: string;
+  status: RoomStatus;
+  /** Whether the caller is a member of it */
+  is_member: boolean;
+}
+
+/**
+ * POST /api/games/[gameId]/play-again response data
+ * - 'created': the caller made the next room
+ * - 'linked': the next room already exists
+ * - 'being_created': another player is creating it (room_code null); ask again
+ */
+export interface PlayAgainResult {
+  status: 'created' | 'linked' | 'being_created';
+  room_code: string | null;
 }
 
 /**
