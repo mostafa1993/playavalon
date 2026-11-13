@@ -1,70 +1,13 @@
 /**
- * What the pipeline's steps read about a game besides its folder: a quest's
- * proposals, votes and mission (quest synthesis), and the outcome (the final
- * report). The live service reads the database; the replay reads an export of
- * the game's rows (recordSource.ts). Both go through the same builders in db.ts.
- *
- * Also here, for the replay: the export's version of the two reads the live
- * service makes before the steps run — the meta snapshot taken at the game's
- * start, and the proposal standing when a turn ended.
+ * The replay's version of the two reads the live service makes before the
+ * pipeline's steps run: the meta snapshot taken at the game's start, and the
+ * proposal standing when a turn ended. Both come from an export of the game's
+ * rows (recordSource.ts) and go through the same builders in db.ts.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GameMetaSnapshot } from '../types.js';
-import {
-  blindRoster,
-  buildMetaSnapshot,
-  buildQuestStructuredData,
-  loadGameOutcome,
-  loadQuestStructuredData,
-  settledProposals,
-  type GameOutcome,
-  type LatestProposal,
-  type MetaRosterEntry,
-  type QuestStructuredData,
-} from './db.js';
+import { blindRoster, buildMetaSnapshot, type LatestProposal, type MetaRosterEntry } from './db.js';
 import type { ExportedGame } from './recordSource.js';
-
-export interface GameReads {
-  /** A quest's settled proposals with their votes, and its mission. */
-  questData(questNumber: number, playerNames: Map<string, string>): Promise<QuestStructuredData>;
-  outcome(): Promise<GameOutcome>;
-}
-
-export function dbGameReads(db: SupabaseClient, gameId: string): GameReads {
-  return {
-    questData: (questNumber, playerNames) =>
-      loadQuestStructuredData(db, gameId, questNumber, playerNames),
-    outcome: () => loadGameOutcome(db, gameId),
-  };
-}
-
-export function exportGameReads(exported: ExportedGame): GameReads {
-  return {
-    questData: async (questNumber, playerNames) => {
-      const rows = settledProposals(
-        (exported.proposals ?? [])
-          .filter((p) => p.quest_number === questNumber)
-          .sort((a, b) => a.proposal_number - b.proposal_number)
-      );
-      const votes = new Map(
-        rows.map((p) => [p.id, (exported.votes ?? []).filter((v) => v.proposal_id === p.id)])
-      );
-      return buildQuestStructuredData(
-        questNumber,
-        rows,
-        votes,
-        exported.game.quest_results,
-        playerNames
-      );
-    },
-    outcome: async () => ({
-      winner: exported.game.winner,
-      win_reason: exported.game.win_reason,
-      ended_at: exported.game.ended_at,
-    }),
-  };
-}
 
 /**
  * The meta snapshot as the live service took it at the game's start

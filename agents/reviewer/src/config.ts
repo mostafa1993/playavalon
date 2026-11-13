@@ -69,7 +69,7 @@ export interface PipelineConfig {
   };
   correction: {
     /** If true, run an LLM proofreading pass on each raw STT transcript before
-     *  it reaches the summarizer. Improves quality for Persian; costs one
+     *  it reaches the record and the report. Improves quality for Persian; costs one
      *  extra LLM call (Gemini Flash by default) per non-empty turn. */
     enabled: boolean;
   };

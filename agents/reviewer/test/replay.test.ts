@@ -255,25 +255,6 @@ function stubLlm(runDir: () => string) {
           stance: 'neutral',
           notable_quotes: [],
         };
-      case 'dossier-update.yml':
-        return {
-          behavior_arc: [`${vars.quest_number}/${vars.round_index}/${vars.turn_index}`],
-          stated_claims: [],
-          contradictions: [],
-          alliance_patterns: [],
-          key_moments: [],
-        };
-      case 'quest-synthesizer.yml':
-        return {
-          quest_number: vars.quest_number,
-          leader_display_name: 'x',
-          proposals: [],
-          mission: null,
-          narrative_summary: 'synthesis',
-          turning_points: [],
-          mvp: null,
-          suspicious_players: [],
-        };
       case 'role-guess-update.yml':
         return {
           guesses: [
@@ -285,9 +266,13 @@ function stubLlm(runDir: () => string) {
             },
           ],
         };
-      case 'performance-eval-fa.yml':
-      case 'performance-eval-en.yml':
-        return { performance: [] };
+      case 'report-god.yml':
+      case 'report-blind.yml':
+        return {
+          narrative: `narrative in ${vars.language}`,
+          quests: [{ quest: 1, commentary: 'commentary' }],
+          performance: [{ player: 'Ana', assessment: 'assessment' }],
+        };
       default:
         return `text from ${file}`;
     }
@@ -425,16 +410,16 @@ test('a run folder starts with the inputs only', async () => {
     const text = await fs.readFile(path.join(runDir, file), 'utf8');
     assert.ok(!text.includes(SHIPPED), `${file} carries a shipped derived value`);
   }
-  for (const file of ['summary.fa.json', 'summary.en.json', 'record.json', GOD_RECORD_FILE, 'quest_1.json', 'quest_2.json']) {
+  for (const file of ['summary.fa.json', 'summary.en.json', 'record.json', GOD_RECORD_FILE]) {
     assert.ok(files.includes(file), `${file} written`);
   }
   assert.ok(!files.includes('guess_log.json'), 'no guess log in god mode');
 });
 
-test('each turn is summarized against the proposal standing when the live service read it', async () => {
+test('blind mode: each turn is summarized against the proposal standing when the live service read it', async () => {
   // Read at the next speaker's start: a leader who talks before proposing
   // has proposed by then, as live saw it.
-  const { calls } = await replay('god');
+  const { calls } = await replay('blind');
   const grounding = calls
     .filter((c) => c.file === 'turn-summarizer.yml' && c.vars.quest_number !== 0)
     .map((c) => [`${c.vars.quest_number}_${c.vars.round_index}_${c.vars.turn_index}`, c.vars.leader_display_name, c.vars.proposed_team])
@@ -447,35 +432,37 @@ test('each turn is summarized against the proposal standing when the live servic
     ['2_0_0', 'Cy', 'Cy, Dee, Eve'],
     ['2_0_1', 'Cy', 'Cy, Dee, Eve'],
   ]);
-  // The intro (quest 0) and the assassin phase have no proposal.
+  // The intro (quest 0) has no proposal; the assassin phase has no summary.
   const unproposed = calls.filter((c) => c.file === 'turn-summarizer.yml' && c.vars.quest_number === 0);
-  assert.equal(unproposed.length, 2);
-
-  // Quest synthesis reads the quest's rows from the export.
-  const quest1 = calls.find((c) => c.file === 'quest-synthesizer.yml' && c.vars.quest_number === 1);
-  const data = JSON.parse(quest1!.vars.quest_data as string);
-  assert.equal(data.leaderDisplayName, 'Ben');
-  assert.deepEqual(
-    data.proposals.map((p: { proposalNumber: number; team: string[]; approvals: string[]; status: string }) =>
-      [p.proposalNumber, p.team, p.approvals, p.status]),
-    [
-      [1, ['Ana', 'Ben'], ['Ana', 'Ben'], 'rejected'],
-      [2, ['Ben', 'Cy'], ['Ana', 'Ben', 'Cy'], 'approved'],
-    ]
-  );
-  assert.deepEqual(data.mission, { team: ['Ben', 'Cy'], success_count: 2, fail_count: 0, result: 'success' });
+  assert.equal(unproposed.length, 1);
 });
 
-test('dossiers take each player\'s turns in order; the detective updates round by round', async () => {
-  const { calls, read } = await replay('blind');
-  const dossierOrder = (name: string) =>
-    calls
-      .filter((c) => c.file === 'dossier-update.yml' && c.vars.player_display_name === name)
-      .map((c) => `${c.vars.quest_number}_${c.vars.round_index}_${c.vars.turn_index}`);
-  assert.deepEqual(dossierOrder('p2'), ['1_0_1', '1_1_0']);
-  assert.deepEqual(dossierOrder('p3'), ['1_1_1', '2_0_0']);
-  assert.deepEqual(dossierOrder('p1'), ['0_0_0', '1_0_0']);
+test('god mode: no turn summaries; the report reads the whole record, once per language', async () => {
+  const { calls, read } = await replay('god');
+  assert.ok(!calls.some((c) => c.file === 'turn-summarizer.yml'), 'nothing reads a god-mode turn summary');
+  const turn = read('turn_1_0_0.json') as Record<string, unknown>;
+  assert.equal(turn.transcript, 'fixed raw 1_0_0');
+  assert.ok(!('summary' in turn));
 
+  const reports = calls.filter((c) => c.file === 'report-god.yml');
+  assert.deepEqual(reports.map((c) => c.vars.language).sort(), ['English', 'Persian (فارسی)']);
+  const record = reports[0]!.vars.record as string;
+  // Each proposal with its own leader, the talk under it, its vote; the
+  // proofread talk; the discussion; the pick.
+  assert.match(record, /Proposal 1\.1: leader Ana; team Ana, Ben\n  1\.1\.1 Ana: fixed raw 1_0_0\n  1\.1\.2 Ben: fixed raw 1_0_1\n  Vote on proposal 1\.1: approve Ana, Ben; reject Cy, Dee, Eve → rejected/);
+  assert.match(record, /Proposal 1\.2: leader Ben; team Ben, Cy/);
+  assert.match(record, /Ana — good \(merlin\)/);
+  assert.match(record, /Eve: fixed raw discussion/);
+  assert.match(record, /The assassin's pick \(named as Merlin\): Ana/);
+
+  const summary = read('summary.fa.json') as Record<string, unknown>;
+  assert.equal(summary.format, 2);
+  assert.equal(summary.narrative, 'narrative in Persian (فارسی)');
+  assert.deepEqual(summary.performance, [{ playerId: 'p1', assessment: 'assessment' }]);
+});
+
+test('the detective updates round by round', async () => {
+  const { calls, read } = await replay('blind');
   const rounds = [[0, 0], [1, 0], [1, 1], [2, 0]];
   assert.deepEqual(
     calls.filter((c) => c.file === 'role-guess-update.yml').map((c) => [c.vars.quest_number, c.vars.proposal_round]),
@@ -515,8 +502,11 @@ test('a blind replay of a god-mode folder holds no role before the report', asyn
     const text = JSON.stringify(vars);
     assert.ok(!roleValue.test(text) && !text.includes('special_role'), `${file} was given a role`);
   }
-  assert.ok(calls.some((c) => c.file === 'final-narrative-blind-fa.yml'));
-  assert.ok(!calls.some((c) => c.file.startsWith('role-reveal')));
+  const report = calls.find((c) => c.file === 'report-blind.yml');
+  assert.ok(report, 'the blind report was written');
+  assert.ok(!/ — (good|evil)/.test(report.vars.record as string), 'the blind report read a role');
+  assert.match(report.vars.record as string, /Proposal 1\.1: leader Ana; team Ana, Ben/);
+  assert.ok(!calls.some((c) => c.file === 'report-god.yml'));
 
   // The judge's god record is written last, beside it, with the roles.
   const god = read(GOD_RECORD_FILE) as { mode: string; players: Array<{ id: string; special_role: string }> };

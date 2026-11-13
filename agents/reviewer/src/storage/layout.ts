@@ -6,8 +6,6 @@
  *
  *   <dir>/meta.json
  *   <dir>/turn_<quest>_<round>_<idx>.json
- *   <dir>/dossier_<playerIdentity>.json
- *   <dir>/quest_<n>.json
  *   <dir>/discussion.json                 (the assassin-phase discussion)
  *   <dir>/guess_log.json                  (blind mode)
  *   <dir>/record.json                     (the game record)
@@ -36,14 +34,6 @@ export function turnPath(
   turnIndex: number
 ): string {
   return path.join(dir, `turn_${questNumber}_${roundIndex}_${turnIndex}.json`);
-}
-
-export function dossierPath(dir: string, playerId: string): string {
-  return path.join(dir, `dossier_${playerId}.json`);
-}
-
-export function questPath(dir: string, questNumber: number): string {
-  return path.join(dir, `quest_${questNumber}.json`);
 }
 
 export function summaryPath(dir: string, language: 'fa' | 'en'): string {

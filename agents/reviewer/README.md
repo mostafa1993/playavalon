@@ -1,8 +1,9 @@
 # Playavalon AI Reviewer Agent
 
 Standalone Node.js service that records per-player speech during an Avalon game,
-transcribes each turn via Azure Speech-to-Text (`fa-IR`), and — in later milestones —
-produces a narrative post-game summary via an LLM.
+transcribes each turn via Azure Speech-to-Text (`fa-IR`), builds the game record from
+the database and the transcripts, and writes the post-game report from that record
+via an LLM.
 
 Runs as a Docker Compose service alongside the Next.js app and LiveKit server.
 Single-VM deployment, single concurrent game.
@@ -11,8 +12,13 @@ Single-VM deployment, single concurrent game.
 
 - **M2**: recorder bot + STT pipeline. Produces `turn_<quest>_<round>_<idx>.json` under
   `/data/games/<game_id>/`.
-- **M3**: per-turn summaries + per-player dossiers + per-quest synthesis.
+- **M3**: per-turn summaries + per-player dossiers + per-quest synthesis (since removed).
 - **M4**: final narrative (fa + en) + review UI.
+- **The report from the record** (`.plans/2026-11-13-1640-reviewer-report-accuracy.md`,
+  row C): the game record (`record.json`) is the source of every fact, and the report
+  reads it whole, transcripts included. Dossiers, quest syntheses, the model-written
+  role reveal and the discussion's per-speaker summaries are gone. The page renders the
+  facts from the record; the model writes only the story and the commentary.
 
 ## Architecture
 
@@ -21,8 +27,33 @@ Supabase (games table)  →  watcher  →  gameSession
                                          │
                             speaking-timer data channel (LiveKit)
                                          │
-LiveKit room  →  bot (audio tracks)  →  turnSegmenter  →  STT (Azure)  →  disk
+LiveKit room  →  bot (audio tracks)  →  turnSegmenter  →  STT (Azure)  →  proofreading  →  turn files
+                                                                                              │
+         assassin-phase discussion  →  STT  →  proofreading  →  discussion.json               │
+                                                                     │                        │
+game end:  database rows + turn files + discussion.json  →  record.json  →  final report  →  summary.<lang>.json
 ```
+
+- **Per turn** (`src/pipeline.ts`): STT, the proofreading pass, the turn file. In blind
+  mode a turn summary is added for the detective; god mode writes none, since nothing
+  reads it.
+- **Blind mode, per round of talk**: the detective (`src/reviewer/guessTracker.ts`)
+  updates its guess of every player's role from the round's turn summaries.
+- **At the game's end**: the assassin-phase discussion is proofread into
+  `discussion.json`; `record.json` is built in code (`src/gamestate/record.ts`); then
+  the final report (`src/reviewer/finalReport.ts`) — one model call per language
+  (`prompts/report-god.yml` or `prompts/report-blind.yml`, no tools) over the whole
+  record as text: the roster (roles in god mode), then, in order, each proposal with
+  its leader and team, the talk about it turn by turn and its vote, each mission and
+  Lady of the Lake (with the result in god mode only), the assassin phase's discussion
+  and pick, and the outcome. A blind report reads the blind record (no role, no Lady
+  result), the game's setup and the detective's guesses.
+- **What the model writes**: the narrative (the whole game, the assassin phase
+  included), a short commentary per quest, and in god mode a performance note per
+  player. Everything else on the review page is the record's: the summary carries the
+  record (without the turns' talk) and the page (`src/lib/review/summary-view.ts` in
+  the app) renders the roles, each proposal's leader, team and votes, each mission,
+  Lady of the Lake, the assassin's pick and each assassin-phase speaker's transcript.
 
 ## Environment
 
@@ -60,7 +91,7 @@ See repo-root `.env.example`. Required vars:
   - `RETRY_BASE_DELAY_MS` — base exponential-backoff delay (default `500`).
   - `TRANSCRIPT_CORRECTION_ENABLED` — if `true` (default), every non-silent
     STT transcript goes through an LLM proofreading pass
-    (`prompts/correct-transcript.yml`) before reaching the summarizer.
+    (`prompts/correct-transcript.yml`) before it reaches the record and the report.
     Fixes Persian STT's common error classes (misheard words, wrong verb
     persons, homophones, Persian half-space / number glitches). The
     turn JSON preserves both `transcript` (corrected) and `transcript_raw`.
@@ -70,13 +101,11 @@ See repo-root `.env.example`. Required vars:
 ```
 $DATA_DIR/<game_id>/
   meta.json                        # players, roles, seating (written at game start)
-  turn_<quest>_<round>_<idx>.json  # raw + corrected transcript + summary
-  dossier_<playerId>.json          # evolving per-player memory
-  quest_<n>.json                   # LLM synthesis of one quest
-  discussion.json                  # the assassin-phase discussion, if any
+  turn_<quest>_<round>_<idx>.json  # raw + corrected transcript (+ summary, blind mode)
+  discussion.json                  # the assassin-phase discussion, if any (raw + corrected)
   guess_log.json                   # blind mode: the detective's guesses per round
   record.json                      # the game record (written at game end)
-  summary.fa.json, summary.en.json # the final report
+  summary.fa.json, summary.en.json # the final report, from the record
 ```
 
 `record.json` holds every fact of the game, built in code from the database and
@@ -88,7 +117,15 @@ proposal it was about (the first of its quest whose vote closed after the turn
 started). A god-mode record adds the roles and the Lady results. A blind-mode
 record holds public play only: its build never reads `player_roles` or the Lady
 `result`. No record holds who played a fail card (`quest_actions` is never
-read). Nothing reads `record.json` yet.
+read). The final report is written from it.
+
+`summary.<lang>.json` (`SummaryJson` in `src/types.ts`, `format: 2`) holds the
+report's language, mode, room code and time; `record`, the record without the turns'
+talk (the facts the page renders); `narrative`; `quest_commentary`, one
+`{quest, commentary}` per quest of the record; and per mode, `performance` (god: one
+`{playerId, assessment}` per player, in seat order) or `guess_timeline` and
+`final_guesses` (blind). The review page reads only this format; any other summary
+shows "This report is no longer available".
 
 ## Replay
 
@@ -127,9 +164,9 @@ Outputs: each run in `<out>/<gameId>/<mode>/run-<k>/` (k = 1…N), which must be
 or empty; every run folder is checked before the first model call. It starts with
 only the inputs — the turn files and `discussion.json` as speech-to-text left them,
 and a `meta.json` built from the export (role-free in blind mode). The pipeline
-then writes what the service writes: turn files with the corrected transcript and
-summary, dossiers, `quest_<n>.json`, `guess_log.json` (blind), `discussion.json`,
-`record.json` (in the run's mode), `summary.fa.json` and `summary.en.json`. Last
+then writes what the service writes: turn files with the corrected transcript (and,
+blind, the summary), `guess_log.json` (blind), `discussion.json`, `record.json` (in
+the run's mode), `summary.fa.json` and `summary.en.json`. Last
 comes `record.god.json`, the god record with roles that the judge
 (`agents/review-judge`) scores every report against, written after every model
 step so no blind step can see it. Each run's log ends with its time and its LLM
@@ -138,12 +175,10 @@ calls and failures (after the client's retries, which are logged as
 
 As of the time:
 
-- a turn's summary is grounded on the proposal standing when the turn ended — the
-  latest of its quest created by then, as `getLatestProposal` gave it live;
-- each player's dossier takes their turns in order;
+- in blind mode, a turn's summary is grounded on the proposal standing when the turn
+  ended — the latest of its quest created by then, as `getLatestProposal` gave it live;
 - in blind mode the detective updates after each round of talk, in order — a round
   per proposal, and the intro — once that round's turn files are written;
-- a quest is synthesized once its turn files are written, from its rows;
 - then the discussion, `record.json` and the final report, as at game end.
 
 ## Local development
@@ -158,8 +193,9 @@ npm run dev
 Regression tests verify prompt YAML files parse, declare the right
 `response_mime_type`, and reference exactly the variables the agent code
 passes in — catching drift between a prompt and its caller. Plus unit tests
-for the silence detector, the game record, the watcher, and the replay (on a
-stub model).
+for the silence detector, the game record, the final report (the record as its
+prompt reads it, and the summary built around a stub model's answer), the
+watcher, and the replay (on a stub model).
 
 ```
 npm test

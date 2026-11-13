@@ -3,45 +3,34 @@
  * The live service (index.ts) runs them as the game goes; the replay
  * (replay.ts) runs the same steps after speech-to-text on a stored game.
  *
- *   per turn:        STT (live only) → proofreading → turn summary →
- *                    turn file → the speaker's dossier
+ *   per turn:        STT (live only) → proofreading → (blind) turn summary →
+ *                    turn file
  *   per round:       the blind detective's guess update (GuessTracker)
- *   per quest:       quest synthesis
  *   assassin phase:  the discussion (reviewer/discussionProcessor.ts)
- *   at the end:      record.json, then the final report (summary.<lang>.json)
+ *   at the end:      record.json, then the final report from it
+ *                    (reviewer/finalReport.ts → summary.<lang>.json)
+ *
+ * The turn summary feeds only the blind detective; god mode writes none.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createLLMClient, isSilent, transcribe, type LLMClient } from '@avalon/shared';
 import type { AgentConfig, PipelineConfig } from './config.js';
 import { getLatestProposal, type LatestProposal } from './gamestate/db.js';
-import type { GameReads } from './gamestate/gameReads.js';
 import { buildGameRecord } from './gamestate/record.js';
 import type { RecordSource } from './gamestate/recordSource.js';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
 import { recordPath, summaryPath, turnPath } from './storage/layout.js';
 import { correctTranscript } from './reviewer/transcriptCorrector.js';
 import { summarizeTurn } from './reviewer/turnSummarizer.js';
-import { updateDossier } from './reviewer/playerDossier.js';
-import { synthesizeQuest } from './reviewer/questSynthesizer.js';
-import { renderRoleReveal } from './reviewer/roleRevealRenderer.js';
-import {
-  generateFinalNarrative,
-  loadAllDossiers,
-  loadAllQuestJsons,
-  loadDiscussion,
-} from './reviewer/finalNarrative.js';
-import { generateBlindSummary } from './reviewer/finalNarrativeBlind.js';
-import { generatePerformanceEval } from './reviewer/performanceEval.js';
+import { writeBlindReport, writeGodReport } from './reviewer/finalReport.js';
 import type { GuessTracker } from './reviewer/guessTracker.js';
 import type {
-  BlindSummaryJson,
   GameMetaSnapshot,
   GameRecord,
-  GodSummaryJson,
-  PlayerPerformance,
   RawTurnJson,
   RecordedTurn,
+  SummaryJson,
   TurnJson,
   TurnSummary,
 } from './types.js';
@@ -51,10 +40,9 @@ export interface GameLog {
   error: (msg: string, err?: unknown) => void;
 }
 
-/** What every step works with: one game, its folder and its reads. */
+/** What every step works with: one game and its folder. */
 export interface PipelineContext {
   llm: LLMClient;
-  reads: GameReads;
   /** Run the proofreading pass on each transcript (TRANSCRIPT_CORRECTION_ENABLED). */
   correction: boolean;
   gameId: string;
@@ -104,9 +92,9 @@ export function turnLabel(turn: { questNumber: number; roundIndex: number; turnI
 }
 
 /**
- * Live: one recorded turn through STT (or the silence skip), with the
- * quest's latest proposal read beside it as the turn ends; then the steps
- * after STT.
+ * Live: one recorded turn through STT (or the silence skip) — in blind mode
+ * with the quest's latest proposal read beside it as the turn ends, for the
+ * turn summary — then the steps after STT.
  */
 export async function processTurn(
   config: AgentConfig,
@@ -148,10 +136,12 @@ export async function processTurn(
 
   const [{ transcript: rawTranscript, confidence }, proposal] = await Promise.all([
     sttPromise,
-    getLatestProposal(db, ctx.gameId, turn.questNumber).catch((err) => {
-      log.error(`latest proposal fetch failed for Q${turn.questNumber}`, err);
-      return null;
-    }),
+    ctx.mode === 'blind'
+      ? getLatestProposal(db, ctx.gameId, turn.questNumber).catch((err) => {
+          log.error(`latest proposal fetch failed for Q${turn.questNumber}`, err);
+          return null;
+        })
+      : null,
   ]);
 
   const raw: RawTurnJson = {
@@ -169,25 +159,25 @@ export async function processTurn(
     language: config.azureSpeech.language,
   };
 
-  const summary = await summarizeRawTurn(ctx, raw, proposal);
-  if (summary) await updateTurnDossier(ctx, raw, summary);
+  await processRawTurn(ctx, raw, proposal);
 }
 
 /**
- * The steps after STT for one turn: proofreading, the summary grounded on
- * `proposal` (the one standing when the turn ended), and the turn file.
- * Returns the summary; undefined for an empty transcript or a failed summary.
+ * The steps after STT for one turn: proofreading; in blind mode, the summary
+ * the detective reads, grounded on `proposal` (the one standing when the turn
+ * ended); and the turn file. God mode writes no summary: nothing reads it.
  */
-export async function summarizeRawTurn(
+export async function processRawTurn(
   ctx: PipelineContext,
   turn: RawTurnJson,
   proposal: LatestProposal | null
-): Promise<TurnSummary | undefined> {
+): Promise<void> {
   const { llm, log, meta } = ctx;
 
   // 2. LLM proofreading pass on the STT output. Fixes misheard words, wrong
   //    verb persons, Persian half-space / number artifacts before the text
-  //    reaches the summarizer. Fails soft — we keep the raw transcript on error.
+  //    reaches the record and the report. Fails soft — we keep the raw
+  //    transcript on error.
   let transcript = turn.transcript_raw;
   let transcriptCorrected = false;
   if (ctx.correction && turn.transcript_raw.trim().length > 0) {
@@ -199,9 +189,9 @@ export async function summarizeRawTurn(
     }
   }
 
-  // 3. Summarize (skip on empty transcript).
+  // 3. Blind mode: summarize for the detective (skip on empty transcript).
   let summary: TurnSummary | undefined;
-  if (transcript.trim().length > 0) {
+  if (ctx.mode === 'blind' && transcript.trim().length > 0) {
     try {
       const speaker = meta.players.find((p) => p.id === turn.speakerIdentity);
       const nameOf = (id: string) =>
@@ -243,40 +233,6 @@ export async function summarizeRawTurn(
     summary,
   };
   await writeJsonAtomic(turnPath(ctx.dir, turn.questNumber, turn.roundIndex, turn.turnIndex), out);
-  return summary;
-}
-
-/** 5. Fold a turn's summary into its speaker's dossier. Fails soft. */
-export async function updateTurnDossier(
-  ctx: PipelineContext,
-  turn: RawTurnJson,
-  summary: TurnSummary
-): Promise<void> {
-  try {
-    const speaker = ctx.meta.players.find((p) => p.id === turn.speakerIdentity);
-    await updateDossier(ctx.llm, {
-      dir: ctx.dir,
-      playerId: turn.speakerIdentity,
-      playerDisplayName: turn.speakerDisplayName,
-      playerSeat: speaker?.seat_number ?? null,
-      questNumber: turn.questNumber,
-      roundIndex: turn.roundIndex,
-      turnIndex: turn.turnIndex,
-      turnSummary: summary,
-    });
-  } catch (err) {
-    ctx.log.error(`dossier update failed for ${turn.speakerDisplayName}`, err);
-  }
-}
-
-/** Synthesize a finished quest from its turn files and its rows → quest_<n>.json. */
-export async function runQuestSynthesis(ctx: PipelineContext, questNumber: number): Promise<void> {
-  await synthesizeQuest(ctx.llm, ctx.reads, {
-    dir: ctx.dir,
-    gameId: ctx.gameId,
-    questNumber,
-    playerNames: new Map(ctx.meta.players.map((p) => [p.id, p.display_name])),
-  });
 }
 
 /** The game record in the context's mode → record.json. */
@@ -290,106 +246,38 @@ export async function writeGameRecord(
 }
 
 /**
- * The final report, per language → summary.fa.json and summary.en.json.
- * God mode: role reveal, narrative and performance. Blind mode: the end
- * summary and the detective's guess timeline. Returns the two paths.
+ * The final report from the game record, per language → summary.fa.json and
+ * summary.en.json (two runs of the same prompt). God mode: the narrative,
+ * quest commentary and performance notes. Blind mode: the narrative and quest
+ * commentary from the blind record, with the detective's guesses. Returns the
+ * two paths.
  */
 export async function generateFinalReport(
   ctx: PipelineContext,
+  record: GameRecord,
   guessTracker: GuessTracker | null
 ): Promise<{ faPath: string; enPath: string }> {
   const { llm, log, meta } = ctx;
-  const [outcome, quests, dossiers, discussion] = await Promise.all([
-    ctx.reads.outcome(),
-    loadAllQuestJsons(ctx.dir),
-    loadAllDossiers(ctx.dir),
-    loadDiscussion(ctx.dir),
-  ]);
+  log.info(`writing the ${record.mode} report from the record (fa + en)`);
+
+  const write = (language: 'fa' | 'en'): Promise<SummaryJson> =>
+    record.mode === 'god'
+      ? writeGodReport(llm, record, meta.roomCode, language)
+      : writeBlindReport(
+          llm,
+          record,
+          {
+            rolesInPlay: meta.rolesInPlay,
+            timeline: guessTracker?.getTimeline() ?? [],
+            finalGuesses: guessTracker?.getFinalGuesses() ?? [],
+          },
+          meta.roomCode,
+          language
+        );
+  const [fa, en] = await Promise.all([write('fa'), write('en')]);
 
   const faPath = summaryPath(ctx.dir, 'fa');
   const enPath = summaryPath(ctx.dir, 'en');
-
-  if (ctx.mode === 'blind') {
-    // BLIND: freeform end summary + the evolving guess timeline. No roles.
-    const timeline = guessTracker?.getTimeline() ?? [];
-    const finalGuesses = guessTracker?.getFinalGuesses() ?? [];
-    log.info('invoking blind end-summary (fa + en)');
-    const blindCtx = { meta, outcome, quests, dossiers, timeline, finalGuesses };
-    const [summaryFa, summaryEn] = await Promise.all([
-      generateBlindSummary(llm, blindCtx, 'fa'),
-      generateBlindSummary(llm, blindCtx, 'en'),
-    ]);
-    const buildBlind = (language: 'fa' | 'en', finalSummary: string): BlindSummaryJson => ({
-      mode: 'blind',
-      language,
-      gameId: ctx.gameId,
-      roomCode: meta.roomCode,
-      generatedAt: new Date().toISOString(),
-      outcome,
-      players: meta.players.map((p) => ({
-        id: p.id,
-        display_name: p.display_name,
-        seat_number: p.seat_number,
-      })),
-      guess_timeline: timeline,
-      final_guesses: finalGuesses,
-      final_summary: finalSummary,
-      quests,
-      discussion,
-    });
-    await Promise.all([
-      writeJsonAtomic(faPath, buildBlind('fa', summaryFa)),
-      writeJsonAtomic(enPath, buildBlind('en', summaryEn)),
-    ]);
-  } else {
-    // GOD: role reveal + narrative (roles known).
-    log.info('invoking role-reveal + narrative + performance prompts (fa + en)');
-    const narrativeCtx = { meta, outcome, dossiers, quests, discussion };
-    const [
-      roleRevealFa,
-      roleRevealEn,
-      narrativeFa,
-      narrativeEn,
-      performanceFa,
-      performanceEn,
-    ] = await Promise.all([
-      renderRoleReveal(llm, meta, 'fa'),
-      renderRoleReveal(llm, meta, 'en'),
-      generateFinalNarrative(llm, narrativeCtx, 'fa'),
-      generateFinalNarrative(llm, narrativeCtx, 'en'),
-      generatePerformanceEval(llm, meta, outcome, quests, dossiers, 'fa'),
-      generatePerformanceEval(llm, meta, outcome, quests, dossiers, 'en'),
-    ]);
-    const buildGod = (
-      language: 'fa' | 'en',
-      roleReveal: string,
-      narrative: string,
-      performance: PlayerPerformance[]
-    ): GodSummaryJson => ({
-      mode: 'god',
-      language,
-      gameId: ctx.gameId,
-      roomCode: meta.roomCode,
-      generatedAt: new Date().toISOString(),
-      outcome,
-      players: meta.players.map((p) => ({
-        id: p.id,
-        display_name: p.display_name,
-        seat_number: p.seat_number,
-        role: p.role ?? 'good',
-        special_role: p.special_role ?? null,
-      })),
-      role_reveal: roleReveal,
-      narrative,
-      performance,
-      quests,
-      discussion,
-    });
-    await Promise.all([
-      writeJsonAtomic(faPath, buildGod('fa', roleRevealFa, narrativeFa, performanceFa)),
-      writeJsonAtomic(enPath, buildGod('en', roleRevealEn, narrativeEn, performanceEn)),
-    ]);
-  }
-
+  await Promise.all([writeJsonAtomic(faPath, fa), writeJsonAtomic(enPath, en)]);
   return { faPath, enPath };
 }

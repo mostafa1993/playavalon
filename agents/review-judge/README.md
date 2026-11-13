@@ -18,10 +18,22 @@ npm run judge -w review-judge -- --record <record.god.json> --fa <summary.fa.jso
 ## What it measures
 
 Code splits the Persian report into numbered sentences: the per-quest facts (leader, proposals,
-mission) one per line, the prose at sentence ends. The model gives each sentence exactly one
-kind and verdict: a **fact** is supported, contradicted or not in the record; an
-**attribution** (what a player said or claimed) is correct, misattributed or not found; anything
-else (opinion, a guess about a role) is none. From those:
+mission) one per line, the prose at sentence ends. It reads both summary formats, since
+historical reports are judged too:
+
+- **format 2** (plan row C): the facts are the record's, carried in the summary and rendered by
+  the review page. The judge reads them as the page shows them — per quest each proposal's
+  leader, team and votes, the mission, Lady of the Lake (`quest-facts`), and in god mode the
+  roles (`roles`, counted in the overall share only) — and the model's text, the narrative, each
+  quest's commentary and the performance notes, as prose. The assassin phase's transcripts are
+  the record's own words and are not judged, nor are the pick and the outcome header.
+- **the earlier format** (no `format` key): a model wrote every section, so all of it is checked:
+  the role reveal, narrative, performance and discussion summaries as prose, the per-quest
+  facts as `quest-facts`.
+
+The model gives each sentence exactly one kind and verdict: a **fact** is supported,
+contradicted or not in the record; an **attribution** (what a player said or claimed) is
+correct, misattributed or not found; anything else (opinion, a guess about a role) is none. From those:
 
 1. contradicted facts as a share of fact sentences — overall, in the prose, and in the quest facts;
 2. misattributed or unfound attributions as a share;

@@ -6,10 +6,11 @@
  *   2. On start: agent upserts `game_reviews` row (status='recording'),
  *      writes meta.json, joins the LiveKit room as a hidden bot,
  *      and begins buffering + transcribing turns.
- *   3. Per turn: STT → summarizer → dossier update → write turn JSON (with summary).
- *   4. On quest boundary: synthesize the completed quest → write quest_<n>.json.
- *   5. On end: flush in-flight turns, synthesize the final quest, disconnect,
- *      write record.json (the game record), then the final report.
+ *   3. Per turn: STT → proofreading → (blind) summary → write turn JSON.
+ *      Blind mode: after each round of talk, the detective's guess update.
+ *   4. On end: flush in-flight turns and the assassin-phase discussion,
+ *      disconnect, write record.json (the game record), then the final report
+ *      from it.
  *
  * The steps themselves are in pipeline.ts, which the replay runs too; this
  * file wires the service: watcher, LiveKit bot, sessions.
@@ -26,7 +27,6 @@ import {
 } from './gamestate/db.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { startWatcher } from './gamestate/watcher.js';
-import { dbGameReads } from './gamestate/gameReads.js';
 import { dbRecordSource } from './gamestate/recordSource.js';
 import type { ActiveGameRow } from './gamestate/db.js';
 import { LiveKitBot } from './bot/livekitBot.js';
@@ -43,7 +43,6 @@ import {
   gameLog,
   generateFinalReport,
   processTurn,
-  runQuestSynthesis,
   turnLabel,
   writeGameRecord,
   type PipelineContext,
@@ -52,7 +51,7 @@ import { GuessTracker } from './reviewer/guessTracker.js';
 import type { MetaJson, RecordedTurn } from './types.js';
 
 interface Session {
-  /** The game, its folder and the reads every pipeline step works with. */
+  /** The game and its folder, which every pipeline step works with. */
   ctx: PipelineContext;
   bot: LiveKitBot;
   segmenter: TurnSegmenter;
@@ -61,8 +60,6 @@ interface Session {
   discussionListener: DiscussionListener;
   /** Tracks in-flight per-turn pipelines so we can await them on session end. */
   pendingTurns: Set<Promise<void>>;
-  /** Tracks in-flight quest synthesis calls. */
-  pendingQuests: Set<Promise<void>>;
   /** Tracks in-flight discussion processing (0 or 1 at a time). */
   pendingDiscussion: Set<Promise<void>>;
   /** Blind-mode active detective (null in god mode). */
@@ -94,7 +91,6 @@ async function startSession(
 
   const ctx: PipelineContext = {
     llm,
-    reads: dbGameReads(db, game.id),
     correction: config.correction.enabled,
     gameId: game.id,
     dir,
@@ -105,7 +101,6 @@ async function startSession(
 
   // 3. Set up segmenter, discussion recorder, timer listeners, then bot.
   const pendingTurns = new Set<Promise<void>>();
-  const pendingQuests = new Set<Promise<void>>();
   const pendingDiscussion = new Set<Promise<void>>();
   const pendingGuesses = new Set<Promise<void>>();
   // Blind mode only: the active detective that re-guesses each round of talk.
@@ -132,17 +127,6 @@ async function startSession(
 
   const metaByIdentity = new Map(meta.players.map((p) => [p.id, p.display_name]));
 
-  const onQuestChanged = (fromQuest: number, _toQuest: number) => {
-    const task = (async () => {
-      // Wait for in-flight turn pipelines to write this quest's turn files —
-      // otherwise the synthesizer would read partial data.
-      await Promise.allSettled(Array.from(pendingTurns));
-      await runQuestSynthesis(ctx, fromQuest);
-    })().catch((err) => log.error(`quest ${fromQuest} synthesis failed`, err));
-    pendingQuests.add(task);
-    void task.finally(() => pendingQuests.delete(task));
-  };
-
   const onRoundChanged = (quest: number, round: number) => {
     if (!guessTracker) return;
     const task = (async () => {
@@ -157,7 +141,7 @@ async function startSession(
   const timerListener = new TimerListener(
     segmenter,
     { displayName: (identity) => metaByIdentity.get(identity) ?? identity },
-    onQuestChanged,
+    undefined,
     onRoundChanged
   );
   const discussionListener = new DiscussionListener(
@@ -209,7 +193,6 @@ async function startSession(
     discussionRecorder,
     discussionListener,
     pendingTurns,
-    pendingQuests,
     pendingDiscussion,
     guessTracker,
     pendingGuesses,
@@ -240,24 +223,6 @@ async function endSession(db: SupabaseClient, session: Session): Promise<void> {
     await Promise.allSettled(Array.from(session.pendingDiscussion));
   }
 
-  // Synthesize the final quest (the one in-progress at end-of-game that never
-  // triggered an onQuestChanged increment).
-  const finalQuest = session.timerListener.getLastSeenQuest();
-  if (finalQuest > 0) {
-    try {
-      await runQuestSynthesis(ctx, finalQuest);
-      log.info(`synthesized final quest ${finalQuest}`);
-    } catch (err) {
-      log.error(`final quest ${finalQuest} synthesis failed`, err);
-    }
-  }
-
-  // Wait for any quest syntheses triggered earlier that are still running.
-  if (session.pendingQuests.size > 0) {
-    log.info(`waiting for ${session.pendingQuests.size} pending quest synthesis call(s)`);
-    await Promise.allSettled(Array.from(session.pendingQuests));
-  }
-
   // Blind mode: drain in-flight per-round guess-updates, then add the FINAL round
   // (the one in progress at end-of-game that never triggered onRoundChanged).
   if (session.guessTracker) {
@@ -265,6 +230,7 @@ async function endSession(db: SupabaseClient, session: Session): Promise<void> {
       log.info(`waiting for ${session.pendingGuesses.size} pending guess-update(s)`);
       await Promise.allSettled(Array.from(session.pendingGuesses));
     }
+    const finalQuest = session.timerListener.getLastSeenQuest();
     if (finalQuest > 0) {
       const finalRound = session.timerListener.getCurrentRoundIndex();
       try {
@@ -279,19 +245,13 @@ async function endSession(db: SupabaseClient, session: Session): Promise<void> {
   // stay connected during LLM work.
   await session.bot.leave().catch((err) => log.error('bot.leave failed', err));
 
-  // The game record: every fact of the game, from the database and the turn
-  // files. Nothing reads it yet.
-  try {
-    await writeGameRecord(ctx, dbRecordSource(db, ctx.gameId));
-    log.info('game record written');
-  } catch (err) {
-    log.error('game record failed', err);
-  }
-
-  // Generate the final report: role reveal + narrative, per language.
+  // The game record — every fact of the game, from the database and the turn
+  // files — then the final report from it, per language.
   try {
     await updateGameReview(db, ctx.gameId, { status: 'generating' });
-    const { faPath, enPath } = await generateFinalReport(ctx, session.guessTracker);
+    const record = await writeGameRecord(ctx, dbRecordSource(db, ctx.gameId));
+    log.info('game record written');
+    const { faPath, enPath } = await generateFinalReport(ctx, record, session.guessTracker);
     await updateGameReview(db, ctx.gameId, {
       status: 'ready',
       summary_fa_path: faPath,

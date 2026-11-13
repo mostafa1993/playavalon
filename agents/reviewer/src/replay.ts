@@ -6,16 +6,15 @@
  * assassin-phase discussion reduced to what speech-to-text produced, and a
  * meta.json built from the export (role-free in blind mode). The pipeline
  * (pipeline.ts) then writes what the live service writes, reading the
- * export's rows where the live service reads the database (gameReads.ts).
+ * export's rows where the live service reads the database (gameReads.ts,
+ * recordSource.ts).
  *
  * As of the time:
- *   - a turn's summary is grounded on the proposal standing when the turn
- *     ended — the latest of its quest created by then, as getLatestProposal
- *     gave it live;
- *   - each player's dossier takes their turns in order;
- *   - the blind detective updates after each round of talk, in order, once the
- *     round's turn files are written;
- *   - a quest is synthesized once its turn files are written, from its rows;
+ *   - blind mode: a turn's summary is grounded on the proposal standing when
+ *     the turn ended — the latest of its quest created by then, as
+ *     getLatestProposal gave it live;
+ *   - blind mode: the detective updates after each round of talk, in order,
+ *     once the round's turn files are written;
  *   - then the discussion, record.json and the final report, as at game end.
  * Last, record.god.json: the god record the judge scores against, written
  * after every model step so no blind step can see a role.
@@ -24,15 +23,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { LLMClient } from '@avalon/shared';
-import { exportGameReads, exportMetaSnapshot, exportProposalAt } from './gamestate/gameReads.js';
+import { exportMetaSnapshot, exportProposalAt } from './gamestate/gameReads.js';
 import { buildGameRecord } from './gamestate/record.js';
 import { exportRecordSource, type ExportedGame, type ProposalRow } from './gamestate/recordSource.js';
 import {
   generateFinalReport,
-  runQuestSynthesis,
-  summarizeRawTurn,
+  processRawTurn,
   turnLabel,
-  updateTurnDossier,
   writeGameRecord,
   type GameLog,
   type PipelineContext,
@@ -48,7 +45,6 @@ import type {
   RawDiscussionJson,
   RawTurnJson,
   TurnJson,
-  TurnSummary,
 } from './types.js';
 
 export type ReplayMode = 'god' | 'blind';
@@ -258,7 +254,6 @@ export async function replayRun(opts: ReplayRunOptions): Promise<void> {
 
   const ctx: PipelineContext = {
     llm: opts.llm,
-    reads: exportGameReads(exported),
     correction: opts.correction,
     gameId,
     dir: runDir,
@@ -270,64 +265,39 @@ export async function replayRun(opts: ReplayRunOptions): Promise<void> {
   const limit = limiter(opts.concurrency);
   const roundKey = (quest: number, round: number) => `${quest}/${round}`;
 
-  // Per turn: proofreading, summary and turn file; then the speaker's dossier,
-  // after their previous turn's.
+  // Per turn: proofreading, (blind) summary and turn file.
   const written = new Map<string, Array<Promise<void>>>();
-  const lastDossier = new Map<string, Promise<void>>();
   const turnTasks = inputs.turns.map((turn, i) => {
-    let markWritten!: () => void;
-    const turnWritten = new Promise<void>((resolve) => (markWritten = resolve));
-    const key = roundKey(turn.questNumber, turn.roundIndex);
-    written.set(key, [...(written.get(key) ?? []), turnWritten]);
-
-    const previousDossier = lastDossier.get(turn.speakerIdentity) ?? Promise.resolve();
     const task = limit(async () => {
       log.info(
         `turn ${turnLabel(turn)} speaker=${turn.speakerDisplayName} (${turn.durationSec.toFixed(1)}s)`
       );
-      let summary: TurnSummary | undefined;
-      try {
-        summary = await summarizeRawTurn(
-          ctx,
-          turn,
-          exportProposalAt(exported, turn.questNumber, turnProcessedAt(inputs.turns, i))
-        );
-      } catch (err) {
-        log.error(`turn ${turnLabel(turn)} failed`, err);
-      } finally {
-        markWritten();
-      }
-      await previousDossier;
-      if (summary) await updateTurnDossier(ctx, turn, summary);
+      await processRawTurn(
+        ctx,
+        turn,
+        mode === 'blind'
+          ? exportProposalAt(exported, turn.questNumber, turnProcessedAt(inputs.turns, i))
+          : null
+      ).catch((err) => log.error(`turn ${turnLabel(turn)} failed`, err));
     });
-    lastDossier.set(turn.speakerIdentity, task);
+    const key = roundKey(turn.questNumber, turn.roundIndex);
+    written.set(key, [...(written.get(key) ?? []), task]);
     return task;
   });
 
-  // Per round, in order: the detective's update once the round's turns are
-  // written. Per quest: its synthesis once its turns are written.
-  const rounds = roundsOf(inputs.turns, exported.proposals ?? []);
+  // Blind mode, per round, in order: the detective's update once the round's
+  // turns are written.
   let guesses = Promise.resolve();
   if (guessTracker) {
-    for (const { quest, round } of rounds) {
+    for (const { quest, round } of roundsOf(inputs.turns, exported.proposals ?? [])) {
       const talk = written.get(roundKey(quest, round)) ?? [];
       guesses = Promise.all([guesses, ...talk]).then(() =>
         guessTracker.updateForRound(quest, round)
       );
     }
   }
-  const quests = [...new Set(rounds.map((r) => r.quest))].filter((q) => q > 0);
-  const syntheses = quests.map(async (quest) => {
-    const talk = rounds
-      .filter((r) => r.quest === quest)
-      .flatMap((r) => written.get(roundKey(r.quest, r.round)) ?? []);
-    await Promise.all(talk);
-    await runQuestSynthesis(ctx, quest).catch((err) =>
-      log.error(`quest ${quest} synthesis failed`, err)
-    );
-  });
 
-  await Promise.all([...turnTasks, guesses, ...syntheses]);
+  await Promise.all([...turnTasks, guesses]);
 
   // The game's end: the assassin-phase discussion, the record, the report.
   if (inputs.discussion) {
@@ -338,13 +308,9 @@ export async function replayRun(opts: ReplayRunOptions): Promise<void> {
       await fs.rm(discussionPath(ctx.dir), { force: true });
     });
   }
-  try {
-    await writeGameRecord(ctx, exportRecordSource(exported));
-    log.info('game record written');
-  } catch (err) {
-    log.error('game record failed', err);
-  }
-  await generateFinalReport(ctx, guessTracker);
+  const record = await writeGameRecord(ctx, exportRecordSource(exported));
+  log.info('game record written');
+  await generateFinalReport(ctx, record, guessTracker);
   log.info('final report generated');
 
   await writeJsonAtomic(

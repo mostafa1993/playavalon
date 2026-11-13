@@ -77,60 +77,17 @@ export interface RawTurnJson {
   language: string;
 }
 
-/** Written to turn_<q>_<r>_<i>.json after STT + summarizer complete. */
+/** Written to turn_<q>_<r>_<i>.json after STT, proofreading and (blind mode)
+ *  the turn summary. */
 export interface TurnJson extends RawTurnJson {
   /** The text actually consumed by downstream prompts (corrected if the
    *  correction step ran and succeeded, otherwise identical to `transcript_raw`). */
   transcript: string;
   /** True if the LLM correction step ran successfully on this turn. */
   transcript_corrected: boolean;
-  /** Undefined if summarization was skipped or failed. */
+  /** Blind mode only, for the detective (GuessTracker); undefined in god mode,
+   *  for an empty transcript, or when the summary failed. */
   summary?: TurnSummary;
-}
-
-/** Evolving per-player memory, written to dossier_<playerId>.json. */
-export interface DossierJson {
-  playerId: string;
-  playerDisplayName: string;
-  lastQuestNumber: number;
-  /** Highest roundIndex seen for this player in lastQuestNumber. */
-  lastRoundIndex: number;
-  lastTurnIndex: number;
-  updatedAt: string;
-  behavior_arc: string[];
-  stated_claims: string[];
-  contradictions: string[];
-  alliance_patterns: string[];
-  key_moments: string[];
-}
-
-/** Structured LLM output for one quest. */
-export interface QuestSynthesis {
-  quest_number: number;
-  leader_display_name: string;
-  proposals: Array<{
-    proposal_number: number;
-    team: string[];
-    approvals: string[];
-    rejections: string[];
-    status: 'approved' | 'rejected';
-  }>;
-  mission: null | {
-    team: string[];
-    success_count: number;
-    fail_count: number;
-    result: 'success' | 'fail';
-  };
-  narrative_summary: string;
-  turning_points: string[];
-  mvp: { player: string; reason: string } | null;
-  suspicious_players: Array<{ player: string; reason: string }>;
-}
-
-/** Written to quest_<n>.json after the quest completes and synthesis runs. */
-export interface QuestJson extends QuestSynthesis {
-  gameId: string;
-  completedAt: string;
 }
 
 /** One speaker's clip from the assassin-phase discussion as speech-to-text
@@ -148,8 +105,6 @@ export interface RawDiscussionSpeaker {
 export interface DiscussionSpeakerRecord extends RawDiscussionSpeaker {
   transcript: string;
   transcript_corrected: boolean;
-  /** Undefined if summarization was skipped (silent clip) or failed. */
-  summary?: TurnSummary;
 }
 
 /** The assassin-phase discussion as recorded and transcribed, before any
@@ -167,66 +122,6 @@ export interface DiscussionJson extends Omit<RawDiscussionJson, 'speakers'> {
   assassinDisplayName: string | null;
   speakers: DiscussionSpeakerRecord[];
 }
-
-/**
- * Written to summary.<lang>.json after the game ends. Each language gets its own
- * file. The shape is discriminated by `mode`: god reveals roles + performance;
- * blind shows the evolving guesses, never the truth.
- */
-interface SummaryCommon {
-  language: 'fa' | 'en';
-  gameId: string;
-  roomCode: string;
-  generatedAt: string;
-  outcome: {
-    winner: 'good' | 'evil' | null;
-    win_reason: string | null;
-    ended_at: string | null;
-  };
-  /** Per-quest structured data from quest_<n>.json files (order preserved). */
-  quests: QuestJson[];
-  /** The assassin-phase discussion, if one happened. Null otherwise. */
-  discussion: DiscussionJson | null;
-}
-
-/** God mode: roles are known → reveal + (later) performance. */
-export interface GodSummaryJson extends SummaryCommon {
-  mode: 'god';
-  /** Roster including the true roles. */
-  players: Array<{
-    id: string;
-    display_name: string;
-    seat_number: number | null;
-    role: 'good' | 'evil';
-    special_role: string | null;
-  }>;
-  /** Prose "who was who" paragraph(s) in the target language. */
-  role_reveal: string;
-  /** Main narrative prose in the target language. */
-  narrative: string;
-  /** Per-player performance assessment (role known). */
-  performance: PlayerPerformance[];
-}
-
-/** Blind mode: roles never read → evolving guesses + reasoning, no truth reveal. */
-export interface BlindSummaryJson extends SummaryCommon {
-  mode: 'blind';
-  /** Role-free roster. */
-  players: Array<{
-    id: string;
-    display_name: string;
-    seat_number: number | null;
-  }>;
-  /** The incremental memory: guesses after each round of talk. */
-  guess_timeline: GuessRound[];
-  /** End-state guesses (= the last timeline entry's guesses). */
-  final_guesses: RoleGuess[];
-  /** Freeform game recap + final guesses in the target language. */
-  final_summary: string;
-}
-
-export type SummaryJson = GodSummaryJson | BlindSummaryJson;
-
 
 // ── Blind-mode role guessing ────────────────────────────────────────────────
 
@@ -379,12 +274,62 @@ export interface BlindGameRecord extends GameRecordCommon {
 /** Written to record.json: every fact of the game, built in code. */
 export type GameRecord = GodGameRecord | BlindGameRecord;
 
-/** God-mode per-player performance assessment. */
+// ── The final report ────────────────────────────────────────────────────────
+
+/** The summary format the review page reads; a summary without it, or with
+ *  another, shows "This report is no longer available". */
+export const SUMMARY_FORMAT = 2;
+
+/** The record as a report carries it: every fact the page renders, without
+ *  the turns' talk, which the page doesn't show. */
+export type ReportRecord<R extends GameRecord> = Omit<R, 'turns' | 'cut'>;
+
+/** The model's short commentary on one quest, shown beside its facts. */
+export interface QuestCommentary {
+  quest: number;
+  commentary: string;
+}
+
+/** God mode: how well one player played their true role. */
 export interface PlayerPerformance {
-  /** Exact display name. */
-  player: string;
-  /** The player's true role. */
-  role: string;
-  /** 2–4 sentence assessment in the target language. */
+  playerId: string;
+  /** 2–4 sentences in the report's language. */
   assessment: string;
 }
+
+/**
+ * Written to summary.<lang>.json at the game's end, one file per language.
+ * The facts are the record's (`record`), rendered by the review page; the
+ * model wrote only the story and the commentary. Discriminated by `mode`: god
+ * holds the roles and a performance note per player; blind never holds a role,
+ * and carries the detective's guesses.
+ */
+interface SummaryCommon {
+  format: typeof SUMMARY_FORMAT;
+  language: 'fa' | 'en';
+  gameId: string;
+  roomCode: string;
+  generatedAt: string;
+  /** The story of the game, intro to outcome, assassin phase included. */
+  narrative: string;
+  /** In quest order; only quests the record has, each at most once. */
+  quest_commentary: QuestCommentary[];
+}
+
+export interface GodSummaryJson extends SummaryCommon {
+  mode: 'god';
+  record: ReportRecord<GodGameRecord>;
+  /** In seat order; only players of the record. */
+  performance: PlayerPerformance[];
+}
+
+export interface BlindSummaryJson extends SummaryCommon {
+  mode: 'blind';
+  record: ReportRecord<BlindGameRecord>;
+  /** The detective's guesses after each round of talk. */
+  guess_timeline: GuessRound[];
+  /** Its end-state guesses (the last timeline entry's). */
+  final_guesses: RoleGuess[];
+}
+
+export type SummaryJson = GodSummaryJson | BlindSummaryJson;

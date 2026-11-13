@@ -2,15 +2,23 @@
  * A report as the judge reads it: the text sections a player sees on the
  * review page, in the report's language.
  *
- * Reads the summary files the reviewer has written so far (god and blind). The
- * per-quest facts (leader, proposals, votes, mission) are included: in these
- * reports a model wrote them, so they are statements to check like any other.
+ * Reads both summary formats, since historical reports are judged too:
+ *   - format 2 (plan row C): the facts are the record's, carried in the
+ *     summary and rendered by the page — each quest's proposals (leader, team,
+ *     votes), mission and Lady of the Lake, and in god mode the roles. They are
+ *     read here as the page shows them; the model's words are the narrative,
+ *     each quest's commentary and the performance notes. The assassin phase's
+ *     transcripts are the record's own words and are not judged, nor are the
+ *     pick and the outcome header (as before).
+ *   - the earlier format (no `format` key): a model wrote every section,
+ *     the per-quest facts included, so all are statements to check.
  */
 
-/** Quest facts are the per-quest leader, proposal and mission lines (in these
- *  reports a model writes them; later the page renders them from the record);
- *  prose is everything else. Measure 1 is reported for each. */
-export type SectionKind = 'quest-facts' | 'prose';
+/** Quest facts are the per-quest leader, proposal, mission (and, in format 2,
+ *  Lady of the Lake) lines; roles are format 2's code-rendered role reveal,
+ *  counted in the overall share only; prose is the model's text. Measure 1 is
+ *  reported overall, for prose and for quest facts. */
+export type SectionKind = 'quest-facts' | 'roles' | 'prose';
 
 export interface ReportSection {
   /** Where on the page: "narrative", "quest 2 facts", "performance: <name>", … */
@@ -94,9 +102,77 @@ function discussionSection(d: Json): ReportSection | null {
     : null;
 }
 
-/** Read a summary.<lang>.json into the sections the judge checks. */
-export function readReport(summary: Json): JudgedReport {
-  const mode: 'god' | 'blind' = summary.mode === 'blind' ? 'blind' : 'god';
+/** Format 2: the record's facts as the page renders them, and the model's text. */
+function currentSections(summary: Json, mode: 'god' | 'blind'): ReportSection[] {
+  const record = obj(summary.record);
+  const players = arr(record.players).map(obj);
+  const nameById = new Map(players.map((p) => [str(p.id), str(p.display_name)]));
+  const name = (id: unknown) => nameById.get(str(id)) ?? str(id);
+  const names = (ids: unknown) => arr(ids).map(name).join(', ');
+  const sections: ReportSection[] = [];
+  const push = (section: string, kind: SectionKind, text: string) => {
+    if (text.trim()) sections.push({ section, kind, text });
+  };
+
+  if (mode === 'god') {
+    push(
+      'roles',
+      'roles',
+      [...players]
+        .sort((a, b) => Number(a.seat_number) - Number(b.seat_number))
+        .map((p) => {
+          const role = str(p.special_role) || (p.role === 'evil' ? 'minion' : 'servant');
+          return `Seat ${String(p.seat_number)}: ${str(p.display_name)} — ${role} (${str(p.role)})`;
+        })
+        .join('\n')
+    );
+  }
+  push('narrative', 'prose', str(summary.narrative));
+  for (const note of arr(summary.performance).map(obj)) {
+    push(`performance: ${name(note.playerId)}`, 'prose', str(note.assessment));
+  }
+
+  const proposals = arr(record.proposals).map(obj);
+  const missions = arr(record.missions).map(obj);
+  const lady = arr(record.lady).map(obj);
+  const commentary = arr(summary.quest_commentary).map(obj);
+  const quests = [...new Set([...proposals, ...missions].map((x) => Number(x.quest)))]
+    .filter((q) => q > 0)
+    .sort((a, b) => a - b);
+  for (const q of quests) {
+    const facts: string[] = [];
+    for (const p of proposals
+      .filter((p) => Number(p.quest) === q)
+      .sort((a, b) => Number(a.proposalNumber) - Number(b.proposalNumber))) {
+      const votes = arr(p.votes).map(obj);
+      const by = (vote: string) =>
+        votes.filter((v) => v.vote === vote).map((v) => name(v.playerId)).join(', ') || 'nobody';
+      facts.push(
+        `Proposal ${q}.${String(p.proposalNumber)}: leader ${name(p.leaderId)}; team ${names(p.teamIds)}; ` +
+          (p.status === 'pending'
+            ? 'not voted'
+            : `approved by ${by('approve')}; rejected by ${by('reject')}; ${str(p.status)}`)
+      );
+    }
+    const m = missions.find((m) => Number(m.quest) === q);
+    if (m) {
+      facts.push(
+        `Mission: team ${names(m.teamIds)}; ${String(m.successCount)} success, ` +
+          `${String(m.failCount)} fail; ${str(m.result)}`
+      );
+    }
+    for (const l of lady.filter((l) => Number(l.quest) === q)) {
+      const seen = mode === 'god' && str(l.result) ? ` and saw ${str(l.result)}` : '';
+      facts.push(`Lady of the Lake: ${name(l.investigatorId)} looked at ${name(l.targetId)}${seen}`);
+    }
+    push(`quest ${q} facts`, 'quest-facts', facts.join('\n'));
+    push(`quest ${q}`, 'prose', commentary.filter((c) => Number(c.quest) === q).map((c) => str(c.commentary)).join('\n'));
+  }
+  return sections;
+}
+
+/** The earlier format: every section written by a model. */
+function earlierSections(summary: Json, mode: 'god' | 'blind'): ReportSection[] {
   const sections: ReportSection[] = [];
   const push = (section: string, text: string) => {
     if (text.trim()) sections.push({ section, kind: 'prose', text });
@@ -119,6 +195,14 @@ export function readReport(summary: Json): JudgedReport {
     const s = discussionSection(obj(summary.discussion));
     if (s) sections.push(s);
   }
+  return sections;
+}
+
+/** Read a summary.<lang>.json, in either format, into the sections the judge checks. */
+export function readReport(summary: Json): JudgedReport {
+  const mode: 'god' | 'blind' = summary.mode === 'blind' ? 'blind' : 'god';
+  const sections =
+    summary.format === 2 ? currentSections(summary, mode) : earlierSections(summary, mode);
 
   const finalGuesses: FinalGuess[] =
     mode === 'blind'
@@ -133,16 +217,14 @@ export function readReport(summary: Json): JudgedReport {
 
 /**
  * Split a report into numbered sentences, so the judge gives each exactly one
- * verdict and the same report always has the same count. Quest facts are one
- * line each; prose splits at sentence ends (., !, ?, ؟) and line breaks.
+ * verdict and the same report always has the same count. Quest facts and roles
+ * are one line each; prose splits at sentence ends (., !, ?, ؟) and line breaks.
  */
 export function reportSentences(report: JudgedReport): ReportSentence[] {
   const out: ReportSentence[] = [];
   for (const sec of report.sections) {
     const parts =
-      sec.kind === 'quest-facts'
-        ? sec.text.split('\n')
-        : sec.text.split(/(?<=[.!?؟])\s+|\n+/u);
+      sec.kind === 'prose' ? sec.text.split(/(?<=[.!?؟])\s+|\n+/u) : sec.text.split('\n');
     for (const raw of parts) {
       const text = raw.replace(/^[-•]\s*/u, '').trim();
       if (text.length < 3) continue;

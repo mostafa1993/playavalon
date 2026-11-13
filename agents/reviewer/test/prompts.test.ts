@@ -25,7 +25,7 @@ const promptsDir = path.resolve(
 );
 
 // Each prompt file + the vars the agent code passes in (by name).
-// Keep this in sync with the actual callers in src/reviewer/*.ts.
+// Keep this in sync with the actual callers in src/reviewer/*.ts and src/pipeline.ts.
 const prompts: Array<{
   file: string;
   mime: 'application/json' | 'text/plain';
@@ -52,59 +52,19 @@ const prompts: Array<{
     ],
   },
   {
-    file: 'dossier-update.yml',
+    file: 'report-god.yml',
     mime: 'application/json',
-    expectedVars: [
-      'player_display_name',
-      'player_seat',
-      'quest_number',
-      'round_index',
-      'turn_index',
-      'previous_dossier',
-      'turn_summary',
-    ],
+    expectedVars: ['language', 'record'],
   },
   {
-    file: 'quest-synthesizer.yml',
+    file: 'report-blind.yml',
     mime: 'application/json',
-    expectedVars: ['quest_number', 'quest_data', 'turn_summaries'],
-  },
-  { file: 'role-reveal-fa.yml', mime: 'text/plain', expectedVars: ['roster'] },
-  { file: 'role-reveal-en.yml', mime: 'text/plain', expectedVars: ['roster'] },
-  {
-    file: 'final-narrative-fa.yml',
-    mime: 'text/plain',
-    expectedVars: ['meta', 'outcome', 'dossiers', 'quests', 'discussion'],
-  },
-  {
-    file: 'final-narrative-en.yml',
-    mime: 'text/plain',
-    expectedVars: ['meta', 'outcome', 'dossiers', 'quests', 'discussion'],
+    expectedVars: ['language', 'record', 'roles_in_play', 'guess_timeline', 'final_guesses'],
   },
   {
     file: 'role-guess-update.yml',
     mime: 'application/json',
     expectedVars: ['seat_table', 'roles_in_play', 'prior_guesses', 'quest_number', 'proposal_round', 'round_talk'],
-  },
-  {
-    file: 'final-narrative-blind-fa.yml',
-    mime: 'text/plain',
-    expectedVars: ['roster', 'roles_in_play', 'outcome', 'quests', 'dossiers', 'timeline', 'final_guesses'],
-  },
-  {
-    file: 'final-narrative-blind-en.yml',
-    mime: 'text/plain',
-    expectedVars: ['roster', 'roles_in_play', 'outcome', 'quests', 'dossiers', 'timeline', 'final_guesses'],
-  },
-  {
-    file: 'performance-eval-fa.yml',
-    mime: 'application/json',
-    expectedVars: ['roster', 'outcome', 'quests', 'dossiers'],
-  },
-  {
-    file: 'performance-eval-en.yml',
-    mime: 'application/json',
-    expectedVars: ['roster', 'outcome', 'quests', 'dossiers'],
   },
 ];
 
@@ -170,7 +130,7 @@ test('every prompt YAML in prompts/ is covered by the expectations above', async
   );
 });
 
-for (const file of ['role-guess-update.yml', 'final-narrative-blind-en.yml', 'final-narrative-blind-fa.yml']) {
+for (const file of ['role-guess-update.yml', 'report-blind.yml']) {
   test(`prompt ${file}, filled for a game without Merlin, assumes no Merlin`, async () => {
     const p = await loadPrompt(promptsDir, file);
     const vars = { roles_in_play: formatRolesInPlay(summarizeRoleConfig(5, { merlin: false })) };

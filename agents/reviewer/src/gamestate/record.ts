@@ -16,8 +16,9 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { loadDiscussion } from '../reviewer/finalNarrative.js';
+import { discussionPath } from '../storage/layout.js';
 import type {
+  DiscussionJson,
   GameRecord,
   GodRecordPlayer,
   RecordPlayer,
@@ -187,6 +188,17 @@ async function loadTurnFiles(dir: string): Promise<TurnFile[]> {
       json: JSON.parse(await fs.readFile(path.join(dir, name), 'utf8')) as TurnJson,
     }))
   );
+}
+
+/** The game folder's discussion.json; null when the game had no assassin-phase
+ *  discussion (or its processing failed, which leaves no file). */
+async function loadDiscussion(dir: string): Promise<DiscussionJson | null> {
+  try {
+    return JSON.parse(await fs.readFile(discussionPath(dir), 'utf8')) as DiscussionJson;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
 }
 
 /** Seat 1 is the first leader, then clockwise around the seating order, as the

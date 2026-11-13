@@ -130,6 +130,80 @@ test('readReport keeps a blind report\'s guesses for measure 3, out of the check
   ]);
 });
 
+/** A format-2 summary: the record's facts, which the page renders, and the model's text. */
+const currentGod = {
+  format: 2,
+  mode: 'god',
+  language: 'fa',
+  narrative: 'آنا رهبر اول بود. بو تیم را برد.',
+  quest_commentary: [
+    { quest: 1, commentary: 'تفسیر اول.' },
+    { quest: 9, commentary: 'not a quest' },
+  ],
+  performance: [{ playerId: 'b', assessment: 'زیرکانه بازی کرد.' }],
+  record: {
+    ...record,
+    proposals: [
+      ...record.proposals,
+      { quest: 1, proposalNumber: 0, leaderId: 'd', teamIds: ['d', 'a'], status: 'rejected', votes: [{ playerId: 'a', vote: 'reject' }] },
+      { quest: 2, proposalNumber: 1, leaderId: 'c', teamIds: ['c', 'd'], status: 'pending', votes: [] },
+    ],
+    lady: [{ quest: 1, investigatorId: 'c', targetId: 'b', result: 'evil' }],
+    discussion: { speakers: [{ speakerId: 'b', transcript: 'آنا مرلین است', confidence: 0.6 }] },
+  },
+};
+
+test('readReport reads a format-2 report: the rendered facts per quest, roles apart, and the model\'s text', () => {
+  const r = readReport(currentGod);
+  assert.equal(r.mode, 'god');
+  assert.deepEqual(
+    r.sections.map((s) => `${s.section}/${s.kind}`),
+    ['roles/roles', 'narrative/prose', 'performance: ٔBo/prose', 'quest 1 facts/quest-facts', 'quest 1/prose', 'quest 2 facts/quest-facts']
+  );
+  const facts = r.sections.find((s) => s.section === 'quest 1 facts')!.text.split('\n');
+  assert.deepEqual(facts, [
+    'Proposal 1.0: leader Di; team Di, Ana; approved by nobody; rejected by Ana; rejected',
+    'Proposal 1.1: leader Ana; team Ana, Cy; approved by Ana; rejected by ٔBo; approved',
+    'Mission: team Ana, Cy; 2 success, 0 fail; success',
+    'Lady of the Lake: Cy looked at ٔBo and saw evil',
+  ]);
+  assert.equal(r.sections.find((s) => s.section === 'quest 2 facts')!.text, 'Proposal 2.1: leader Cy; team Cy, Di; not voted');
+  // The assassin phase's transcripts are the record's own words: not judged.
+  assert.ok(r.sections.every((s) => !s.text.includes('آنا مرلین است')));
+
+  const sentences = reportSentences(r);
+  assert.deepEqual(
+    sentences.filter((s) => s.kind === 'roles').map((s) => s.text),
+    ['Seat 1: Ana — merlin (good)', 'Seat 2: ٔBo — assassin (evil)', 'Seat 3: Cy — servant (good)', 'Seat 4: Di — minion (evil)']
+  );
+  assert.deepEqual(
+    sentences.filter((s) => s.section === 'narrative').map((s) => s.text),
+    ['آنا رهبر اول بود.', 'بو تیم را برد.']
+  );
+});
+
+test('readReport reads a format-2 blind report: no roles, no Lady result, the guesses kept for measure 3', () => {
+  const r = readReport({
+    ...currentGod,
+    mode: 'blind',
+    performance: undefined,
+    final_guesses: [{ player: 'Ana', guessed_role: 'Merlin', confidence: 'high', reasoning: 'x' }],
+    guess_timeline: [],
+    record: {
+      ...currentGod.record,
+      mode: 'blind',
+      players: record.players.map(({ id, display_name, seat_number }) => ({ id, display_name, seat_number })),
+      lady: [{ quest: 1, investigatorId: 'c', targetId: 'b' }],
+    },
+  });
+  assert.deepEqual(
+    r.sections.map((s) => `${s.section}/${s.kind}`),
+    ['narrative/prose', 'quest 1 facts/quest-facts', 'quest 1/prose', 'quest 2 facts/quest-facts']
+  );
+  assert.match(r.sections[1]!.text, /\nLady of the Lake: Cy looked at ٔBo$/);
+  assert.deepEqual(r.finalGuesses, [{ player: 'Ana', guessedRole: 'Merlin' }]);
+});
+
 test('matchVerdicts needs one valid verdict per sentence', () => {
   const sentences = reportSentences(readReport(godSummary));
   const all = sentences.map((s) => ({ id: s.id, evidence: 'e', kind: 'none', verdict: 'none' }));
@@ -208,4 +282,18 @@ test('the judge prompts parse, return JSON, and use exactly the variables judge.
     const found = new Set([...`${p.system}\n${p.user}`.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]));
     assert.deepEqual([...found].sort(), [...vars], file);
   }
+});
+
+test('computeMeasures counts rendered roles in the overall share only', () => {
+  const m = computeMeasures(record, readReport(currentGod), {
+    sentences: [
+      { ...v(1, 'prose', 'fact', 'supported') },
+      { ...v(2, 'quest-facts', 'fact', 'supported') },
+      { ...v(3, 'prose', 'fact', 'supported'), sectionKind: 'roles', verdict: 'contradicted' },
+    ],
+    translation: null,
+  });
+  assert.deepEqual(m.contradicted, { count: 1, of: 3, share: 1 / 3 });
+  assert.deepEqual(m.contradictedInProse, { count: 0, of: 1, share: 0 });
+  assert.deepEqual(m.contradictedInQuestFacts, { count: 0, of: 1, share: 0 });
 });

@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Sparkles, ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import type {
-  ReviewApiResponse,
-  ReviewDiscussion,
-  ReviewSummary,
-  GodReviewSummary,
-  BlindReviewSummary,
-} from '@/types/review';
+import type { ReviewApiResponse } from '@/types/review';
+import {
+  summaryView,
+  type ReviewAssassinPhaseView,
+  type ReviewQuestView,
+  type ReviewView,
+} from '@/lib/review/summary-view';
 
 type Language = 'fa' | 'en';
 
@@ -21,9 +21,16 @@ export default function GameReviewPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [language, setLanguage] = useState<Language>('fa');
-  const [summary, setSummary] = useState<ReviewSummary | null>(null);
+  const [view, setView] = useState<ReviewView | null>(null);
   const [status, setStatus] = useState<
-    'loading' | 'pending' | 'recording' | 'generating' | 'ready' | 'failed' | 'disabled'
+    | 'loading'
+    | 'pending'
+    | 'recording'
+    | 'generating'
+    | 'ready'
+    | 'failed'
+    | 'disabled'
+    | 'unavailable'
   >('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +43,7 @@ export default function GameReviewPage() {
     // Reset on language change so we don't render the previous language's
     // summary inside the new language's UI chrome while the new fetch runs.
     setStatus('loading');
-    setSummary(null);
+    setView(null);
     setError(null);
 
     let cancelled = false;
@@ -57,8 +64,10 @@ export default function GameReviewPage() {
           return;
         }
         if (body.data.status === 'ready') {
-          setSummary(body.data.summary);
-          setStatus('ready');
+          // A report in an earlier format can't be shown (plan D17).
+          const next = summaryView(body.data.summary);
+          setView(next);
+          setStatus(next ? 'ready' : 'unavailable');
           return;
         }
         setStatus(body.data.status);
@@ -104,6 +113,16 @@ export default function GameReviewPage() {
     );
   }
 
+  if (status === 'unavailable') {
+    return (
+      <ReviewShell onBack={() => router.push(`/game/${gameId}`)} title="AI Game Report">
+        <div className="card p-6 text-center space-y-3">
+          <p className="text-avalon-text">This report is no longer available.</p>
+        </div>
+      </ReviewShell>
+    );
+  }
+
   if (status === 'failed') {
     return (
       <ReviewShell onBack={() => router.push(`/game/${gameId}`)} title="AI Game Report">
@@ -138,7 +157,7 @@ export default function GameReviewPage() {
     );
   }
 
-  if (status !== 'ready' || !summary) return null;
+  if (status !== 'ready' || !view) return null;
 
   return (
     <ReviewShell
@@ -147,81 +166,119 @@ export default function GameReviewPage() {
       right={<LanguageToggle value={language} onChange={setLanguage} />}
     >
       <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-5">
-        <OutcomeHeader summary={summary} />
+        <OutcomeHeader view={view} />
 
-        {summary.mode === 'blind' ? (
-          <BlindSections summary={summary} isRtl={isRtl} />
-        ) : (
-          <GodSections summary={summary} isRtl={isRtl} />
-        )}
+        {view.roles && <RolesSection roles={view.roles} isRtl={isRtl} />}
+
+        <Section
+          title={
+            view.mode === 'blind'
+              ? isRtl
+                ? 'روایت کارآگاه'
+                : "The Detective's Story"
+              : isRtl
+                ? 'روایت بازی'
+                : 'Game Narrative'
+          }
+          body={view.narrative}
+          isRtl={isRtl}
+        />
+
+        {view.performance.length > 0 && <PerformanceSection view={view} isRtl={isRtl} />}
+
+        {view.detective && <DetectiveSections detective={view.detective} isRtl={isRtl} />}
 
         <div>
           <h2 className="text-avalon-gold font-display text-lg mb-2">
             {isRtl ? 'جزئیات ماموریت‌ها' : 'Quest Breakdown'}
           </h2>
           <div className="space-y-3">
-            {summary.quests.map((q) => (
-              <QuestCard key={q.quest_number} quest={q} isRtl={isRtl} />
+            {view.quests.map((q) => (
+              <QuestCard key={q.quest} quest={q} isRtl={isRtl} />
             ))}
           </div>
         </div>
 
-        {summary.discussion && summary.discussion.speakers.length > 0 && (
-          <DiscussionSection discussion={summary.discussion} isRtl={isRtl} />
-        )}
+        {view.assassinPhase && <AssassinPhaseSection phase={view.assassinPhase} isRtl={isRtl} />}
 
         <div className="text-avalon-silver/60 text-xs text-center pt-4">
           {isRtl ? 'تولید شده در' : 'Generated'}{' '}
-          {new Date(summary.generatedAt).toLocaleString(isRtl ? 'fa-IR' : 'en-US')}
+          {new Date(view.generatedAt).toLocaleString(isRtl ? 'fa-IR' : 'en-US')}
         </div>
       </div>
     </ReviewShell>
   );
 }
 
-function GodSections({ summary, isRtl }: { summary: GodReviewSummary; isRtl: boolean }) {
+function RolesSection({
+  roles,
+  isRtl,
+}: {
+  roles: NonNullable<ReviewView['roles']>;
+  isRtl: boolean;
+}) {
+  const t = (fa: string, en: string) => (isRtl ? fa : en);
+  const side = (title: string, color: string, lines: typeof roles.good) => (
+    <div className="card p-3">
+      <div className={`font-display mb-2 ${color}`}>{title}</div>
+      <ul className="space-y-1 text-sm">
+        {lines.map((p) => (
+          <li key={p.seat} className="flex items-center justify-between gap-2">
+            <span className="text-avalon-text">
+              <span className="text-avalon-silver/70 text-xs">
+                {t('صندلی', 'Seat')} {p.seat}
+              </span>{' '}
+              {p.name}
+            </span>
+            <span className="text-avalon-silver">{p.role}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
   return (
-    <>
-      <Section
-        title={isRtl ? 'بازیکنان و نقش‌ها' : 'Players & Roles'}
-        body={summary.role_reveal}
-        isRtl={isRtl}
-      />
-      <Section
-        title={isRtl ? 'روایت بازی' : 'Game Narrative'}
-        body={summary.narrative}
-        isRtl={isRtl}
-      />
-      {summary.performance && summary.performance.length > 0 && (
-        <div>
-          <h2 className="text-avalon-gold font-display text-lg mb-2">
-            {isRtl ? 'ارزیابی عملکرد بازیکنان' : 'Player Performance'}
-          </h2>
-          <div className="space-y-2">
-            {summary.performance.map((p) => (
-              <div key={p.player} className="card p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-avalon-text font-medium">{p.player}</span>
-                  <span className="text-avalon-silver text-xs">{p.role}</span>
-                </div>
-                <p className="text-avalon-silver text-sm mt-1 whitespace-pre-wrap">{p.assessment}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
+    <div>
+      <h2 className="text-avalon-gold font-display text-lg mb-2">
+        {t('بازیکنان و نقش‌ها', 'Players & Roles')}
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {side(t('نیکان', 'Good'), 'text-good', roles.good)}
+        {side(t('پلیدان', 'Evil'), 'text-evil-light', roles.evil)}
+      </div>
+    </div>
   );
 }
 
-function BlindSections({ summary, isRtl }: { summary: BlindReviewSummary; isRtl: boolean }) {
+function PerformanceSection({ view, isRtl }: { view: ReviewView; isRtl: boolean }) {
+  return (
+    <div>
+      <h2 className="text-avalon-gold font-display text-lg mb-2">
+        {isRtl ? 'ارزیابی عملکرد بازیکنان' : 'Player Performance'}
+      </h2>
+      <div className="space-y-2">
+        {view.performance.map((p) => (
+          <div key={p.name} className="card p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-avalon-text font-medium">{p.name}</span>
+              <span className="text-avalon-silver text-xs">{p.role}</span>
+            </div>
+            <p className="text-avalon-silver text-sm mt-1 whitespace-pre-wrap">{p.assessment}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DetectiveSections({
+  detective,
+  isRtl,
+}: {
+  detective: NonNullable<ReviewView['detective']>;
+  isRtl: boolean;
+}) {
   return (
     <>
-      <Section
-        title={isRtl ? 'خلاصه و حدس‌های کارآگاه' : "Detective's Summary & Guesses"}
-        body={summary.final_summary}
-        isRtl={isRtl}
-      />
       <div>
         <h2 className="text-avalon-gold font-display text-lg mb-2">
           {isRtl ? 'حدس‌های نهایی نقش‌ها' : 'Final Role Guesses'}
@@ -232,7 +289,7 @@ function BlindSections({ summary, isRtl }: { summary: BlindReviewSummary; isRtl:
             : 'These are guesses only — the detective never saw the true roles.'}
         </p>
         <div className="space-y-2">
-          {summary.final_guesses.map((g) => (
+          {detective.finalGuesses.map((g) => (
             <div key={g.player} className="card p-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-avalon-text font-medium">{g.player}</span>
@@ -246,13 +303,13 @@ function BlindSections({ summary, isRtl }: { summary: BlindReviewSummary; isRtl:
           ))}
         </div>
       </div>
-      {summary.guess_timeline.length > 1 && (
+      {detective.timeline.length > 1 && (
         <details className="card p-3">
           <summary className="cursor-pointer text-avalon-gold font-display">
             {isRtl ? 'سیر تکامل حدس‌ها (دور به دور)' : 'How the guesses evolved (round by round)'}
           </summary>
           <div className="mt-3 space-y-3">
-            {summary.guess_timeline.map((r) => (
+            {detective.timeline.map((r) => (
               <div key={r.round} className="border-l-2 border-avalon-gold/30 pl-3">
                 <div className="text-avalon-silver text-xs mb-1">
                   {r.quest === 0
@@ -360,9 +417,9 @@ function LanguageToggle({
   );
 }
 
-function OutcomeHeader({ summary }: { summary: ReviewSummary }) {
-  const winner = summary.outcome.winner;
-  const isRtl = summary.language === 'fa';
+function OutcomeHeader({ view }: { view: ReviewView }) {
+  const winner = view.outcome.winner;
+  const isRtl = view.language === 'fa';
   const label = winner
     ? isRtl
       ? winner === 'good'
@@ -384,11 +441,11 @@ function OutcomeHeader({ summary }: { summary: ReviewSummary }) {
   return (
     <div className="card p-4 text-center">
       <div className={`font-display text-2xl ${color}`}>{label}</div>
-      {summary.outcome.win_reason && (
-        <p className="text-avalon-silver text-sm mt-1">{summary.outcome.win_reason}</p>
+      {view.outcome.reason && (
+        <p className="text-avalon-silver text-sm mt-1">{view.outcome.reason}</p>
       )}
       <p className="text-avalon-silver/60 text-xs mt-2">
-        {isRtl ? 'اتاق' : 'Room'} {summary.roomCode}
+        {isRtl ? 'اتاق' : 'Room'} {view.roomCode}
       </p>
     </div>
   );
@@ -418,26 +475,15 @@ function Section({
   );
 }
 
-function QuestCard({
-  quest,
-  isRtl,
-}: {
-  quest: ReviewSummary['quests'][number];
-  isRtl: boolean;
-}) {
-  const lastProp = quest.proposals[quest.proposals.length - 1];
+function QuestCard({ quest, isRtl }: { quest: ReviewQuestView; isRtl: boolean }) {
   const t = (fa: string, en: string) => (isRtl ? fa : en);
+  const list = (names: string[]) => names.join(isRtl ? '، ' : ', ') || '—';
   return (
-    <details className="card p-3 group">
+    <details open className="card p-3">
       <summary className="flex items-center justify-between cursor-pointer list-none">
-        <div>
-          <span className="text-avalon-gold font-semibold">
-            {t('ماموریت', 'Quest')} {quest.quest_number}
-          </span>
-          <span className="text-avalon-silver text-sm ml-2">
-            {t('رهبر:', 'Leader:')} {quest.leader_display_name}
-          </span>
-        </div>
+        <span className="text-avalon-gold font-semibold">
+          {t('ماموریت', 'Quest')} {quest.quest}
+        </span>
         {quest.mission && (
           <span
             className={`
@@ -447,124 +493,123 @@ function QuestCard({
                 : 'bg-evil/20 text-evil-light'}
             `}
           >
-            {quest.mission.result === 'success'
-              ? t('موفق', 'Success')
-              : t('شکست', 'Fail')}
-            {quest.mission.fail_count > 0 && ` (${quest.mission.fail_count})`}
+            {quest.mission.result === 'success' ? t('موفق', 'Success') : t('شکست', 'Fail')}
           </span>
         )}
       </summary>
 
       <div className="mt-3 space-y-3 text-sm">
-        <div>
-          <div className="text-avalon-silver text-xs mb-1">
-            {t('پیشنهادها', 'Proposals')}
-          </div>
-          <div className="space-y-1">
-            {quest.proposals.map((p) => (
-              <div
-                key={p.proposal_number}
-                className="flex items-center justify-between bg-avalon-navy/50 rounded px-2 py-1"
-              >
+        <div className="space-y-1.5">
+          {quest.proposals.map((p) => (
+            <div key={p.number} className="bg-avalon-navy/50 rounded px-2 py-1.5 space-y-0.5">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-avalon-text">
-                  #{p.proposal_number} — {p.team.join(', ')}
+                  {t('پیشنهاد', 'Proposal')} {p.number} · {t('رهبر:', 'Leader:')}{' '}
+                  <span className="font-medium">{p.leader}</span>
                 </span>
                 <span
                   className={`text-xs font-medium ${
-                    p.status === 'approved' ? 'text-good' : 'text-evil-light'
+                    p.status === 'approved'
+                      ? 'text-good'
+                      : p.status === 'rejected'
+                        ? 'text-evil-light'
+                        : 'text-avalon-silver'
                   }`}
                 >
                   {p.status === 'approved'
                     ? t('تصویب', 'Approved')
-                    : t('رد', 'Rejected')}
+                    : p.status === 'rejected'
+                      ? t('رد', 'Rejected')
+                      : t('بدون رأی', 'Not voted')}
                 </span>
               </div>
-            ))}
-          </div>
-          {lastProp && (
-            <div className="text-avalon-silver/80 text-xs mt-1">
-              {t('موافق:', 'Approved:')} {lastProp.approvals.join(', ') || '—'} ·{' '}
-              {t('مخالف:', 'Rejected:')} {lastProp.rejections.join(', ') || '—'}
+              <div className="text-avalon-text-secondary">
+                {t('تیم:', 'Team:')} {list(p.team)}
+              </div>
+              {p.status !== 'pending' && (
+                <div className="text-avalon-silver/80 text-xs">
+                  {t('موافق:', 'Approved:')} {list(p.approvals)} · {t('مخالف:', 'Rejected:')}{' '}
+                  {list(p.rejections)}
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
 
-        {quest.narrative_summary && (
-          <p className="text-avalon-text whitespace-pre-wrap">
-            {quest.narrative_summary}
-          </p>
+        {quest.mission && (
+          <div className="text-avalon-text-secondary">
+            {t('ماموریت:', 'Mission:')} {list(quest.mission.team)} ·{' '}
+            {t(
+              `${quest.mission.successCount} موفق، ${quest.mission.failCount} شکست`,
+              `${quest.mission.successCount} success, ${quest.mission.failCount} fail`
+            )}
+          </div>
         )}
 
-        {quest.turning_points.length > 0 && (
-          <div>
-            <div className="text-avalon-silver text-xs mb-1">
-              {t('لحظات کلیدی', 'Turning points')}
-            </div>
-            <ul className="list-disc list-inside text-avalon-text-secondary space-y-0.5">
-              {quest.turning_points.map((tp, i) => (
-                <li key={i}>{tp}</li>
-              ))}
-            </ul>
+        {quest.lady.map((l, i) => (
+          <div key={i} className="text-avalon-text-secondary">
+            {t('بانوی دریاچه:', 'Lady of the Lake:')}{' '}
+            {t(`${l.investigator} ${l.target} را بررسی کرد`, `${l.investigator} looked at ${l.target}`)}
+            {l.result &&
+              (l.result === 'good'
+                ? t(' — نیک دید', ' — saw good')
+                : t(' — پلید دید', ' — saw evil'))}
           </div>
+        ))}
+
+        {quest.commentary && (
+          <p className="text-avalon-text whitespace-pre-wrap">{quest.commentary}</p>
         )}
       </div>
     </details>
   );
 }
 
-function DiscussionSection({
-  discussion,
+function AssassinPhaseSection({
+  phase,
   isRtl,
 }: {
-  discussion: ReviewDiscussion;
+  phase: ReviewAssassinPhaseView;
   isRtl: boolean;
 }) {
   const t = (fa: string, en: string) => (isRtl ? fa : en);
   return (
     <div>
       <h2 className="text-avalon-gold font-display text-lg mb-2">
-        {t('بحث آدمکش', 'Assassin Discussion')}
+        {t('مرحله‌ی آدمکش', 'Assassin Phase')}
       </h2>
       <div className="card p-3 space-y-3">
-        <div className="text-avalon-silver text-xs">
-          {t('آدمکش:', 'Assassin:')} {discussion.assassinDisplayName ?? '—'} ·{' '}
-          {t('مدت:', 'Duration:')} {Math.round(discussion.durationSec)}s
+        <div className="text-avalon-silver text-xs space-x-2 rtl:space-x-reverse">
+          {phase.assassin && (
+            <span>
+              {t('آدمکش:', 'Assassin:')} {phase.assassin} ·
+            </span>
+          )}
+          <span>
+            {t('انتخاب آدمکش:', "Assassin's pick:")} {phase.pick ?? '—'}
+          </span>
+          {phase.durationSec !== null && (
+            <span>
+              · {t('مدت بحث:', 'Discussion:')} {Math.round(phase.durationSec)}s
+            </span>
+          )}
         </div>
-        <div className="space-y-2">
-          {discussion.speakers
-            .filter((s) => s.transcript.trim().length > 0)
-            .map((s) => (
-              <details key={s.identity} className="bg-avalon-navy/50 rounded px-2 py-1">
-                <summary className="cursor-pointer list-none flex items-center justify-between">
-                  <span className="text-avalon-text font-semibold">{s.display_name}</span>
-                  <span className="text-avalon-silver/80 text-xs">
-                    {Math.round(s.durationSec)}s
-                  </span>
-                </summary>
-                <div className="mt-2 space-y-2 text-sm">
-                  {s.summary?.key_points && s.summary.key_points.length > 0 && (
-                    <ul className="list-disc list-inside text-avalon-text-secondary space-y-0.5">
-                      {s.summary.key_points.map((kp, i) => (
-                        <li key={i}>{kp}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {s.summary?.notable_quotes && s.summary.notable_quotes.length > 0 && (
-                    <div className="space-y-0.5">
-                      {s.summary.notable_quotes.map((q, i) => (
-                        <p
-                          key={i}
-                          className="text-avalon-gold/90 text-xs italic border-l-2 border-avalon-gold/40 pl-2"
-                        >
-                          « {q} »
-                        </p>
-                      ))}
-                    </div>
-                  )}
+        {phase.speakers.length > 0 && (
+          <div className="space-y-2">
+            {phase.speakers.map((s, i) => (
+              <div key={i} className="bg-avalon-navy/50 rounded px-2 py-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-avalon-text font-semibold">{s.name}</span>
+                  <span className="text-avalon-silver/80 text-xs">{Math.round(s.durationSec)}s</span>
                 </div>
-              </details>
+                {/* The talk is Persian whatever the report's language. */}
+                <p dir="auto" className="text-avalon-text-secondary text-sm mt-1 whitespace-pre-wrap">
+                  {s.transcript}
+                </p>
+              </div>
             ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

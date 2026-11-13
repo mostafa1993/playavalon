@@ -43,8 +43,9 @@ export interface ShareOf {
 
 export interface Measures {
   sentences: number;
-  /** 1. Contradicted facts as a share of the report's fact sentences: overall,
-   *  in the prose, and in the per-quest facts (leader, proposals, mission). */
+  /** 1. Contradicted facts as a share of the report's fact sentences: overall
+   *  (every section, a format-2 report's rendered roles included), in the
+   *  prose, and in the per-quest facts (leader, proposals, mission). */
   contradicted: ShareOf;
   contradictedInProse: ShareOf;
   contradictedInQuestFacts: ShareOf;

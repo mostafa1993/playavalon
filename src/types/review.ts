@@ -1,58 +1,117 @@
 /**
  * Shared types for the AI Game Reviewer feature (022).
- * The agent writes summary JSON files with the shape below; the Next.js
- * review page and API route read them.
+ *
+ * The agent writes one summary JSON file per language (`SummaryJson` in
+ * agents/reviewer/src/types.ts, mirrored here); the API route serves it as it
+ * is, and the review page maps it to its sections with `summaryView`
+ * (src/lib/review/summary-view.ts). The facts in it are the game record's
+ * own — roles (god mode), leaders, teams, votes, missions, Lady of the Lake,
+ * the assassin's pick — and the model wrote only the narrative, the per-quest
+ * commentary and (god mode) the performance notes.
  */
+
+import type { SpecialRole } from './database';
 
 export type ReviewStatus = 'pending' | 'recording' | 'generating' | 'ready' | 'failed';
 
-export interface ReviewQuestProposal {
-  proposal_number: number;
-  team: string[];
-  approvals: string[];
-  rejections: string[];
-  status: 'approved' | 'rejected';
-}
+/** The one summary format the page reads. A summary without it, or with
+ *  another, shows "This report is no longer available". */
+export const REVIEW_SUMMARY_FORMAT = 2;
 
-export interface ReviewQuest {
-  quest_number: number;
-  leader_display_name: string;
-  proposals: ReviewQuestProposal[];
-  mission: null | {
-    team: string[];
-    success_count: number;
-    fail_count: number;
-    result: 'success' | 'fail';
-  };
-  narrative_summary: string;
-  turning_points: string[];
-  mvp: { player: string; reason: string } | null;
-  suspicious_players: Array<{ player: string; reason: string }>;
-  gameId: string;
-  completedAt: string;
-}
+// ── The record, as the summary carries it (without the turns' talk) ─────────
 
-export interface ReviewDiscussionSpeaker {
-  identity: string;
+export interface ReviewRecordPlayer {
+  id: string;
   display_name: string;
-  durationSec: number;
-  transcript: string;
-  summary?: {
-    key_points?: string[];
-    notable_quotes?: string[];
-    stance?: string;
-    claims?: string[];
-    suspicions?: Array<{ target: string; reason: string }>;
-    defenses?: Array<{ subject: string; reason: string }>;
-  };
+  /** Seat 1 led the first proposal; then clockwise. */
+  seat_number: number;
 }
 
-export interface ReviewDiscussion {
-  gameId: string;
+/** God mode: the seat with its true role. */
+export interface GodReviewRecordPlayer extends ReviewRecordPlayer {
+  role: 'good' | 'evil';
+  special_role: SpecialRole | null;
+}
+
+export interface ReviewRecordProposal {
+  quest: number;
+  proposalNumber: number;
+  leaderId: string;
+  teamIds: string[];
+  status: 'pending' | 'approved' | 'rejected';
+  /** In seat order; empty while pending. */
+  votes: Array<{ playerId: string; vote: 'approve' | 'reject' }>;
+}
+
+export interface ReviewRecordMission {
+  quest: number;
+  teamIds: string[];
+  successCount: number;
+  failCount: number;
+  result: 'success' | 'fail';
+}
+
+/** Lady of the Lake, used after `quest`'s mission. */
+export interface ReviewRecordLadyUse {
+  quest: number;
+  investigatorId: string;
+  targetId: string;
+}
+
+/** God mode: what the investigator saw. */
+export interface GodReviewRecordLadyUse extends ReviewRecordLadyUse {
+  result: 'good' | 'evil';
+}
+
+export interface ReviewRecordDiscussion {
   startedAt: string;
   durationSec: number;
-  assassinDisplayName: string | null;
-  speakers: ReviewDiscussionSpeaker[];
+  speakers: Array<{
+    speakerId: string;
+    transcript: string;
+    confidence: number | null;
+    durationSec: number;
+  }>;
+}
+
+interface ReviewRecordCommon {
+  gameId: string;
+  /** By quest, then proposal number. */
+  proposals: ReviewRecordProposal[];
+  missions: ReviewRecordMission[];
+  assassinPickId: string | null;
+  outcome: {
+    winner: 'good' | 'evil' | null;
+    win_reason: string | null;
+    ended_at: string | null;
+  } | null;
+  /** The assassin-phase discussion; null when there was none. */
+  discussion: ReviewRecordDiscussion | null;
+}
+
+export interface GodReviewRecord extends ReviewRecordCommon {
+  mode: 'god';
+  players: GodReviewRecordPlayer[];
+  lady: GodReviewRecordLadyUse[];
+}
+
+/** Blind mode: public play only — no role, no Lady result. */
+export interface BlindReviewRecord extends ReviewRecordCommon {
+  mode: 'blind';
+  players: ReviewRecordPlayer[];
+  lady: ReviewRecordLadyUse[];
+}
+
+// ── The model's part ────────────────────────────────────────────────────────
+
+export interface ReviewQuestCommentary {
+  quest: number;
+  commentary: string;
+}
+
+export interface ReviewPlayerPerformance {
+  playerId: string;
+  assessment: string;
 }
 
 export interface ReviewRoleGuess {
@@ -69,60 +128,33 @@ export interface ReviewGuessRound {
   guesses: ReviewRoleGuess[];
 }
 
-export interface ReviewPlayerPerformance {
-  player: string;
-  role: string;
-  assessment: string;
-}
+// ── The summary ─────────────────────────────────────────────────────────────
 
 interface ReviewSummaryCommon {
+  format: typeof REVIEW_SUMMARY_FORMAT;
   language: 'fa' | 'en';
   gameId: string;
   roomCode: string;
   generatedAt: string;
-  outcome: {
-    winner: 'good' | 'evil' | null;
-    win_reason: string | null;
-    ended_at: string | null;
-  };
-  quests: ReviewQuest[];
-  discussion?: ReviewDiscussion | null;
+  narrative: string;
+  quest_commentary: ReviewQuestCommentary[];
 }
 
-/** God mode: roles revealed + per-player performance. */
+/** God mode: the roles and a performance note per player. */
 export interface GodReviewSummary extends ReviewSummaryCommon {
   mode: 'god';
-  players: Array<{
-    id: string;
-    display_name: string;
-    seat_number: number | null;
-    role: 'good' | 'evil';
-    special_role: string | null;
-  }>;
-  role_reveal: string;
-  narrative: string;
-  /** Optional: absent on reports generated before god performance shipped. */
-  performance?: ReviewPlayerPerformance[];
+  record: GodReviewRecord;
+  performance: ReviewPlayerPerformance[];
 }
 
-/** Blind mode: evolving guesses + reasoning, never the role truth. */
+/** Blind mode: the detective's guesses, never a role. */
 export interface BlindReviewSummary extends ReviewSummaryCommon {
   mode: 'blind';
-  players: Array<{
-    id: string;
-    display_name: string;
-    seat_number: number | null;
-  }>;
+  record: BlindReviewRecord;
   guess_timeline: ReviewGuessRound[];
   final_guesses: ReviewRoleGuess[];
-  final_summary: string;
 }
 
-/**
- * The review report. Discriminated by `mode`. Reports generated before this
- * feature have no `mode` field → they render through the god branch (they carry
- * role_reveal/narrative), which is correct since the old reviewer was god-only.
- */
 export type ReviewSummary = GodReviewSummary | BlindReviewSummary;
 
 export type ReviewApiResponse =
@@ -140,6 +172,8 @@ export type ReviewApiResponse =
         enabled: true;
         status: 'ready';
         language: 'fa' | 'en';
-        summary: ReviewSummary;
+        /** The file as the agent wrote it, in whatever format: the page reads
+         *  it through `summaryView`, which accepts only REVIEW_SUMMARY_FORMAT. */
+        summary: unknown;
       };
     };
