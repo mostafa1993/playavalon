@@ -245,8 +245,22 @@ export interface QuestResult {
 /**
  * Full game state for client rendering
  */
+/** The hidden columns of a game: who Merlin sees as decoy, the Split Intel
+ *  groups, the Evil Ring links. Only the role route reads them, per player. */
+export type HiddenGameColumn =
+  | 'merlin_decoy_player_id'
+  | 'split_intel_certain_evil_ids'
+  | 'split_intel_mixed_evil_id'
+  | 'split_intel_mixed_good_id'
+  | 'oberon_split_intel_certain_evil_ids'
+  | 'oberon_split_intel_mixed_good_id'
+  | 'evil_ring_assignments';
+
+/** A game as players and watchers receive it: without its hidden columns. */
+export type PublicGame = Omit<Game, HiddenGameColumn>;
+
 export interface GameState {
-  game: Game;
+  game: PublicGame;
   players: GamePlayer[];
   current_proposal: TeamProposal | null;
   quest_requirement: QuestRequirement;
@@ -334,7 +348,6 @@ export interface GamePlayer {
 export interface AssassinPhaseState {
   assassin_id: string;
   assassin_display_name: string;
-  merlin_id: string; // Only known to server
   can_guess: boolean; // True if current player is assassin
 }
 

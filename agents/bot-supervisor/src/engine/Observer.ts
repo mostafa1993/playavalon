@@ -207,7 +207,6 @@ export class Observer {
         assassin_phase: d.assassin_phase
           ? {
               assassin_id: d.assassin_phase.assassin_id,
-              merlin_id: d.assassin_phase.merlin_id,
               can_guess: d.assassin_phase.can_guess,
             }
           : null,

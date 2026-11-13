@@ -314,7 +314,6 @@ export interface GameStateResponse {
     assassin_phase: null | {
       assassin_id: string;
       assassin_display_name: string;
-      merlin_id: string;
       can_guess: boolean;
     };
     /** True iff THIS caller is the assassin (regardless of phase). */

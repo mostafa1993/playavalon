@@ -16,6 +16,7 @@ import { getQuestRequirementsMap } from '@/lib/domain/quest-config';
 import { isLadyPhase } from '@/lib/domain/game-state-machine';
 import { getConnectionStatus } from '@/lib/domain/connection-status';
 import { playedInGame } from '@/lib/domain/game-membership';
+import { publicGame } from '@/lib/domain/public-game';
 import { errors, handleError } from '@/lib/utils/errors';
 import type { GameState, GamePlayer, LadyOfLakeState, NextRoomState } from '@/types/game';
 
@@ -212,19 +213,11 @@ export async function GET(request: Request, { params }: RouteParams) {
         .eq('special_role', 'assassin')
         .single();
 
-      const { data: merlinData } = await supabase
-        .from('player_roles')
-        .select('player_id')
-        .eq('room_id', game.room_id)
-        .eq('special_role', 'merlin')
-        .single();
-
-      if (assassinData && merlinData) {
+      if (assassinData) {
         const assassinDisplayName = displayNameMap.get(assassinData.player_id) || 'Unknown';
         assassinPhase = {
           assassin_id: assassinData.player_id,
           assassin_display_name: assassinDisplayName,
-          merlin_id: merlinData.player_id,
           can_guess: user.id === assassinData.player_id,
         };
         isAssassin = user.id === assassinData.player_id;
@@ -283,7 +276,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const isDraftInProgress = game.draft_team !== null && game.draft_team !== undefined && (game.draft_team as string[]).length > 0;
 
     const gameState: GameState = {
-      game,
+      game: publicGame(game),
       players,
       current_proposal: currentProposal,
       quest_requirement: questRequirement,

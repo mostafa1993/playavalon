@@ -90,7 +90,6 @@ export interface GameObservation {
   /** Assassin phase state — only populated during phase === 'assassin'. */
   assassin_phase: null | {
     assassin_id: string;
-    merlin_id: string;
     can_guess: boolean;
   };
   /** True iff THIS agent is the assassin (regardless of current phase). */

@@ -12,6 +12,7 @@ import type {
 } from '@/types/watcher';
 import { getQuestRequirementsMap } from './quest-config';
 import { getConnectionStatus } from './connection-status';
+import { publicGame } from './public-game';
 
 /**
  * Build game state for a watcher (neutral observer view)
@@ -64,7 +65,7 @@ export async function buildWatcherGameState(
   }
 
   return {
-    game,
+    game: publicGame(game),
     players,
     current_proposal: currentProposal,
     quest_requirement: questRequirement,

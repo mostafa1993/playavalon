@@ -11,6 +11,7 @@ import type {
   TeamProposal,
   QuestRequirement,
   LastVoteResult,
+  PublicGame,
 } from './game';
 
 // ============================================
@@ -97,8 +98,8 @@ export interface WatcherLadyState {
  * This is a SUBSET of GameState - excludes all player-specific fields
  */
 export interface WatcherGameState {
-  /** Core game data (same as player view) */
-  game: Game;
+  /** Core game data (same as player view, hidden columns removed) */
+  game: PublicGame;
 
   /** Player info WITHOUT role data (until game_over) */
   players: WatcherPlayerInfo[];
