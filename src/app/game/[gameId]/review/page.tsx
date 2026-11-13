@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Sparkles, ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { ReviewChat } from '@/components/review/ReviewChat';
+import { ERROR_CODES } from '@/lib/utils/constants';
 import type { ReviewApiResponse } from '@/types/review';
 import {
   summaryView,
@@ -32,6 +33,7 @@ export default function GameReviewPage() {
     | 'failed'
     | 'disabled'
     | 'unavailable'
+    | 'in_play'
   >('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +57,11 @@ export default function GameReviewPage() {
         const res = await fetch(`/api/reviews/${gameId}?lang=${language}`);
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
+          // The report opens only once the game can't be played any more.
+          if (body.error?.code === ERROR_CODES.GAME_NOT_OVER) {
+            if (!cancelled) setStatus('in_play');
+            return;
+          }
           throw new Error(body.error?.message || `Request failed (${res.status})`);
         }
         const body = (await res.json()) as ReviewApiResponse;
@@ -119,6 +126,16 @@ export default function GameReviewPage() {
       <ReviewShell onBack={() => router.push(`/game/${gameId}`)} title="AI Game Report">
         <div className="card p-6 text-center space-y-3">
           <p className="text-avalon-text">This report is no longer available.</p>
+        </div>
+      </ReviewShell>
+    );
+  }
+
+  if (status === 'in_play') {
+    return (
+      <ReviewShell onBack={() => router.push(`/game/${gameId}`)} title="AI Game Report">
+        <div className="card p-6 text-center space-y-3">
+          <p className="text-avalon-text">The report opens once the game is over.</p>
         </div>
       </ReviewShell>
     );
