@@ -1,12 +1,12 @@
 /**
- * The replay's version of the two reads the live service makes before the
- * pipeline's steps run: the meta snapshot taken at the game's start, and the
- * proposal standing when a turn ended. Both come from an export of the game's
- * rows (recordSource.ts) and go through the same builders in db.ts.
+ * The replay's version of the read the live service makes before the
+ * pipeline's steps run: the meta snapshot taken at the game's start, from an
+ * export of the game's rows (recordSource.ts), through the same builder in
+ * db.ts.
  */
 
 import type { GameMetaSnapshot } from '../types.js';
-import { blindRoster, buildMetaSnapshot, type LatestProposal, type MetaRosterEntry } from './db.js';
+import { blindRoster, buildMetaSnapshot, type MetaRosterEntry } from './db.js';
 import type { ExportedGame } from './recordSource.js';
 
 /**
@@ -51,19 +51,4 @@ export function exportMetaSnapshot(
     exported.room,
     roster
   );
-}
-
-/**
- * The proposal a turn's summary was grounded on live: `getLatestProposal`,
- * read as the turn ended — the latest of its quest made by then (`at`).
- */
-export function exportProposalAt(
-  exported: ExportedGame,
-  questNumber: number,
-  at: Date
-): LatestProposal | null {
-  const latest = (exported.proposals ?? [])
-    .filter((p) => p.quest_number === questNumber && Date.parse(p.created_at) <= at.getTime())
-    .sort((a, b) => b.proposal_number - a.proposal_number)[0];
-  return latest ? { leaderId: latest.leader_id, teamMemberIds: latest.team_member_ids ?? [] } : null;
 }

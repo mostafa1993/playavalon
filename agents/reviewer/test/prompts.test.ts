@@ -37,21 +37,6 @@ const prompts: Array<{
     expectedVars: ['raw_transcript'],
   },
   {
-    file: 'turn-summarizer.yml',
-    mime: 'application/json',
-    expectedVars: [
-      'quest_number',
-      'round_index',
-      'turn_index',
-      'speaker_display_name',
-      'speaker_seat',
-      'leader_display_name',
-      'proposed_team',
-      'seat_table',
-      'transcript',
-    ],
-  },
-  {
     file: 'report-god.yml',
     mime: 'application/json',
     expectedVars: ['language', 'record'],
@@ -74,7 +59,7 @@ const prompts: Array<{
   {
     file: 'role-guess-update.yml',
     mime: 'application/json',
-    expectedVars: ['seat_table', 'roles_in_play', 'prior_guesses', 'quest_number', 'proposal_round', 'round_talk'],
+    expectedVars: ['record', 'roles_in_play', 'recheck'],
   },
 ];
 

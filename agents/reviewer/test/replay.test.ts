@@ -12,7 +12,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { LLMClient, PromptVars } from '@avalon/shared';
-import { exportProposalAt } from '../src/gamestate/gameReads.js';
 import type { ExportedGame, ProposalRow } from '../src/gamestate/recordSource.js';
 import type { GameLog } from '../src/pipeline.js';
 import {
@@ -21,7 +20,6 @@ import {
   replayMode,
   replayRun,
   type ReplayMode,
-  turnProcessedAt,
 } from '../src/replay.js';
 import type { DiscussionJson, TurnJson } from '../src/types.js';
 
@@ -149,11 +147,12 @@ const SHIPPED = 'SHIPPED';
 const writeJson = (file: string, value: unknown) => fs.writeFile(file, JSON.stringify(value));
 
 /** A god-mode game folder as the live service left it: roles in meta.json,
- *  and every derived file marked SHIPPED. */
+ *  and every derived file marked SHIPPED — the turn summaries of earlier
+ *  services included. */
 async function makeGodFolder(): Promise<string> {
   const dir = await tempDir();
   for (const [quest, round, turn, speaker, time] of TURNS) {
-    const json: TurnJson = {
+    const json: TurnJson & { summary: unknown } = {
       gameId: GAME_ID,
       questNumber: quest,
       roundIndex: round,
@@ -246,25 +245,20 @@ function stubLlm(runDir: () => string) {
     switch (file) {
       case 'correct-transcript.yml':
         return `fixed ${vars.raw_transcript}`;
-      case 'turn-summarizer.yml':
-        return {
-          key_points: [`about ${vars.transcript}`],
-          claims: [],
-          suspicions: [],
-          defenses: [],
-          stance: 'neutral',
-          notable_quotes: [],
-        };
       case 'role-guess-update.yml':
         return {
           guesses: [
-            {
-              player: 'Ana',
-              guessed_role: 'Loyal Servant',
-              confidence: 'low',
-              reasoning: `after ${vars.quest_number}/${vars.proposal_round}`,
-            },
-          ],
+            ['Ana', 'Merlin'],
+            ['Ben', 'Percival'],
+            ['Cy', 'Loyal Servant'],
+            ['Dee', 'Assassin'],
+            ['Eve', 'Morgana'],
+          ].map(([player, guessed_role]) => ({
+            player,
+            guessed_role,
+            confidence: 'low',
+            reasoning: (vars.record as string).split('\n').at(-1),
+          })),
         };
       case 'report-god.yml':
       case 'report-blind.yml':
@@ -371,19 +365,6 @@ test("the mode: the game's, god for a summary without a mode key, or --mode", ()
   assert.equal(replayMode(makeExport('blind'), { mode: 'blind' }, 'god'), 'god');
 });
 
-test('the proposal a turn is summarized against is the latest made by its end', () => {
-  const exported = makeExport('god');
-  const proposalAt = (quest: number, time: string) =>
-    exportProposalAt(exported, quest, new Date(at(time)));
-  assert.equal(proposalAt(1, '09:59:59'), null);
-  assert.deepEqual(proposalAt(1, '10:00:00'), { leaderId: 'p1', teamMemberIds: ['p1', 'p2'] });
-  assert.deepEqual(proposalAt(1, '10:05:59'), { leaderId: 'p1', teamMemberIds: ['p1', 'p2'] });
-  assert.deepEqual(proposalAt(1, '10:06:00'), { leaderId: 'p2', teamMemberIds: ['p2', 'p3'] });
-  assert.deepEqual(proposalAt(1, '11:00:00'), { leaderId: 'p2', teamMemberIds: ['p2', 'p3'] });
-  assert.equal(proposalAt(2, '10:11:59'), null);
-  assert.equal(proposalAt(0, '11:00:00'), null);
-});
-
 test('a run folder starts with the inputs only', async () => {
   const { firstSeen, runDir } = await replay('god');
   const seen = firstSeen();
@@ -396,7 +377,7 @@ test('a run folder starts with the inputs only', async () => {
     assert.ok(!text.includes(SHIPPED), `${file} carries a shipped derived value`);
     if (!file.startsWith('turn_')) continue;
     const turn = JSON.parse(text) as Record<string, unknown>;
-    for (const key of ['transcript', 'transcript_corrected', 'summary']) {
+    for (const key of ['transcript', 'transcript_corrected']) {
       assert.ok(!(key in turn), `${file} has ${key}`);
     }
     assert.match(turn.transcript_raw as string, /^raw /);
@@ -418,33 +399,10 @@ test('a run folder starts with the inputs only', async () => {
   assert.ok(!files.includes('guess_log.json'), 'no guess log in god mode');
 });
 
-test('blind mode: each turn is summarized against the proposal standing when the live service read it', async () => {
-  // Read at the next speaker's start: a leader who talks before proposing
-  // has proposed by then, as live saw it.
-  const { calls } = await replay('blind');
-  const grounding = calls
-    .filter((c) => c.file === 'turn-summarizer.yml' && c.vars.quest_number !== 0)
-    .map((c) => [`${c.vars.quest_number}_${c.vars.round_index}_${c.vars.turn_index}`, c.vars.leader_display_name, c.vars.proposed_team])
-    .sort();
-  assert.deepEqual(grounding, [
-    ['1_0_0', 'Ana', 'Ana, Ben'],
-    ['1_0_1', 'Ana', 'Ana, Ben'],
-    ['1_1_0', 'Ben', 'Ben, Cy'],
-    ['1_1_1', 'Ben', 'Ben, Cy'],
-    ['2_0_0', 'Cy', 'Cy, Dee, Eve'],
-    ['2_0_1', 'Cy', 'Cy, Dee, Eve'],
-  ]);
-  // The intro (quest 0) has no proposal; the assassin phase has no summary.
-  const unproposed = calls.filter((c) => c.file === 'turn-summarizer.yml' && c.vars.quest_number === 0);
-  assert.equal(unproposed.length, 1);
-});
-
-test('god mode: no turn summaries; the report reads the whole record, once per language', async () => {
+test('god mode: the report reads the whole record, once per language', async () => {
   const { calls, read } = await replay('god');
-  assert.ok(!calls.some((c) => c.file === 'turn-summarizer.yml'), 'nothing reads a god-mode turn summary');
   const turn = read('turn_1_0_0.json') as Record<string, unknown>;
   assert.equal(turn.transcript, 'fixed raw 1_0_0');
-  assert.ok(!('summary' in turn));
 
   const reports = calls.filter((c) => c.file === 'report-god.yml');
   assert.deepEqual(reports.map((c) => c.vars.language).sort(), ['English', 'Persian (فارسی)']);
@@ -468,18 +426,37 @@ test('god mode: no turn summaries; the report reads the whole record, once per l
   assert.deepEqual(summary.performance, [{ playerId: 'p1', assessment: 'assessment' }]);
 });
 
-test('the detective updates round by round', async () => {
+test('the detective updates round by round, each from the public record cut at its round', async () => {
   const { calls, read } = await replay('blind');
-  const rounds = [[0, 0], [1, 0], [1, 1], [2, 0]];
-  assert.deepEqual(
-    calls.filter((c) => c.file === 'role-guess-update.yml').map((c) => [c.vars.quest_number, c.vars.proposal_round]),
-    rounds
-  );
-  const log = read('guess_log.json') as { rounds: Array<{ quest: number; proposal_round: number }> };
-  assert.deepEqual(log.rounds.map((r) => [r.quest, r.proposal_round]), rounds);
-  // Each round's update saw that round's summaries, all of them.
-  const round10 = calls.find((c) => c.file === 'role-guess-update.yml' && c.vars.quest_number === 1 && c.vars.proposal_round === 0);
-  assert.match(round10!.vars.round_talk as string, /fixed raw 1_0_0.*fixed raw 1_0_1/s);
+  const updates = calls.filter((c) => c.file === 'role-guess-update.yml');
+  const ends = [
+    'SO FAR: the record ends after the introductions; the game goes on.',
+    'SO FAR: the record ends after quest 1, round 1; the game goes on.',
+    'SO FAR: the record ends after quest 1, round 2; the game goes on.',
+    'SO FAR: the record ends after quest 2, round 1; the game goes on.',
+  ];
+  assert.deepEqual(updates.map((c) => (c.vars.record as string).split('\n').at(-1)), ends);
+  const log = read('guess_log.json') as { rounds: Array<{ quest: number; proposal_round: number; guesses: Array<{ reasoning: string }> }> };
+  assert.deepEqual(log.rounds.map((r) => [r.quest, r.proposal_round]), [[0, 0], [1, 0], [1, 1], [2, 0]]);
+  assert.deepEqual(log.rounds.map((r) => r.guesses[0]!.reasoning), ends);
+
+  // Each round's update read that round's proofread talk and its vote, and
+  // nothing later: no later talk, no assassin phase, no outcome.
+  const round10 = updates[1]!.vars.record as string;
+  assert.match(round10, /1\.1\.1 Ana: fixed raw 1_0_0\n {2}1\.1\.2 Ben: fixed raw 1_0_1\n {2}Vote on proposal 1\.1: approve Ana, Ben; reject Cy, Dee, Eve → rejected/);
+  assert.ok(!round10.includes('Proposal 1.2') && !round10.includes('raw 1_1_0'), round10);
+  for (const c of updates) {
+    const record = c.vars.record as string;
+    assert.ok(!/ASSASSIN PHASE|OUTCOME|raw discussion/.test(record), record);
+  }
+  // The second quest's update has the first quest's mission.
+  assert.match(updates[3]!.vars.record as string, /Mission 1: team Ben, Cy; 2 success, 0 fail → success/);
+
+  // The scored read is the last, from before the assassin phase.
+  const summary = read('summary.fa.json') as { final_guesses: Array<{ reasoning: string }> };
+  assert.equal(summary.final_guesses[0]!.reasoning, ends[3]);
+  const report = calls.find((c) => c.file === 'report-blind.yml');
+  assert.match(report!.vars.final_guesses as string, /^- Ana: Merlin \(low\) — SO FAR: the record ends after quest 2, round 1/);
 });
 
 test('a blind replay of a god-mode folder holds no role before the report', async () => {
@@ -519,18 +496,4 @@ test('a blind replay of a god-mode folder holds no role before the report', asyn
   const god = read(GOD_RECORD_FILE) as { mode: string; players: Array<{ id: string; special_role: string }> };
   assert.equal(god.mode, 'god');
   assert.equal(god.players.find((p) => p.id === 'p1')?.special_role, 'merlin');
-});
-
-test('a turn is read as of the next speaker\'s start in its round, else its audio end', () => {
-  const turn = (q: number, r: number, t: number, startedAt: string, durationSec = 10) =>
-    ({ questNumber: q, roundIndex: r, turnIndex: t, startedAt, durationSec }) as never;
-  const turns = [
-    turn(1, 0, 0, '2026-01-01T10:00:00.000Z'),
-    turn(1, 0, 1, '2026-01-01T10:00:30.000Z'),
-    turn(1, 1, 0, '2026-01-01T10:05:00.000Z'),
-  ];
-  assert.equal(turnProcessedAt(turns, 0).toISOString(), '2026-01-01T10:00:30.000Z');
-  // The round's last turn: no next speaker in its round, so its audio end.
-  assert.equal(turnProcessedAt(turns, 1).toISOString(), '2026-01-01T10:00:40.000Z');
-  assert.equal(turnProcessedAt(turns, 2).toISOString(), '2026-01-01T10:05:10.000Z');
 });

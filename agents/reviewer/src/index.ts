@@ -6,8 +6,9 @@
  *   2. On start: agent upserts `game_reviews` row (status='recording'),
  *      writes meta.json, joins the LiveKit room as a hidden bot,
  *      and begins buffering + transcribing turns.
- *   3. Per turn: STT → proofreading → (blind) summary → write turn JSON.
- *      Blind mode: after each round of talk, the detective's guess update.
+ *   3. Per turn: STT → proofreading → write turn JSON.
+ *      Blind mode: after each round of talk, the detective's guess update
+ *      from the public record so far.
  *   4. On end: flush in-flight turns and the assassin-phase discussion,
  *      disconnect, write record.json (the game record), then the final report
  *      from it.
@@ -105,10 +106,10 @@ async function startSession(
   const pendingGuesses = new Set<Promise<void>>();
   // Blind mode only: the active detective that re-guesses each round of talk.
   const guessTracker =
-    game.ai_review_mode === 'blind' ? new GuessTracker(llm, dir, meta) : null;
+    game.ai_review_mode === 'blind' ? new GuessTracker(ctx, dbRecordSource(db, game.id)) : null;
 
   const onTurnFinished = (turn: RecordedTurn) => {
-    const task = processTurn(config, db, ctx, turn).catch((err) => {
+    const task = processTurn(config, ctx, turn).catch((err) => {
       log.error(`turn ${turnLabel(turn)} failed`, err);
     });
     pendingTurns.add(task);

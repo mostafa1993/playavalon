@@ -81,20 +81,54 @@ export function summarizeRoleConfig(
   return { goodCount: ratio.good, evilCount: ratio.evil, merlinInPlay: config.merlin, specialRoles };
 }
 
+/** The special roles on the good side; every other special role is evil. */
+const GOOD_SPECIAL_ROLES = new Set(['Merlin', 'Percival']);
+
+/** A role the setup deals, and how many players have it. */
+export interface RoleCount {
+  role: string;
+  team: 'good' | 'evil';
+  count: number;
+}
+
+/**
+ * Every role the setup deals and how many players have it: each special role
+ * once, and the plain Loyal Servants and Minions that fill each side. The
+ * counts add up to the players.
+ */
+export function roleCounts(roles: RolesInPlay): RoleCount[] {
+  const good = roles.specialRoles.filter((r) => GOOD_SPECIAL_ROLES.has(r));
+  const evil = roles.specialRoles.filter((r) => !GOOD_SPECIAL_ROLES.has(r));
+  const counts: RoleCount[] = [
+    ...good.map((role) => ({ role, team: 'good' as const, count: 1 })),
+    { role: 'Loyal Servant', team: 'good', count: roles.goodCount - good.length },
+    ...evil.map((role) => ({ role, team: 'evil' as const, count: 1 })),
+    { role: 'Minion', team: 'evil', count: roles.evilCount - evil.length },
+  ];
+  return counts.filter((r) => r.count > 0);
+}
+
 /**
  * Render the configuration as a prompt block. Used by both the per-round guess
- * tracker and the final blind narrative so the detective sees the same setup.
+ * tracker and the final blind narrative so the detective sees the same setup,
+ * with how many players have each role.
  */
 export function formatRolesInPlay(roles: RolesInPlay | null | undefined): string {
   if (!roles) return '(role configuration unavailable)';
   const total = roles.goodCount + roles.evilCount;
   const special = roles.specialRoles.length > 0 ? roles.specialRoles.join(', ') : 'none';
+  const counts = roleCounts(roles);
+  const side = (team: 'good' | 'evil') =>
+    counts
+      .filter((r) => r.team === team)
+      .map((r) => `${r.role} ${r.count}`)
+      .join(', ');
   return [
     "This game's setup (public knowledge — NOT a role assignment):",
     `- ${total} players: ${roles.goodCount} good, ${roles.evilCount} evil.`,
     `- Special roles in play: ${special}.`,
     ...(roles.merlinInPlay ? [] : ['- No Merlin and no Assassin in this game.']),
-    '- Any remaining players are generic Loyal Servants (good) or Minions of Mordred (evil).',
+    `- Every role in play and how many players have it — good: ${side('good')}; evil: ${side('evil')}.`,
     '- Only these roles exist in this game — never guess a role that is not in this list.',
   ].join('\n');
 }

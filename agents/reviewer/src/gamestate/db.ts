@@ -248,35 +248,3 @@ export interface GameOutcome {
   win_reason: string | null;
   ended_at: string | null;
 }
-
-/** The proposal a turn's summary is grounded on: its leader and team. */
-export interface LatestProposal {
-  leaderId: string;
-  teamMemberIds: string[];
-}
-
-/**
- * Return the most recent proposal for a quest (by proposal_number), or null
- * if no proposal exists yet. Used by the per-turn summarizer to ground each
- * speaker's stance on a concrete proposed team + leader.
- */
-export async function getLatestProposal(
-  db: SupabaseClient,
-  gameId: string,
-  questNumber: number
-): Promise<LatestProposal | null> {
-  const { data, error } = await db
-    .from('team_proposals')
-    .select('leader_id, team_member_ids, proposal_number')
-    .eq('game_id', gameId)
-    .eq('quest_number', questNumber)
-    .order('proposal_number', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return {
-    leaderId: data.leader_id as string,
-    teamMemberIds: (data.team_member_ids as string[]) ?? [],
-  };
-}

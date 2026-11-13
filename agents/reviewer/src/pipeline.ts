@@ -3,28 +3,23 @@
  * The live service (index.ts) runs them as the game goes; the replay
  * (replay.ts) runs the same steps after speech-to-text on a stored game.
  *
- *   per turn:        STT (live only) → proofreading → (blind) turn summary →
- *                    turn file
- *   per round:       the blind detective's guess update (GuessTracker)
+ *   per turn:        STT (live only) → proofreading → turn file
+ *   per round:       the blind detective's guess update (GuessTracker), from
+ *                    the public record so far
  *   assassin phase:  the discussion (reviewer/discussionProcessor.ts)
  *   at the end:      record.json, then the final report from it
  *                    (reviewer/finalReport.ts), checked against the record
  *                    (reviewer/checkReport.ts) → summary.<lang>.json
- *
- * The turn summary feeds only the blind detective; god mode writes none.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { createLLMClient, isSilent, transcribe, type LLMClient } from '@avalon/shared';
 import type { AgentConfig, PipelineConfig } from './config.js';
-import { getLatestProposal, type LatestProposal } from './gamestate/db.js';
 import { buildGameRecord } from './gamestate/record.js';
 import type { RecordSource } from './gamestate/recordSource.js';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
 import { checkPath, recordPath, summaryPath, turnPath } from './storage/layout.js';
 import { checkReport } from './reviewer/checkReport.js';
 import { correctTranscript } from './reviewer/transcriptCorrector.js';
-import { summarizeTurn } from './reviewer/turnSummarizer.js';
 import { writeBlindReport, writeGodReport } from './reviewer/finalReport.js';
 import type { GuessTracker } from './reviewer/guessTracker.js';
 import type {
@@ -34,7 +29,6 @@ import type {
   RecordedTurn,
   SummaryJson,
   TurnJson,
-  TurnSummary,
 } from './types.js';
 
 export interface GameLog {
@@ -80,27 +74,17 @@ export function gameLog(gameId: string): GameLog {
   };
 }
 
-function buildSeatTable(meta: GameMetaSnapshot): string {
-  return meta.players
-    .filter((p) => p.seat_number !== null)
-    .sort((a, b) => (a.seat_number ?? 0) - (b.seat_number ?? 0))
-    .map((p) => `seat ${p.seat_number}: ${p.display_name}`)
-    .join('\n');
-}
-
 /** `Q<quest>/R<round>/<turn>`, as the logs name a turn. */
 export function turnLabel(turn: { questNumber: number; roundIndex: number; turnIndex: number }): string {
   return `Q${turn.questNumber}/R${turn.roundIndex}/${turn.turnIndex}`;
 }
 
 /**
- * Live: one recorded turn through STT (or the silence skip) — in blind mode
- * with the quest's latest proposal read beside it as the turn ends, for the
- * turn summary — then the steps after STT.
+ * Live: one recorded turn through STT (or the silence skip), then the steps
+ * after STT.
  */
 export async function processTurn(
   config: AgentConfig,
-  db: SupabaseClient,
   ctx: PipelineContext,
   turn: RecordedTurn
 ): Promise<void> {
@@ -109,17 +93,17 @@ export async function processTurn(
     `turn ${turnLabel(turn)} speaker=${turn.speakerDisplayName} (${turn.durationSec.toFixed(1)}s)`
   );
 
-  // 1. STT (or silence skip) + proposal context fetch in parallel.
-  //    The silence check avoids a round-trip to Azure for clips that clearly
-  //    contain no speech, saving cost and sparing the LLM stage garbage input.
+  // 1. STT (or silence skip). The silence check avoids a round-trip to Azure
+  //    for clips that clearly contain no speech, saving cost and sparing the
+  //    LLM stage garbage input.
   const silent = isSilent(turn.pcm, config.audio.silenceRmsThreshold);
   if (silent) {
     log.info(`turn ${turnLabel(turn)} skipped STT (RMS below silence threshold)`);
   }
 
-  const sttPromise: Promise<{ transcript: string; confidence: number | null }> = silent
-    ? Promise.resolve({ transcript: '', confidence: null })
-    : transcribe(
+  const { transcript: rawTranscript, confidence } = silent
+    ? { transcript: '', confidence: null }
+    : await transcribe(
         {
           key: config.azureSpeech.key,
           region: config.azureSpeech.region,
@@ -136,16 +120,6 @@ export async function processTurn(
         }
       );
 
-  const [{ transcript: rawTranscript, confidence }, proposal] = await Promise.all([
-    sttPromise,
-    ctx.mode === 'blind'
-      ? getLatestProposal(db, ctx.gameId, turn.questNumber).catch((err) => {
-          log.error(`latest proposal fetch failed for Q${turn.questNumber}`, err);
-          return null;
-        })
-      : null,
-  ]);
-
   const raw: RawTurnJson = {
     gameId: ctx.gameId,
     questNumber: turn.questNumber,
@@ -161,20 +135,12 @@ export async function processTurn(
     language: config.azureSpeech.language,
   };
 
-  await processRawTurn(ctx, raw, proposal);
+  await processRawTurn(ctx, raw);
 }
 
-/**
- * The steps after STT for one turn: proofreading; in blind mode, the summary
- * the detective reads, grounded on `proposal` (the one standing when the turn
- * ended); and the turn file. God mode writes no summary: nothing reads it.
- */
-export async function processRawTurn(
-  ctx: PipelineContext,
-  turn: RawTurnJson,
-  proposal: LatestProposal | null
-): Promise<void> {
-  const { llm, log, meta } = ctx;
+/** The steps after STT for one turn: proofreading and the turn file. */
+export async function processRawTurn(ctx: PipelineContext, turn: RawTurnJson): Promise<void> {
+  const { llm, log } = ctx;
 
   // 2. LLM proofreading pass on the STT output. Fixes misheard words, wrong
   //    verb persons, Persian half-space / number artifacts before the text
@@ -191,32 +157,7 @@ export async function processRawTurn(
     }
   }
 
-  // 3. Blind mode: summarize for the detective (skip on empty transcript).
-  let summary: TurnSummary | undefined;
-  if (ctx.mode === 'blind' && transcript.trim().length > 0) {
-    try {
-      const speaker = meta.players.find((p) => p.id === turn.speakerIdentity);
-      const nameOf = (id: string) =>
-        meta.players.find((p) => p.id === id)?.display_name ?? id;
-      const leaderName = proposal ? nameOf(proposal.leaderId) : 'unknown';
-      const proposedTeam = proposal ? proposal.teamMemberIds.map(nameOf).join(', ') : 'unknown';
-      summary = await summarizeTurn(llm, {
-        questNumber: turn.questNumber,
-        roundIndex: turn.roundIndex,
-        turnIndex: turn.turnIndex,
-        speakerDisplayName: turn.speakerDisplayName,
-        speakerSeat: speaker?.seat_number ?? null,
-        leaderDisplayName: leaderName,
-        proposedTeam,
-        seatTable: buildSeatTable(meta),
-        transcript,
-      });
-    } catch (err) {
-      log.error(`summarizer failed for ${turnLabel(turn)}`, err);
-    }
-  }
-
-  // 4. Persist the turn file (with or without summary).
+  // 3. Persist the turn file.
   const out: TurnJson = {
     gameId: turn.gameId,
     questNumber: turn.questNumber,
@@ -232,7 +173,6 @@ export async function processRawTurn(
     transcript_corrected: transcriptCorrected,
     confidence: turn.confidence,
     language: turn.language,
-    summary,
   };
   await writeJsonAtomic(turnPath(ctx.dir, turn.questNumber, turn.roundIndex, turn.turnIndex), out);
 }
@@ -277,7 +217,7 @@ async function checkedReport(
  * summary.en.json (two runs of the same prompt), each checked against the
  * record. God mode: the narrative, quest commentary and performance notes.
  * Blind mode: the narrative and quest commentary from the blind record, with
- * the detective's guesses. Returns the two paths.
+ * the detective's reads, its scored read last. Returns the two paths.
  */
 export async function generateFinalReport(
   ctx: PipelineContext,
@@ -296,7 +236,7 @@ export async function generateFinalReport(
           {
             rolesInPlay: meta.rolesInPlay,
             timeline: guessTracker?.getTimeline() ?? [],
-            finalGuesses: guessTracker?.getFinalGuesses() ?? [],
+            finalGuesses: guessTracker?.scoredRead() ?? [],
           },
           meta.roomCode,
           language

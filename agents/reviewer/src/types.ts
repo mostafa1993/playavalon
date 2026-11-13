@@ -46,16 +46,6 @@ export interface MetaJson {
   agentStartedAt: string;
 }
 
-/** Structured LLM output for one speaking turn. */
-export interface TurnSummary {
-  key_points: string[];
-  claims: string[];
-  suspicions: Array<{ target: string; reason: string }>;
-  defenses: Array<{ subject: string; reason: string }>;
-  stance: 'supports' | 'opposes' | 'neutral' | 'unclear';
-  notable_quotes: string[];
-}
-
 /** A turn as speech-to-text leaves it: what every later step starts from,
  *  and all of a turn a replay copies in. */
 export interface RawTurnJson {
@@ -77,17 +67,13 @@ export interface RawTurnJson {
   language: string;
 }
 
-/** Written to turn_<q>_<r>_<i>.json after STT, proofreading and (blind mode)
- *  the turn summary. */
+/** Written to turn_<q>_<r>_<i>.json after STT and proofreading. */
 export interface TurnJson extends RawTurnJson {
   /** The text actually consumed by downstream prompts (corrected if the
    *  correction step ran and succeeded, otherwise identical to `transcript_raw`). */
   transcript: string;
   /** True if the LLM correction step ran successfully on this turn. */
   transcript_corrected: boolean;
-  /** Blind mode only, for the detective (GuessTracker); undefined in god mode,
-   *  for an empty transcript, or when the summary failed. */
-  summary?: TurnSummary;
 }
 
 /** One speaker's clip from the assassin-phase discussion as speech-to-text
@@ -136,9 +122,9 @@ export interface RoleGuess {
   reasoning: string;
 }
 
-/** One entry in the incremental guess memory — per completed round of talk. */
+/** The detective's read after one round of talk (blind mode). */
 export interface GuessRound {
-  /** Global discussion-phase index (1-based). */
+  /** The read's place in the game's reads (1-based). */
   round: number;
   quest: number;
   /** Proposal round within the quest (0-based). */
@@ -146,7 +132,8 @@ export interface GuessRound {
   guesses: RoleGuess[];
 }
 
-/** Written incrementally to guess_log.json during a blind-mode game. */
+/** Written to guess_log.json after each round of a blind-mode game, never
+ *  read back. */
 export interface GuessLog {
   gameId: string;
   updatedAt: string;

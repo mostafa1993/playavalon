@@ -60,7 +60,8 @@ export function talkLabel(t: Pick<RecordTurn, 'quest' | 'round' | 'turn'>): stri
  * The record as the report's prompt reads it: names instead of ids, and the
  * game in order — each proposal followed by the talk about it and its vote,
  * each quest's mission and Lady of the Lake after its proposals. Roles only in
- * a god record; a blind record has none to give.
+ * a god record; a blind record has none to give. A cut record (the blind
+ * detective's) ends where it was cut, with no outcome.
  */
 export function recordText(record: GameRecord): string {
   const nameById = new Map(record.players.map((p) => [p.id, p.display_name]));
@@ -137,6 +138,13 @@ export function recordText(record: GameRecord): string {
     lines.push(
       `The assassin's pick (named as Merlin): ${record.assassinPickId ? name(record.assassinPickId) : 'none'}`
     );
+  }
+
+  if (record.cut) {
+    const { quest, round } = record.cut;
+    const where = quest === 0 ? 'the introductions' : `quest ${quest}, round ${round + 1}`;
+    lines.push('', `SO FAR: the record ends after ${where}; the game goes on.`);
+    return lines.join('\n');
   }
 
   const outcome = record.outcome;

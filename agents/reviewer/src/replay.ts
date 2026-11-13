@@ -10,11 +10,9 @@
  * recordSource.ts).
  *
  * As of the time:
- *   - blind mode: a turn's summary is grounded on the proposal standing when
- *     the turn ended — the latest of its quest created by then, as
- *     getLatestProposal gave it live;
  *   - blind mode: the detective updates after each round of talk, in order,
- *     once the round's turn files are written;
+ *     once the round's turn files are written, from the public record cut at
+ *     that round;
  *   - then the discussion, record.json and the final report, as at game end.
  * Last, record.god.json: the god record the judge scores against, written
  * after every model step so no blind step can see a role.
@@ -23,7 +21,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { LLMClient } from '@avalon/shared';
-import { exportMetaSnapshot, exportProposalAt } from './gamestate/gameReads.js';
+import { exportMetaSnapshot } from './gamestate/gameReads.js';
 import { buildGameRecord } from './gamestate/record.js';
 import { exportRecordSource, type ExportedGame, type ProposalRow } from './gamestate/recordSource.js';
 import {
@@ -188,25 +186,6 @@ export function roundsOf(
     .flatMap(([quest, n]) => Array.from({ length: n }, (_, round) => ({ quest, round })));
 }
 
-/** When a turn's audio ended. */
-export function turnEnd(turn: RawTurnJson): Date {
-  return new Date(Date.parse(turn.startedAt) + turn.durationSec * 1000);
-}
-
-/**
- * When the live service read a turn's proposal: it flushed the turn when the
- * next speaker started, so that start time when the round has a next turn,
- * else the turn's audio end. `turns` is in quest, round, turn order.
- */
-export function turnProcessedAt(turns: RawTurnJson[], i: number): Date {
-  const turn = turns[i]!;
-  const next = turns[i + 1];
-  if (next && next.questNumber === turn.questNumber && next.roundIndex === turn.roundIndex) {
-    return new Date(next.startedAt);
-  }
-  return turnEnd(turn);
-}
-
 /**
  * Write a run folder's inputs: the turn files and discussion as speech-to-text
  * left them, and meta.json. Refuses a folder that already holds anything.
@@ -261,24 +240,19 @@ export async function replayRun(opts: ReplayRunOptions): Promise<void> {
     meta,
     log,
   };
-  const guessTracker = mode === 'blind' ? new GuessTracker(opts.llm, runDir, meta) : null;
+  const guessTracker =
+    mode === 'blind' ? new GuessTracker(ctx, exportRecordSource(exported)) : null;
   const limit = limiter(opts.concurrency);
   const roundKey = (quest: number, round: number) => `${quest}/${round}`;
 
-  // Per turn: proofreading, (blind) summary and turn file.
+  // Per turn: proofreading and the turn file.
   const written = new Map<string, Array<Promise<void>>>();
-  const turnTasks = inputs.turns.map((turn, i) => {
+  const turnTasks = inputs.turns.map((turn) => {
     const task = limit(async () => {
       log.info(
         `turn ${turnLabel(turn)} speaker=${turn.speakerDisplayName} (${turn.durationSec.toFixed(1)}s)`
       );
-      await processRawTurn(
-        ctx,
-        turn,
-        mode === 'blind'
-          ? exportProposalAt(exported, turn.questNumber, turnProcessedAt(inputs.turns, i))
-          : null
-      ).catch((err) => log.error(`turn ${turnLabel(turn)} failed`, err));
+      await processRawTurn(ctx, turn).catch((err) => log.error(`turn ${turnLabel(turn)} failed`, err));
     });
     const key = roundKey(turn.questNumber, turn.roundIndex);
     written.set(key, [...(written.get(key) ?? []), task]);

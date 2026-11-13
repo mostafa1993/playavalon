@@ -1,5 +1,5 @@
 /**
- * Transcript corrector — runs between Azure STT and the per-turn summarizer.
+ * Transcript corrector — runs between Azure STT and the turn file.
  *
  * A proofreading LLM pass fixes the common classes of errors Azure's
  * Persian (fa-IR) STT produces: misheard words, wrong verb persons, homophone

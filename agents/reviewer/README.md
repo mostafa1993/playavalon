@@ -12,7 +12,7 @@ Single-VM deployment, single concurrent game.
 
 - **M2**: recorder bot + STT pipeline. Produces `turn_<quest>_<round>_<idx>.json` under
   `/data/games/<game_id>/`.
-- **M3**: per-turn summaries + per-player dossiers + per-quest synthesis (since removed).
+- **M3**: per-turn summaries + per-player dossiers + per-quest synthesis (all since removed).
 - **M4**: final narrative (fa + en) + review UI.
 - **The report from the record** (`.plans/2026-11-13-1640-reviewer-report-accuracy.md`,
   row C): the game record (`record.json`) is the source of every fact, and the report
@@ -34,11 +34,22 @@ LiveKit room  →  bot (audio tracks)  →  turnSegmenter  →  STT (Azure)  →
 game end:  database rows + turn files + discussion.json  →  record.json  →  final report  →  check  →  summary.<lang>.json
 ```
 
-- **Per turn** (`src/pipeline.ts`): STT, the proofreading pass, the turn file. In blind
-  mode a turn summary is added for the detective; god mode writes none, since nothing
-  reads it.
-- **Blind mode, per round of talk**: the detective (`src/reviewer/guessTracker.ts`)
-  updates its guess of every player's role from the round's turn summaries.
+- **Per turn** (`src/pipeline.ts`): STT, the proofreading pass, the turn file.
+- **Blind mode, per round of talk**: the detective (`src/reviewer/guessTracker.ts`,
+  plan row E) gives its read of every player's role from the public record so far:
+  the blind record (no role, no Lady result) cut at the round that just ended
+  (`cutRecord`) — that round's talk and everything before it, the proposal it led to
+  with its vote, a settled quest's mission and Lady of the Lake — never the whole
+  blind record, whose assassin-phase discussion (only the evil players speak in it),
+  pick and outcome give the answer away. It also reads the setup with how many players
+  have each role (`src/gamestate/roleConfig.ts`). Each read is made afresh from the
+  record so far, not from the read before, so an early guess doesn't carry itself
+  forward. Code checks each read against the roster and the setup — every player guessed once,
+  only roles in play, no role given to more players than the setup deals — and asks
+  once more, with what broke, on a break; a second break or a failed call keeps the
+  read before. Every read is from before the assassin phase; the last is the scored
+  read, which the report shows as the detective's (`final_guesses`). A session starts
+  with no reads: `guess_log.json` is written each round, never read back.
 - **At the game's end**: the assassin-phase discussion is proofread into
   `discussion.json`; `record.json` is built in code (`src/gamestate/record.ts`); then
   the final report (`src/reviewer/finalReport.ts`) — one model call per language
@@ -112,9 +123,9 @@ See repo-root `.env.example`. Required vars:
 ```
 $DATA_DIR/<game_id>/
   meta.json                        # players, roles, seating (written at game start)
-  turn_<quest>_<round>_<idx>.json  # raw + corrected transcript (+ summary, blind mode)
+  turn_<quest>_<round>_<idx>.json  # raw + corrected transcript
   discussion.json                  # the assassin-phase discussion, if any (raw + corrected)
-  guess_log.json                   # blind mode: the detective's guesses per round
+  guess_log.json                   # blind mode: the detective's read per round (never read back)
   record.json                      # the game record (written at game end)
   summary.fa.json, summary.en.json # the final report, from the record
   check.fa.json, check.en.json     # the report's check: each statement, what it rests on, rewrites
@@ -180,8 +191,8 @@ Outputs: each run in `<out>/<gameId>/<mode>/run-<k>/` (k = 1…N), which must be
 or empty; every run folder is checked before the first model call. It starts with
 only the inputs — the turn files and `discussion.json` as speech-to-text left them,
 and a `meta.json` built from the export (role-free in blind mode). The pipeline
-then writes what the service writes: turn files with the corrected transcript (and,
-blind, the summary), `guess_log.json` (blind), `discussion.json`, `record.json` (in
+then writes what the service writes: turn files with the corrected transcript,
+`guess_log.json` (blind), `discussion.json`, `record.json` (in
 the run's mode), `summary.fa.json` and `summary.en.json`, and the checks
 `check.fa.json` and `check.en.json`. Last
 comes `record.god.json`, the god record with roles that the judge
@@ -192,10 +203,9 @@ calls and failures (after the client's retries, which are logged as
 
 As of the time:
 
-- in blind mode, a turn's summary is grounded on the proposal standing when the turn
-  ended — the latest of its quest created by then, as `getLatestProposal` gave it live;
 - in blind mode the detective updates after each round of talk, in order — a round
-  per proposal, and the intro — once that round's turn files are written;
+  per proposal, and the intro — once that round's turn files are written, from the
+  record cut at that round;
 - then the discussion, `record.json` and the final report, as at game end.
 
 ## Local development
@@ -213,7 +223,8 @@ passes in — catching drift between a prompt and its caller. Plus unit tests
 for the silence detector, the game record, the final report (the record as its
 prompt reads it, and the summary built around a stub model's answer), the
 report's check (flagged statements rewritten, a clean report left alone), the
-watcher, and the replay (on a stub model).
+blind detective (its read checked against the setup's roles and counts, the re-ask,
+the record cut per round), the watcher, and the replay (on a stub model).
 
 ```
 npm test
