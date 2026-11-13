@@ -173,8 +173,12 @@ async function transcribeOnce(
     const payload = (await res.json()) as AzureSttResponse;
     if (payload.RecognitionStatus === 'Success') {
       const best = payload.NBest?.[0];
+      const transcript = (best?.Display ?? payload.DisplayText ?? '').trim();
+      // Azure can answer Success with no words and confidence 0 (a click in
+      // room noise): no speech, like NoMatch, so it carries no confidence.
+      if (transcript === '') return { transcript: '', confidence: null, raw: payload };
       return {
-        transcript: best?.Display ?? payload.DisplayText ?? '',
+        transcript,
         confidence: typeof best?.Confidence === 'number' ? best.Confidence : null,
         raw: payload,
       };

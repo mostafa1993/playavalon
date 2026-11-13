@@ -185,6 +185,19 @@ test("a long clip's piece that answers InitialSilenceTimeout has no weight in th
   assert.equal(isLowConfidence(result?.confidence ?? null, 0.5), false);
 });
 
+test("a long clip's piece that Azure hears as no words (Success, empty, confidence 0) has no weight", async () => {
+  // Seen live: a click in room noise comes back as Success with an empty
+  // transcript and confidence 0. It must not pull a clear turn's confidence down.
+  const pcm = clip([[50, 3000], [1, 0], [20, 0], [0.2, 1500], [20, 0]]);
+  const { result, calls } = await withFetch(
+    (n) => (n === 0 ? said('the talk', 0.9) : said('', 0)),
+    () => transcribe(azure, pcm, RATE, { retry: { maxAttempts: 1 } })
+  );
+  assert.equal(calls, 2);
+  assert.equal(result?.transcript, 'the talk');
+  assert.equal(result?.confidence, 0.9);
+});
+
 test('transcribe skips the noise-only pieces of a long clip', async () => {
   // 40 s of speech, then 80 s of room noise: the speaker talked only at first.
   const pcm = clip([[40, 3000], [80, 0]]);
