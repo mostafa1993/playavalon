@@ -60,5 +60,5 @@ user: |
 
   Raw transcript:
   {{raw_transcript}}
-
+  {{recheck}}
   Return the corrected Persian text now.

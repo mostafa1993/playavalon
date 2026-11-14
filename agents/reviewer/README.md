@@ -36,7 +36,16 @@ game end:  database rows + turn files + discussion.json  →  record.json  →  
                                                                                                   └→  translation  →  summary.en.json
 ```
 
-- **Per turn** (`src/pipeline.ts`): STT, the proofreading pass, the turn file.
+- **Per turn** (`src/pipeline.ts`): STT, the proofreading pass, the turn file. Code
+  holds the proofreading to the raw transcript (`src/reviewer/proofreadCheck.ts`): it
+  aligns the two word by word, and a table name the correction gained must stand for a
+  raw word in its place that sounds like it (باشید → بشیر, not رسولی → امیر بشیر), never
+  for another player's name; Latin letters the raw text doesn't have break it too. A
+  correction that breaks it is asked for once more, with what broke. A second answer
+  that still has such names keeps its correction with those places put back to the raw
+  words; one that still has Latin letters (sometimes the model's reasoning, cut short)
+  fails the correction, and the turn keeps its raw transcript. On the measured games
+  over a third of turns needed the second ask, and one in eleven had places put back.
 - **Blind mode, per round of talk**: the detective (`src/reviewer/guessTracker.ts`,
   plan row E) gives its read of every player's role from the public record so far:
   the blind record (no role, no Lady result) cut at the round that just ended
@@ -156,8 +165,9 @@ See repo-root `.env.example`. Required vars:
     persons, homophones, Persian half-space / number glitches). It gets the
     table's names, to recognize a misheard name, which it writes in Persian script
     as spoken, and the prompt lists the game's words (roles, sides, the play) as
-    players say them. The turn JSON preserves both `transcript` (corrected) and
-    `transcript_raw`.
+    players say them. Code checks each correction's names and script against the
+    raw transcript and asks once more on a break (Architecture, per turn). The turn
+    JSON preserves both `transcript` (corrected) and `transcript_raw`.
   - `LOW_CONFIDENCE_THRESHOLD` — a turn or assassin-phase transcript whose STT
     confidence is below this (default `0.5`) is flagged `low_confidence` in its
     turn file, `discussion.json` and the record: the report's prompts and the
@@ -268,7 +278,10 @@ Regression tests verify prompt YAML files parse, declare the right
 `response_mime_type`, and reference exactly the variables the agent code
 passes in — catching drift between a prompt and its caller — and that every prompt
 reading player talk treats it as data. Plus unit tests
-for the silence detector and the cut (on noisy audio), the low-confidence flag, the game record, the final report (the record as its
+for the silence detector and the cut (on noisy audio), the low-confidence flag, the proofreading's check
+(a misheard name put right passes, a name put in place of a word that doesn't
+sound like it is refused, the re-ask, the places put back, Latin letters twice
+failing), the game record, the final report (the record as its
 prompt reads it, the talk fenced, the summary built around a stub model's answer,
 the English translated from the checked Persian report and asked again once, a
 failed check or translation never losing the report), the

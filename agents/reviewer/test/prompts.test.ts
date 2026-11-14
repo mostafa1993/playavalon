@@ -34,7 +34,7 @@ const prompts: Array<{
   {
     file: 'correct-transcript.yml',
     mime: 'text/plain',
-    expectedVars: ['raw_transcript', 'players'],
+    expectedVars: ['raw_transcript', 'players', 'recheck'],
   },
   {
     file: 'report-god.yml',
