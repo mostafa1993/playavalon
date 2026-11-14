@@ -36,7 +36,9 @@ export async function findActiveReviewGame(
 ): Promise<ActiveGameRow | null> {
   const { data, error } = await db
     .from('games')
-    .select('id, room_id, phase, rooms!inner(code, ai_review_enabled, ai_review_mode)')
+    // games has two links to rooms (room_id, and next_room_id from migration 032):
+    // name the game's own room, or PostgREST refuses the embed as ambiguous.
+    .select('id, room_id, phase, rooms!games_room_id_fkey!inner(code, ai_review_enabled, ai_review_mode)')
     .eq('rooms.ai_review_enabled', true)
     .is('ended_at', null)
     .neq('phase', 'game_over')
@@ -241,7 +243,8 @@ export interface StaleReview {
 export async function findStaleReviews(db: SupabaseClient): Promise<StaleReview[]> {
   const { data, error } = await db
     .from('game_reviews')
-    .select('game_id, status, games(phase, ended_at, rooms(status))')
+    // The game's own room (games.room_id), not its next room (migration 032).
+    .select('game_id, status, games(phase, ended_at, rooms!games_room_id_fkey(status))')
     .in('status', ['recording', 'generating']);
   if (error) throw error;
 
