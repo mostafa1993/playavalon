@@ -9,8 +9,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { getSupabaseClient } from '@/lib/supabase/client';
-import type { GamePlayer, MerlinQuizState, MerlinQuizVote } from '@/types/game';
+import type { GamePlayer, MerlinQuizState } from '@/types/game';
 import { QUIZ_TIMEOUT_SECONDS, getRemainingSeconds } from '@/lib/domain/merlin-quiz';
 
 interface MerlinQuizProps {
@@ -90,32 +89,6 @@ export function MerlinQuiz({
 
     return () => clearInterval(timer);
   }, [quizState?.quiz_active, quizState?.quiz_complete, onQuizComplete]);
-
-  // Real-time subscription for quiz votes
-  useEffect(() => {
-    const supabase = getSupabaseClient();
-
-    const channel = supabase
-      .channel(`quiz-votes-${gameId}`)
-      .on<MerlinQuizVote>(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'merlin_quiz_votes',
-          filter: `game_id=eq.${gameId}`,
-        },
-        () => {
-          // Refresh quiz state when a new vote comes in
-          fetchQuizState();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [gameId, fetchQuizState]);
 
   // Get other players (exclude self)
   const otherPlayers = players.filter((p) => p.id !== currentPlayerId);

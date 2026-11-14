@@ -33,20 +33,15 @@ npm install
 
 1. Create a new Supabase project at [supabase.com](https://supabase.com)
 
-2. Run the database migrations in order:
-   ```sql
-   -- Run in Supabase SQL Editor:
-   -- 1. supabase/migrations/001_initial_schema.sql
-   -- 2. supabase/migrations/002_rls_policies.sql
-   -- 3. supabase/migrations/003_functions.sql
-   ```
+2. Run every migration in `supabase/migrations/`, in order (on the self-hosted stack,
+   `deploy/migrate.sh` does this; see `docs/deploy-from-scratch.md`).
 
-3. Enable Realtime for the following tables:
-   - `rooms`
-   - `room_players`
-   - `player_roles`
+3. Copy your project credentials from Settings > API
 
-4. Copy your project credentials from Settings > API
+The database API is server-only (migration 033): only the service role reads and writes
+tables — the app's `/api` routes, the reviewer and the bot supervisor; the browser and the
+bots' players use the anon key only to sign in and for broadcast channels. Realtime carries
+only broadcast channels, so no table needs to be in the Realtime publication.
 
 ### 3. Environment Variables
 

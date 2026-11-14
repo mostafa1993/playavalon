@@ -2,8 +2,10 @@
  * Browser-side Supabase client
  *
  * Cookie-backed session via @supabase/ssr. The session JWT is stored in
- * httpOnly cookies set by the server — the browser client reads them to
- * authenticate requests automatically.
+ * cookies set by the server (not httpOnly: @supabase/ssr's default) — the
+ * browser client reads them to authenticate requests automatically. It is used
+ * for auth and broadcast channels only; the database tables are server-only
+ * (migration 033).
  */
 
 import { createBrowserClient as createSSRBrowserClient } from '@supabase/ssr';

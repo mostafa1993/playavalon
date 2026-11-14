@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { RoomList } from '@/components/RoomList';
 import { CreateRoomModal } from '@/components/CreateRoomModal';
 import { useAuth } from '@/hooks/useAuth';
-import { getSupabaseClient } from '@/lib/supabase/client';
 import { RefreshCw } from 'lucide-react';
 import type { RoomListItem } from '@/types/room';
 import type { RoleConfig } from '@/types/role-config';
+
+const ROOM_LIST_REFRESH_MS = 5000;
 
 /**
  * Active rooms list page
@@ -20,13 +21,19 @@ export default function RoomsPage() {
 
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // The list's own fetch error, cleared by the next good fetch; a join or create error
+  // stays until the next join or create.
+  const [listError, setListError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [joiningCode, setJoiningCode] = useState<string | null>(null);
   const [watchingCode, setWatchingCode] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const fetching = useRef(false);
 
   const fetchRooms = useCallback(async () => {
+    if (fetching.current) return;
+    fetching.current = true;
     try {
       const response = await fetch('/api/rooms');
       if (!response.ok) {
@@ -34,47 +41,30 @@ export default function RoomsPage() {
       }
       const { data } = await response.json();
       setRooms(data);
-      setError(null);
+      setListError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch rooms');
+      setListError(err instanceof Error ? err.message : 'Failed to fetch rooms');
     } finally {
+      fetching.current = false;
       setIsLoading(false);
     }
   }, []);
 
+  // The list refetches every 5 s while the tab is visible, and as soon as it becomes
+  // visible again, so new rooms and players show without a reload. The database
+  // tables are server-only (migration 033).
   useEffect(() => {
     fetchRooms();
-
-    const supabase = getSupabaseClient();
-
-    const channel = supabase
-      .channel('rooms-list')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'rooms',
-        },
-        () => {
-          fetchRooms();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'room_players',
-        },
-        () => {
-          fetchRooms();
-        }
-      )
-      .subscribe();
-
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchRooms();
+    }, ROOM_LIST_REFRESH_MS);
+    const onVisible = () => {
+      if (!document.hidden) fetchRooms();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [fetchRooms]);
 
@@ -176,9 +166,9 @@ export default function RoomsPage() {
           </button>
         </div>
 
-        {error && (
+        {(error ?? listError) && (
           <div className="p-4 bg-evil/20 border border-evil/50 rounded-lg animate-slide-up">
-            <p className="text-evil-light text-sm text-center">{error}</p>
+            <p className="text-evil-light text-sm text-center">{error ?? listError}</p>
           </div>
         )}
 
