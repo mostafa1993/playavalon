@@ -1,8 +1,8 @@
 name: role_guess_update
-# Carbon on HIGH: reasoning; it runs in the background each round.
+# Carbon on MEDIUM (on HIGH its thinking ran past the 32,768-token cap on a whole game): reasoning; it runs in the background each round.
 # Thinking counts against max_output_tokens (32,768 at most per non-streaming call).
 model: gemini-4-carbon
-thinking_level: HIGH
+thinking_level: MEDIUM
 max_output_tokens: 32768
 response_mime_type: application/json
 system: |

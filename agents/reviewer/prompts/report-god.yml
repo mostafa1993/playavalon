@@ -1,8 +1,8 @@
 name: report_god
-# Carbon on HIGH: the strongest reasoning for the report; the check (Argon) catches what it invents.
+# Carbon on MEDIUM (on HIGH its thinking ran past the 32,768-token cap on a whole game): the strongest reasoning for the report; the check (Argon) catches what it invents.
 # Thinking counts against max_output_tokens (32,768 at most per non-streaming call).
 model: gemini-4-carbon
-thinking_level: HIGH
+thinking_level: MEDIUM
 max_output_tokens: 32768
 response_mime_type: application/json
 system: |
