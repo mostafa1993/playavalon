@@ -1,4 +1,4 @@
-name: diana
+name: mandana
 order: 4
 # Smart (the LLM player with a voice, Gemini 4): the first four bots a room asks
 # for are smart, ~$1.50-3 each a game; set `mode: stupid` and restart the
@@ -9,7 +9,7 @@ brain:
   type: rule
 # Deliberately slow on role confirmation so the manager has time to
 # inspect the per-player confirmation dashboard in the lobby. The other
-# bots confirm within the default 2-8s; diana waits 25-30s, so the
-# panel shows everyone else as ✓ confirmed with diana still ⏳ waiting.
+# bots confirm within the default 2-8s; mandana waits 25-30s, so the
+# panel shows everyone else as ✓ confirmed with mandana still ⏳ waiting.
 timing:
   confirm_role_ms: [25000, 30000]
