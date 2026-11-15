@@ -202,3 +202,11 @@ test('a turn heard that is not just before one of my slots starts nothing', asyn
   await sleep(30);
   assert.deepEqual(w.calls, ['speak-turn.yml']);
 });
+
+test('a draft still being written races the words written now, and wins if it comes first', async () => {
+  const w = world({ draft: 'پیش‌نویس کامل.', draftMs: 20, fresh: 'hang', ran: false });
+  w.speaker.prepare(turn);
+  await w.speaker.myTurn(turn);
+  assert.deepEqual(w.said, ['پیش‌نویس کامل.']);
+  assert.deepEqual(w.calls, ['speak-turn.yml', 'speak-turn.yml LOW']);
+});

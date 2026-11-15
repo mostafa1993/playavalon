@@ -28,7 +28,7 @@ import type { Identity } from '../types/Identity.js';
 import type { Observation } from '../types/Observation.js';
 import type { AgentLogger } from '../util/logger.js';
 import { generateTurnSpeech, renderNewSince, streamTurnSpeech, streamUpdatedSpeech, type SpeechArgs } from './speechGen.js';
-import { PENDING, drained, firstSentence, joined, settled, type SentenceSource, type Started } from './streams.js';
+import { PENDING, drained, firstSentence, fromSentences, joined, settled, type SentenceSource, type Started } from './streams.js';
 import type { TalkMemory } from './talkMemory.js';
 import { sentences, turnKey, type MyTurnInfo, type VoiceLayer } from './voiceLayer.js';
 
@@ -214,12 +214,13 @@ export class TurnSpeaker {
         { afterMs: this.t.hedgeAfterMs, source },
       ];
 
+      const teamNow = teamKey(obs.game?.current_proposal?.team_member_ids ?? null);
+      // A leader's opening presents the team it chose, proposed or not yet.
+      const teamChangedSince = (d: Draft) => !opensRound(info) && teamNow !== d.team;
       const ready = draftPromise ? await settled(draftPromise) : null;
       if (ready && ready !== PENDING) {
         const newTurns = talk.turnsSince(ready.talkVersion);
-        const teamNow = teamKey(obs.game?.current_proposal?.team_member_ids ?? null);
-        // A leader's opening presents the team it chose, proposed or not yet.
-        const teamChanged = !opensRound(info) && teamNow !== ready.team;
+        const teamChanged = teamChangedSince(ready);
         if (newTurns.length === 0 && !teamChanged) {
           logger.info('[turn] the draft: nothing new since it was written');
           return { text: ready.text };
@@ -237,13 +238,21 @@ export class TurnSpeaker {
         return { text: ready.text };
       }
 
-      logger.info(`[turn] no draft ready (${draftPromise ? 'still being written, or failed' : 'none'}); writing the words now`);
-      const fresh = await firstSentence(
-        hedged((signal) => streamTurnSpeech(llm, { ...args, override: QUICK_SPEECH }, signal)),
-        this.t.passAtMs - elapsed()
-      );
+      // A draft still being written races the words written now, if nothing has happened since it began.
+      const pending = ready === PENDING ? draftPromise : undefined;
+      const draftIfCurrent: SentenceSource = () =>
+        (async function* () {
+          const d = await pending;
+          if (!d || talk.turnsSince(d.talkVersion).length > 0 || teamChangedSince(d)) throw new Error('no current draft');
+          yield* fromSentences(sentences(d.text));
+        })();
+      logger.info(`[turn] no draft ready (${pending ? 'still being written: racing it' : draftPromise ? 'it failed' : 'none'}); writing the words now`);
+      const tries = hedged((signal) => streamTurnSpeech(llm, { ...args, override: QUICK_SPEECH }, signal));
+      if (pending) tries.push({ afterMs: 0, source: draftIfCurrent });
+      const fresh = await firstSentence(tries, this.t.passAtMs - elapsed());
       if (fresh) {
-        logger.info(`[turn] words written now (call ${fresh.index + 1}, ${(elapsed() / 1000).toFixed(1)} s)`);
+        const which = fresh.index === 2 ? 'the draft, finished meanwhile' : `words written now (call ${fresh.index + 1})`;
+        logger.info(`[turn] ${which}, ${(elapsed() / 1000).toFixed(1)} s`);
         return { started: drained(fresh) };
       }
       const late = draftPromise ? await settled(draftPromise) : null;

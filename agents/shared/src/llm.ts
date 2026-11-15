@@ -80,7 +80,16 @@ function withOverride(loaded: PromptFile, override?: ModelOverride): PromptFile 
  * JSON line (prompt, model, level, seconds, the filled prompts, the answer):
  * the record that measurements replay.
  */
-function dump(entry: { prompt: string; model: string; level?: string; ms: number; system: string; user: string; output: string }): void {
+function dump(entry: {
+  prompt: string;
+  model: string;
+  level?: string;
+  ms: number;
+  system: string;
+  user: string;
+  output: string;
+  usage?: { input?: number; output?: number; thoughts?: number };
+}): void {
   const file = process.env.LLM_DUMP_FILE;
   if (!file) return;
   try {
@@ -184,7 +193,10 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
             })`
           );
         }
-        dump({ prompt: promptFile, model: modelName, level: prompt.thinking_level, ms: Date.now() - started, system: systemText, user: userText, output: text });
+        dump({
+          prompt: promptFile, model: modelName, level: prompt.thinking_level, ms: Date.now() - started,
+          system: systemText, user: userText, output: text, usage: usageOf(res.usageMetadata),
+        });
         return text;
       },
       {
@@ -205,9 +217,11 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
     const abortSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
     const started = Date.now();
     let output = '';
+    let usage: ReturnType<typeof usageOf>;
     try {
       const chunks = await ai.models.generateContentStream({ model: modelName, contents: userText, config: { ...config, abortSignal } });
       for await (const chunk of chunks) {
+        if (chunk.usageMetadata) usage = usageOf(chunk.usageMetadata);
         if (chunk.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS) {
           throw new OutOfTokensError(promptFile, modelName, prompt.thinking_level);
         }
@@ -228,7 +242,7 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
       throw err;
     }
     if (!output) throw new Error(`LLM returned an empty stream for prompt ${promptFile}`);
-    dump({ prompt: promptFile, model: modelName, level: prompt.thinking_level, ms: Date.now() - started, system: systemText, user: userText, output });
+    dump({ prompt: promptFile, model: modelName, level: prompt.thinking_level, ms: Date.now() - started, system: systemText, user: userText, output, usage });
   }
 
   return {
@@ -245,6 +259,11 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
       }
     },
   };
+}
+
+/** A call's token counts, for the call record. */
+function usageOf(u: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } | undefined) {
+  return u ? { input: u.promptTokenCount, output: u.candidatesTokenCount, thoughts: u.thoughtsTokenCount } : undefined;
 }
 
 /** How long one model call may take, unless its prompt says otherwise. */

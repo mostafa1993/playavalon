@@ -45,9 +45,9 @@ export interface Started {
 /**
  * The first of several tries to give a sentence wins; the others are stopped.
  * Each try starts at its `afterMs`, or at once when every try started so far
- * has failed (a hung call is hedged by a second one; a failed one is replaced
- * straight away). Null when every try fails, or none gives a sentence within
- * `withinMs`.
+ * has failed (a hung call is hedged by a second one; a failed one, with
+ * nothing else running, is replaced straight away). Null when every try
+ * fails, or none gives a sentence within `withinMs`.
  */
 export function firstSentence(tries: { afterMs: number; source: SentenceSource }[], withinMs: number): Promise<Started | null> {
   return new Promise((resolve) => {
@@ -60,6 +60,7 @@ export function firstSentence(tries: { afterMs: number; source: SentenceSource }
     const started = new Set<number>();
     const timers: ReturnType<typeof setTimeout>[] = [];
     let failed = 0;
+    let inFlight = 0;
     let done = false;
 
     const finish = (winner: Running | null, first?: string) => {
@@ -83,14 +84,24 @@ export function firstSentence(tries: { afterMs: number; source: SentenceSource }
       }
       const r: Running = { index, ctrl, it };
       running.push(r);
+      inFlight += 1;
       it.next().then(
-        (step) => (step.done ? onFail() : done ? stop(r) : finish(r, step.value)),
-        () => onFail()
+        (step) => {
+          inFlight -= 1;
+          if (step.done) onFail();
+          else if (done) stop(r);
+          else finish(r, step.value);
+        },
+        () => {
+          inFlight -= 1;
+          onFail();
+        }
       );
     };
 
     const onFail = () => {
       failed += 1;
+      if (inFlight > 0) return;
       const next = tries.findIndex((_, i) => !started.has(i));
       if (next >= 0) launch(next);
       else if (failed >= tries.length) finish(null);
