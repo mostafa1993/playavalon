@@ -12,6 +12,7 @@
  */
 
 import {
+  FinishReason,
   GoogleGenAI,
   HarmCategory,
   HarmBlockThreshold,
@@ -77,7 +78,23 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
     location: opts.location,
   });
 
+  /**
+   * A Gemini 4 call that runs out of output tokens (its thinking past the cap,
+   * seen on a whole game's record) is asked once more a thinking level lower,
+   * HIGH → MEDIUM → LOW, rather than failing.
+   */
   const invoke = async (promptFile: string, vars: PromptVars, override?: ModelOverride): Promise<string> => {
+    try {
+      return await invokeOnce(promptFile, vars, override);
+    } catch (err) {
+      const lower = err instanceof OutOfTokensError && isGemini4(err.model) ? lowerThinkingLevel(err.level) : null;
+      if (!lower || !(err instanceof OutOfTokensError)) throw err;
+      console.warn(`[llm] ${promptFile} ran out of tokens on ${err.model} ${err.level}; asking once more on ${lower}`);
+      return invoke(promptFile, vars, { model: err.model, thinking_level: lower });
+    }
+  };
+
+  const invokeOnce = async (promptFile: string, vars: PromptVars, override?: ModelOverride): Promise<string> => {
     const loaded = await loadPrompt(opts.promptsDir, promptFile);
     const prompt: PromptFile = override
       ? { ...loaded, model: override.model, thinking_level: override.thinking_level, thinking_budget: undefined, temperature: undefined }
@@ -106,6 +123,10 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
         });
 
         const text = res.text;
+        if (res.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS) {
+          // Cut off (or empty) at the output cap: a truncated answer is no answer.
+          throw new OutOfTokensError(promptFile, modelName, prompt.thinking_level);
+        }
         if (typeof text !== 'string' || text.length === 0) {
           const candidate = res.candidates?.[0];
           const finishReason = candidate?.finishReason ?? 'UNKNOWN';
@@ -143,6 +164,24 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
       }
     },
   };
+}
+
+/** A call whose answer hit its output cap: empty, or cut off. */
+export class OutOfTokensError extends Error {
+  constructor(
+    readonly promptFile: string,
+    readonly model: string,
+    readonly level: ThinkingLevelName | undefined
+  ) {
+    super(`LLM ran out of output tokens for prompt ${promptFile} (finishReason=MAX_TOKENS)`);
+  }
+}
+
+/** The next thinking level down, or null at LOW (or with no level). */
+export function lowerThinkingLevel(level: ThinkingLevelName | undefined): ThinkingLevelName | null {
+  if (level === 'HIGH') return 'MEDIUM';
+  if (level === 'MEDIUM') return 'LOW';
+  return null;
 }
 
 /** A Gemini 4 model (gemini-4-argon, -carbon, -hydrogen, …). */

@@ -66,3 +66,11 @@ test('LiveKit native handle errors are recognised, others are not', async () => 
   assert.equal(isLiveKitHandleError(new Error('ECONNREFUSED')), false);
   assert.equal(isLiveKitHandleError('trying to drop an invalid handle'), false);
 });
+
+test('out of tokens steps the thinking level down, HIGH → MEDIUM → LOW, then stops', async () => {
+  const { lowerThinkingLevel } = await import('@avalon/shared');
+  assert.equal(lowerThinkingLevel('HIGH'), 'MEDIUM');
+  assert.equal(lowerThinkingLevel('MEDIUM'), 'LOW');
+  assert.equal(lowerThinkingLevel('LOW'), null);
+  assert.equal(lowerThinkingLevel(undefined), null);
+});
