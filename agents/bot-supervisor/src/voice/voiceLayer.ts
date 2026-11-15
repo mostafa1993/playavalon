@@ -42,6 +42,7 @@ import {
   type SpeakingTimerState,
 } from '@avalon/shared';
 import { TalkMemory } from './talkMemory.js';
+import { TalkClock } from './talkClock.js';
 import type { AgentLogger } from '../util/logger.js';
 
 const EAR_SAMPLE_RATE = 16000; // matches the reviewer's STT rate
@@ -105,6 +106,8 @@ function readVoiceEnv(): VoiceEnv | null {
 }
 
 export class VoiceLayer {
+  /** The speaking timer as heard on the data channel (vote timing reads it). */
+  readonly clock = new TalkClock();
   private readonly memory: TalkMemory;
   private room: Room | null = null;
   private readonly consumers = new Map<string, AbortController>();
@@ -258,6 +261,7 @@ export class VoiceLayer {
         ? (state.speakingOrder[state.currentSpeakerIndex] ?? null)
         : null;
     this.currentActiveSpeaker = active;
+    this.clock.onState(state.timerRunning);
     if (active !== this.selfIdentity || !this.onMyTurn) return;
 
     const quest = state.isIntro ? 0 : state.questNumber;

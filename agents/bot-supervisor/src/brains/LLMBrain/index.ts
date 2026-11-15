@@ -25,13 +25,21 @@ import type { Brain, BrainContext } from '../Brain.js';
 import type { GameObservation } from '../../types/Observation.js';
 import { RuleBrain } from '../RuleBrain/index.js';
 import { seatTable } from '../seats.js';
+import { voteReady } from '../voteTiming.js';
+import { raceWithDeadline } from '../deadline.js';
 
 const AUTO_APPROVE_VOTE_TRACK = 4;
+/** Carbon's moves race the same prompt on Hydrogen (deadline.ts). */
+const FAST = { model: 'gemini-4-hydrogen', thinking_level: 'HIGH' } as const;
+const PROPOSE_DEADLINE_MS = 60_000;
+const ASSASSIN_DEADLINE_MS = 90_000;
 
 export class LLMBrain implements Brain {
   private readonly fallback = new RuleBrain();
   private llm: LLMClient | null = null;
   private llmUnavailable = false;
+  /** When the bot first saw the proposal it may vote on. */
+  private proposalSeen: { id: string; at: number } | null = null;
 
   async decide(ctx: BrainContext): Promise<Action | null> {
     const ruleAction = await this.fallback.decide(ctx);
@@ -41,6 +49,8 @@ export class LLMBrain implements Brain {
       case 'propose':
         return this.withFallback(ctx, ruleAction, () => this.decidePropose(ctx));
       case 'vote':
+        // Vote after the table has talked about the team (voteTiming.ts).
+        if (!this.voteTime(ctx)) return null;
         // Hard rule: a 5th rejection auto-loses the game — never consult the LLM.
         if (ctx.observation.game?.vote_track === AUTO_APPROVE_VOTE_TRACK) return ruleAction;
         return this.withFallback(ctx, ruleAction, () => this.decideVote(ctx));
@@ -101,10 +111,8 @@ export class LLMBrain implements Brain {
   private async decidePropose(ctx: BrainContext): Promise<Action | null> {
     const game = ctx.observation.game!;
     const size = game.quest_requirement.size;
-    const out = await this.llm!.runJson<{ team: string[]; reason?: string }>('decide-propose.yml', {
-      ...(await this.baseVars(ctx, game)),
-      team_size: size,
-    });
+    const vars = { ...(await this.baseVars(ctx, game)), team_size: size };
+    const out = await this.race<{ team: string[]; reason?: string }>(ctx, 'decide-propose.yml', vars, PROPOSE_DEADLINE_MS);
     this.noteReason(ctx, 'decide-propose.yml', out.reason);
     const ids = this.namesToIds(game, out.team);
     if (!ids || ids.length !== size || new Set(ids).size !== size) return null;
@@ -170,10 +178,8 @@ export class LLMBrain implements Brain {
   private async decideAssassin(ctx: BrainContext): Promise<Action | null> {
     const game = ctx.observation.game!;
     const candidates = game.players.filter((p) => p.id !== ctx.identity.user_id);
-    const out = await this.llm!.runJson<{ target: string; reason?: string }>('decide-assassin.yml', {
-      ...(await this.baseVars(ctx, game)),
-      candidates: candidates.map((p) => p.display_name).join(', '),
-    });
+    const vars = { ...(await this.baseVars(ctx, game)), candidates: candidates.map((p) => p.display_name).join(', ') };
+    const out = await this.race<{ target: string; reason?: string }>(ctx, 'decide-assassin.yml', vars, ASSASSIN_DEADLINE_MS);
     this.noteReason(ctx, 'decide-assassin.yml', out.reason);
     const target = candidates.find((p) => p.display_name === out.target);
     return target ? { kind: 'assassin_guess', target_id: target.id } : null;
@@ -207,6 +213,34 @@ export class LLMBrain implements Brain {
       game_so_far: smart ? await smart.gameSoFar(ctx.observation) : '(the game so far is unavailable)',
       private_read: smart ? smart.privateRead() : '(no read)',
     };
+  }
+
+  /** Whether it is time to vote on the current proposal: after the talk about it. */
+  private voteTime(ctx: BrainContext): boolean {
+    const game = ctx.observation.game;
+    const proposal = game?.current_proposal;
+    if (!game || !proposal) return true;
+    if (this.proposalSeen?.id !== proposal.id) this.proposalSeen = { id: proposal.id, at: Date.now() };
+    const ready = voteReady({
+      now: Date.now(),
+      proposalSeenAt: this.proposalSeen.at,
+      votesCast: game.votes_submitted,
+      others: game.players.length - 1,
+      clock: ctx.talkClock ?? null,
+    });
+    return ready;
+  }
+
+  /** A Carbon move raced against the same prompt on Hydrogen, with a deadline. */
+  private async race<T>(ctx: BrainContext, prompt: string, vars: Record<string, string | number>, deadlineMs: number): Promise<T> {
+    const started = Date.now();
+    const { value, from } = await raceWithDeadline(
+      this.llm!.runJson<T>(prompt, vars),
+      this.llm!.runJson<T>(prompt, vars, FAST),
+      deadlineMs
+    );
+    ctx.logger.info(`[smart] ${prompt}: ${from === 'primary' ? 'Carbon' : 'Hydrogen (Carbon past its deadline)'} answered, ${Math.round((Date.now() - started) / 1000)} s`);
+    return value;
   }
 
   /** Log the model's one-sentence reason, for reading a game afterwards. */

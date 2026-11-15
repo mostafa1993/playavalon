@@ -19,7 +19,7 @@ import {
   type SafetySetting,
   type ThinkingConfig,
 } from '@google/genai';
-import { loadPrompt, fill, type PromptFile } from './prompts.js';
+import { loadPrompt, fill, type PromptFile, type ThinkingLevelName } from './prompts.js';
 import { isNetworkError, retry } from './retry.js';
 
 // Prepended to every system prompt. Clarifies to Gemini that accusatory
@@ -42,9 +42,15 @@ const SAFETY_SETTINGS: SafetySetting[] = [
 
 export interface LLMClient {
   /** Run a prompt file, substituting `{{var}}` placeholders, return the raw text. */
-  runText: (promptFile: string, vars: PromptVars) => Promise<string>;
+  runText: (promptFile: string, vars: PromptVars, override?: ModelOverride) => Promise<string>;
   /** Run a prompt file whose response_mime_type is application/json, return parsed JSON. */
-  runJson: <T = unknown>(promptFile: string, vars: PromptVars) => Promise<T>;
+  runJson: <T = unknown>(promptFile: string, vars: PromptVars, override?: ModelOverride) => Promise<T>;
+}
+
+/** Run a prompt on another model than its file names (e.g. a faster fallback). */
+export interface ModelOverride {
+  model: string;
+  thinking_level?: ThinkingLevelName;
 }
 
 export type PromptVars = Record<string, string | number | null | undefined>;
@@ -71,8 +77,11 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
     location: opts.location,
   });
 
-  const invoke = async (promptFile: string, vars: PromptVars): Promise<string> => {
-    const prompt = await loadPrompt(opts.promptsDir, promptFile);
+  const invoke = async (promptFile: string, vars: PromptVars, override?: ModelOverride): Promise<string> => {
+    const loaded = await loadPrompt(opts.promptsDir, promptFile);
+    const prompt: PromptFile = override
+      ? { ...loaded, model: override.model, thinking_level: override.thinking_level, thinking_budget: undefined, temperature: undefined }
+      : loaded;
     const systemText = GAME_CONTEXT_PREAMBLE + fill(prompt.system, vars);
     const userText = fill(prompt.user, vars);
 
@@ -123,8 +132,8 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
 
   return {
     runText: invoke,
-    async runJson<T = unknown>(promptFile: string, vars: PromptVars): Promise<T> {
-      const text = await invoke(promptFile, vars);
+    async runJson<T = unknown>(promptFile: string, vars: PromptVars, override?: ModelOverride): Promise<T> {
+      const text = await invoke(promptFile, vars, override);
       try {
         return JSON.parse(text) as T;
       } catch (err) {

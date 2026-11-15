@@ -12,6 +12,7 @@ import type { Observation } from '../types/Observation.js';
 import type { Action } from '../types/Action.js';
 import type { AgentLogger } from '../util/logger.js';
 import type { SmartView } from './smartView.js';
+import type { TalkClock } from '../voice/talkClock.js';
 
 export interface BrainContext {
   /** Stable info about the agent itself: user_id, role, intel, etc. */
@@ -27,6 +28,9 @@ export interface BrainContext {
   /** Smart mode: the talk, the game's history and its role setup.
    *  Absent/null for stupid bots and in tests. */
   smart?: SmartView | null;
+  /** Smart mode: the speaking timer as the bot hears it; null until it has
+   *  joined the voice room (or if it can't). */
+  talkClock?: TalkClock | null;
 }
 
 export interface Brain {

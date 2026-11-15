@@ -234,6 +234,7 @@ export class AgentEngine {
           rng: Math.random,
           logger: this.logger,
           smart: this.smartView,
+          talkClock: this.voice?.clock ?? null,
         };
         const action = await this.brain.decide(brainCtx);
         if (action && action.kind !== 'noop') {
