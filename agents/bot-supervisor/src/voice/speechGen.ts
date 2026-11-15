@@ -7,7 +7,7 @@
  * says.
  */
 
-import type { LLMClient } from '@avalon/shared';
+import type { LLMClient, ModelOverride } from '@avalon/shared';
 import type { SmartView } from '../brains/smartView.js';
 import type { Identity } from '../types/Identity.js';
 import type { Observation } from '../types/Observation.js';
@@ -23,6 +23,8 @@ export async function generateTurnSpeech(
     turn: MyTurnInfo;
     /** What this speech is, when it isn't a speaking slot (the assassin discussion). */
     situation?: string;
+    /** Another model or thinking level than speak-turn.yml names (the quick fallback). */
+    override?: ModelOverride;
   }
 ): Promise<string> {
   const { identity, observation, smart, turn } = args;
@@ -35,7 +37,7 @@ export async function generateTurnSpeech(
     game_so_far: await smart.gameSoFar(observation),
     private_read: smart.privateRead(),
     situation: args.situation ?? situation(identity, observation, turn, nameOf),
-  });
+  }, args.override);
   return text.trim();
 }
 

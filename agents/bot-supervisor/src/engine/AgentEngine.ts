@@ -20,6 +20,7 @@ import type { AgentLogger } from '../util/logger.js';
 import type { Brain } from '../brains/Brain.js';
 import type { Identity } from '../types/Identity.js';
 import type { Action } from '../types/Action.js';
+import type { Observation } from '../types/Observation.js';
 import { SessionManager } from './SessionManager.js';
 import { ApiClient, ApiError } from './ApiClient.js';
 import { Observer } from './Observer.js';
@@ -240,6 +241,9 @@ export class AgentEngine {
           discussionClock: this.voice?.discussionClock ?? null,
         };
         const action = await this.brain.decide(brainCtx);
+        // A leader opens the round its proposal starts: write that opening, with
+        // the chosen team, before the proposal goes in and the host starts the clock.
+        if (action?.kind === 'propose') await this.writeOpening(action.team, obs);
         if (action && action.kind !== 'noop') {
           // Human-feel jitter for this action kind.
           const [min, max] = this.timingFor(action.kind, cfg);
@@ -349,31 +353,60 @@ export class AgentEngine {
   /** Statements being written for upcoming slots, by turn key. */
   private readonly prepared = new Map<string, Promise<string | null>>();
 
-  /** The bot is next to speak: start writing its statement now. */
+  /**
+   * The prepared statement if it is ready within QUICK_AFTER_MS of the slot
+   * opening; otherwise a quick one is written too, and whichever comes first
+   * is said — the bot speaks in its turn rather than miss it.
+   */
+  private async inTime(prepared: Promise<string | null>, quick: () => Promise<string | null>): Promise<string | null> {
+    const early = await Promise.race([prepared, sleep(QUICK_AFTER_MS).then(() => undefined)]);
+    if (early !== undefined) return early;
+    this.logger.info('[mouth] the statement is not ready; writing a quick one as well');
+    const fast = quick();
+    const first = await Promise.race([prepared.then((t) => ({ t, from: 'prepared' })), fast.then((t) => ({ t, from: 'quick' }))]);
+    if (first.t) {
+      this.logger.info(`[mouth] saying the ${first.from} statement`);
+      return first.t;
+    }
+    return first.from === 'prepared' ? fast : prepared;
+  }
+
+  /** The leader's opening of a quest's round, written when it chose its team. */
+  private opening: { quest: number; text: Promise<string | null> } | null = null;
+
+  /** The bot is near its turn: start writing its statement (a leader's opening is written with its proposal). */
   private prepareSpeech(info: MyTurnInfo): void {
     const key = turnKey(info);
+    if (opensRound(info)) return;
     if (!this.prepared.has(key)) this.prepared.set(key, this.writeSpeech(info));
   }
 
-  /**
-   * Write the statement for a slot. When the bot leads and opens the round, it
-   * presents its team, so it waits (up to a minute) for its own proposal.
-   */
-  private async writeSpeech(info: MyTurnInfo): Promise<string | null> {
+  /** As leader, write the round's opening with the team just chosen; wait for it, so the slot finds it ready. */
+  private async writeOpening(team: string[], obs: Observation): Promise<void> {
+    if (!this.voice || !obs.game) return;
+    const names = team.map((id) => obs.game!.players.find((p) => p.id === id)?.display_name ?? 'someone').join(', ');
+    const quest = obs.game.current_quest;
+    const text = this.writeSpeech(
+      { quest, round: 0, turnIndex: 0, speakers: 0 },
+      `Quest ${quest}, vote track ${obs.game.vote_track}/5. You are the leader and speak first: present your team [${names}] and why you chose it.`
+    );
+    this.opening = { quest, text };
+    await text;
+  }
+
+  /** Write the statement for a slot (or for the situation given); `quick` on Hydrogen LOW. */
+  private async writeSpeech(info: MyTurnInfo, situation?: string, quick = false): Promise<string | null> {
     const started = Date.now();
     try {
       const identity = this.observer.identity();
       const smart = this.smartView;
       const llm = (this.speechLLM ??= createBotLLM());
       if (!identity || !smart || !llm) return null;
-      let obs = await this.observer.fetch();
-      const opens = info.quest > 0 && info.turnIndex === 0;
-      for (let waited = 0; opens && !obs.game?.current_proposal && waited < 60_000; waited += 2_000) {
-        await sleep(2_000);
-        obs = await this.observer.fetch();
-      }
-      const text = await generateTurnSpeech(llm, { identity, observation: obs, smart, turn: info });
-      this.logger.info(`[mouth] statement written in ${Math.round((Date.now() - started) / 1000)} s (${sentences(text).length} sentences)`);
+      const obs = await this.observer.fetch();
+      const text = await generateTurnSpeech(llm, {
+        identity, observation: obs, smart, turn: info, situation, override: quick ? QUICK_SPEECH : undefined,
+      });
+      this.logger.info(`[mouth] ${quick ? 'quick ' : ''}statement written in ${Math.round((Date.now() - started) / 1000)} s (${sentences(text).length} sentences)`);
       return text || null;
     } catch (err) {
       this.logger.warn(`[mouth] writing the statement failed: ${(err as Error).message}`);
@@ -389,7 +422,6 @@ export class AgentEngine {
       const smart = this.smartView;
       const llm = (this.speechLLM ??= createBotLLM());
       if (!voice || !identity || !smart || !llm || identity.role !== 'evil') return;
-      const startedAt = Date.now();
       const obs = await this.observer.fetch();
       const text = await generateTurnSpeech(llm, {
         identity,
@@ -398,8 +430,10 @@ export class AgentEngine {
         turn: { quest: obs.game?.current_quest ?? 0, round: 0, turnIndex: 0, speakers: 0 },
         situation: DISCUSSION_SITUATION,
       });
-      const spoken = text ? await voice.say(text, startedAt, { free: true }) : null;
+      // No slot in the discussion: the usual length, counted from when the words are ready.
+      const spoken = text ? await voice.say(text, Date.now(), { free: true }) : null;
       if (spoken) {
+        this.logger.info(`[mouth] said in the discussion: ${spoken}`);
         this.talkMemory?.addDiscussion(identity.display_name, spoken);
         this.tell({ type: 'discussed', speaker: identity.display_name, text: spoken });
       }
@@ -416,9 +450,11 @@ export class AgentEngine {
       const voice = this.voice;
       const identity = this.observer.identity();
       if (!voice || !identity) return;
-      const pending = this.prepared.get(key) ?? this.writeSpeech(info);
+      const opening = opensRound(info) && this.opening?.quest === info.quest ? this.opening.text : null;
+      if (opening) this.opening = null;
+      const pending = opening ?? this.prepared.get(key) ?? this.writeSpeech(info);
       this.prepared.delete(key);
-      const text = await pending;
+      const text = await this.inTime(pending, () => this.writeSpeech(info, undefined, true));
       if (!text) {
         await voice.handOn();
         return;
@@ -426,6 +462,7 @@ export class AgentEngine {
       const spoken = await voice.say(text, slotStartedAt);
       // Remember what I said — my ears can't hear my published track.
       if (spoken) {
+        this.logger.info(`[mouth] said (Q${info.quest}/R${info.round}): ${spoken}`);
         this.talkMemory?.addTurn(info.quest, info.round, identity.display_name, spoken);
         this.tell({ type: 'said', quest: info.quest, round: info.round, speaker: identity.display_name, text: spoken });
       }
@@ -460,3 +497,13 @@ export class AgentEngine {
 
 // keep TS happy about the unused import warning if Identity isn't referenced
 export type { Identity };
+
+/** The leader's first turn of a quest's round (the intro round has no proposal to present). */
+function opensRound(info: MyTurnInfo): boolean {
+  return info.quest > 0 && info.turnIndex === 0;
+}
+
+/** How long into its slot the bot waits for its prepared statement before writing a quick one too. */
+const QUICK_AFTER_MS = 6_000;
+/** The quick statement: Hydrogen on LOW, about 7-10 s. */
+const QUICK_SPEECH = { model: 'gemini-4-hydrogen', thinking_level: 'LOW' } as const;

@@ -32,7 +32,8 @@ import { assassinReady } from '../assassinTiming.js';
 const AUTO_APPROVE_VOTE_TRACK = 4;
 /** Carbon's moves race the same prompt on Hydrogen (deadline.ts). */
 const FAST = { model: 'gemini-4-hydrogen', thinking_level: 'HIGH' } as const;
-const PROPOSE_DEADLINE_MS = 60_000;
+/** A leader also writes its opening before proposing: about 45 + 20-40 s in all, as human leaders take. */
+const PROPOSE_DEADLINE_MS = 45_000;
 /** The assassin decides after the discussion: Carbon gets a minute more. */
 const ASSASSIN_DEADLINE_MS = 60_000;
 
@@ -173,7 +174,10 @@ export class LLMBrain implements Brain {
     const lady = game.lady_of_lake;
     if (!lady) return null;
     const eligible = game.players.filter(
-      (p) => p.id !== ctx.identity.user_id && !lady.investigated_player_ids.includes(p.id)
+      (p) =>
+        p.id !== ctx.identity.user_id &&
+        !lady.investigated_player_ids.includes(p.id) &&
+        !lady.previous_lady_holder_ids.includes(p.id)
     );
     const out = await this.llm!.runJson<{ target: string; reason?: string }>('decide-lady.yml', {
       ...(await this.baseVars(ctx, game)),

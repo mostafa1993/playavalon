@@ -86,6 +86,8 @@ export interface GameObservation {
   lady_of_lake: null | {
     holder_id: string | null;
     investigated_player_ids: string[];
+    /** Players who held the Lady before: the game refuses them as targets too. */
+    previous_lady_holder_ids: string[];
     is_holder: boolean;
     can_investigate: boolean;
   };

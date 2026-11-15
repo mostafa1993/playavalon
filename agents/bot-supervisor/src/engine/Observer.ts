@@ -203,6 +203,7 @@ export class Observer {
           ? {
               holder_id: d.lady_of_lake.holder_id,
               investigated_player_ids: d.lady_of_lake.investigated_player_ids,
+              previous_lady_holder_ids: d.lady_of_lake.previous_lady_holder_ids ?? [],
               is_holder: d.lady_of_lake.is_holder,
               can_investigate: d.lady_of_lake.can_investigate,
             }

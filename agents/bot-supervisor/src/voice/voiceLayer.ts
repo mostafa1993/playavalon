@@ -56,7 +56,7 @@ export interface MyTurnInfo {
 /** Fired once when the speaking timer reaches the bot's own slot. */
 export type MyTurnHandler = (info: MyTurnInfo) => void;
 
-/** Fired once when the bot becomes the next speaker (or is queued to speak): time to write. */
+/** Fired once when the bot is within two speakers of its slot (or queued): time to write. */
 export type PrepareHandler = (info: MyTurnInfo) => void;
 
 /** The turn a MyTurnInfo is about, the same for its prepare and its slot. */
@@ -260,7 +260,7 @@ export class VoiceLayer {
     }
   }
 
-  /** The bot is next (or queued and not started): fire onPrepare once for that slot. */
+  /** The bot is one of the next two speakers (or queued): fire onPrepare once for that slot. */
   private watchForNext(state: SpeakingTimerState, quest: number, round: number): void {
     if (!this.onPrepare || !state.speakingOrder) return;
     let mine = -1;
@@ -270,7 +270,8 @@ export class VoiceLayer {
         break;
       }
     }
-    if (mine < 0 || mine - state.currentSpeakerIndex > 1) return;
+    // Two speakers ahead: a silent player's turn passes in seconds, and a statement takes 20-40 s.
+    if (mine < 0 || mine - state.currentSpeakerIndex > 2) return;
     const info = { quest, round, turnIndex: mine, speakers: state.speakingOrder.length };
     const key = turnKey(info);
     if (key === this.lastPreparedKey) return;

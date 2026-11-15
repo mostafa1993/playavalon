@@ -26,10 +26,11 @@ export async function decide(ctx: BrainContext): Promise<Action | null> {
   if (!game.lady_of_lake.can_investigate) return null;  // not our turn / wrong phase
 
   const me = selfId(ctx);
-  const investigated = new Set(game.lady_of_lake.investigated_player_ids);
+  // The game refuses a player already looked at, and one who held the Lady before.
+  const refused = new Set([...game.lady_of_lake.investigated_player_ids, ...game.lady_of_lake.previous_lady_holder_ids]);
   const eligible = game.players
     .map((p) => p.id)
-    .filter((id) => id !== me && !investigated.has(id));
+    .filter((id) => id !== me && !refused.has(id));
 
   if (eligible.length === 0) {
     ctx.logger.warn('lady_of_lake: no eligible targets; skipping');
