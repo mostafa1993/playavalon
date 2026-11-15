@@ -103,7 +103,11 @@ export async function createRoomForPlayer(
   // A player is in one waiting or dealt room at a time
   const currentRoom = await getPlayerCurrentRoom(client, playerId);
   if (currentRoom) {
-    throw new ApiError(ERROR_CODES.PLAYER_ALREADY_IN_ROOM, 'Player is already in a room', 409);
+    throw new ApiError(
+      ERROR_CODES.PLAYER_ALREADY_IN_ROOM,
+      `You are already in room ${currentRoom.room_code}; leave it first`,
+      409
+    );
   }
 
   const code = await generateUniqueRoomCode(client);

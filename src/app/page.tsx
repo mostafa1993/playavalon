@@ -42,8 +42,8 @@ export default function Home() {
         }),
       });
       if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: 'Failed to create room' }));
-        setGeneralError(data.error || 'Failed to create room');
+        const data = await response.json().catch(() => null);
+        setGeneralError(data?.error?.message || 'Failed to create room');
         return;
       }
       const data = await response.json();
@@ -76,8 +76,8 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
       });
       if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: 'Failed to join room' }));
-        setRoomCodeError(data.error || 'Failed to join room');
+        const data = await response.json().catch(() => null);
+        setRoomCodeError(data?.error?.message || 'Failed to join room');
         return;
       }
       router.push(`/rooms/${code}`);

@@ -75,7 +75,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Check if player is in another room
     const currentRoom = await getPlayerCurrentRoom(supabase, user.id);
     if (currentRoom) {
-      return errors.playerAlreadyInRoom();
+      return errors.playerAlreadyInRoom(`You are already in room ${currentRoom.room_code}; leave it first`);
     }
 
     // Get current player count
