@@ -261,7 +261,7 @@ export class VoiceLayer {
         ? (state.speakingOrder[state.currentSpeakerIndex] ?? null)
         : null;
     this.currentActiveSpeaker = active;
-    this.clock.onState(state.timerRunning);
+    this.clock.onState(state);
     if (active !== this.selfIdentity || !this.onMyTurn) return;
 
     const quest = state.isIntro ? 0 : state.questNumber;

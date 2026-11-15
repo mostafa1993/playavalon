@@ -6,15 +6,18 @@
  *
  * Ready when any of:
  *   - every other player has voted (nothing more to wait for);
- *   - a speaking round ran after the proposal and the timer has now stopped
- *     for STOPPED_MS (the round about this team is over);
+ *   - the round of talk finished after the proposal: its last speaker (the
+ *     leader, closing) has had their turn;
+ *   - the timer ran after the proposal but has stood still for STALLED_MS (the
+ *     host stopped running the round — the timer also stops between speakers,
+ *     until the host starts the next one, so a short stop means nothing);
  *   - no speaking round ran within NO_TALK_WAIT_MS of the proposal (a game
  *     played without the timer, or the bot can't hear the room).
  */
 
 import type { TalkClock } from '../voice/talkClock.js';
 
-export const STOPPED_MS = 5_000;
+export const STALLED_MS = 90_000;
 export const NO_TALK_WAIT_MS = 45_000;
 
 export function voteReady(input: {
@@ -27,6 +30,9 @@ export function voteReady(input: {
   clock: TalkClock | null;
 }): boolean {
   if (input.votesCast >= input.others) return true;
-  if (input.clock?.ranSince(input.proposalSeenAt)) return input.clock.stoppedFor(STOPPED_MS);
+  const clock = input.clock;
+  if (clock?.ranSince(input.proposalSeenAt)) {
+    return clock.roundFinishedSince(input.proposalSeenAt) || clock.stoppedFor(STALLED_MS);
+  }
   return input.now - input.proposalSeenAt >= NO_TALK_WAIT_MS;
 }
