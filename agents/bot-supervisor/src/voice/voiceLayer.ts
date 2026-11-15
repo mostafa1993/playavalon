@@ -23,6 +23,7 @@
 import { Room, RoomEvent, type RemoteParticipant } from '@livekit/rtc-node';
 import { AccessToken } from 'livekit-server-sdk';
 import {
+  DISCUSSION_TIMER_TOPIC,
   TIMER_TOPIC,
   TimerListener,
   TurnSegmenter,
@@ -112,6 +113,10 @@ function readVoiceEnv(): VoiceEnv | null {
 export class VoiceLayer {
   /** The speaking timer as heard on the data channel (vote timing reads it). */
   readonly clock = new TalkClock();
+  /** The assassin-phase discussion timer (the assassin's timing reads it). */
+  readonly discussionClock = new TalkClock();
+  private onDiscussionStart: (() => void) | null = null;
+  private discussionRunning = false;
   private room: Room | null = null;
   private readonly nameByIdentity = new Map<string, string>();
   // Mouth state
@@ -138,6 +143,11 @@ export class VoiceLayer {
   /** Register the engine's prepare handler (fired once per upcoming slot). */
   setOnPrepare(handler: PrepareHandler): void {
     this.onPrepare = handler;
+  }
+
+  /** Register the engine's handler for the assassin-phase discussion starting. */
+  setOnDiscussionStart(handler: () => void): void {
+    this.onDiscussionStart = handler;
   }
 
   /**
@@ -188,6 +198,10 @@ export class VoiceLayer {
       if (p.name) this.nameByIdentity.set(p.identity, p.name);
     });
     room.on(RoomEvent.DataReceived, (payload: Uint8Array, _p?: RemoteParticipant, _k?: unknown, topic?: string) => {
+      if (topic === DISCUSSION_TIMER_TOPIC) {
+        this.watchDiscussion(payload);
+        return;
+      }
       if (topic !== TIMER_TOPIC) return;
       timerListener.onPayload(payload);
       this.watchForMyTurn(payload, timerListener);
@@ -229,6 +243,23 @@ export class VoiceLayer {
     this.onMyTurn({ quest, round, turnIndex: state.currentSpeakerIndex, speakers: state.speakingOrder.length });
   }
 
+  /** The discussion timer's messages: keep its clock, and say when it starts. */
+  private watchDiscussion(payload: Uint8Array): void {
+    let running = false;
+    try {
+      running = (JSON.parse(new TextDecoder().decode(payload)) as { running?: boolean }).running === true;
+    } catch {
+      return;
+    }
+    this.discussionClock.onState({ timerRunning: running, currentSpeakerIndex: 0, speakingOrder: [] });
+    const started = running && !this.discussionRunning;
+    this.discussionRunning = running;
+    if (started) {
+      this.opts.logger.info('[mouth] the assassin discussion started');
+      this.onDiscussionStart?.();
+    }
+  }
+
   /** The bot is next (or queued and not started): fire onPrepare once for that slot. */
   private watchForNext(state: SpeakingTimerState, quest: number, round: number): void {
     if (!this.onPrepare || !state.speakingOrder) return;
@@ -252,10 +283,12 @@ export class VoiceLayer {
    * Speak a Persian statement into the room: TTS → publish, fitted to the time
    * left in the slot that started at `slotStartedAt`: whole sentences are
    * dropped from the end until it fits. Stays quiet if the slot has passed or
-   * no sentence fits. Returns the words it spoke, or null.
+   * no sentence fits. Returns the words it spoke, or null. `free`: speech
+   * outside the speaking timer (the assassin discussion), held to the same length.
    */
-  async say(text: string, slotStartedAt: number): Promise<string | null> {
+  async say(text: string, slotStartedAt: number, opts: { free?: boolean } = {}): Promise<string | null> {
     if (!this.room) return null;
+    const mine = () => opts.free === true || this.currentActiveSpeaker === this.selfIdentity;
     let parts = sentences(text);
     while (parts.length > 0) {
       const left = SLOT_SECONDS - SLOT_MARGIN_SECONDS - (Date.now() - slotStartedAt) / 1000;
@@ -263,7 +296,7 @@ export class VoiceLayer {
         voice: this.opts.voice,
         sampleRate: MOUTH_SAMPLE_RATE,
       });
-      if (this.currentActiveSpeaker !== this.selfIdentity) {
+      if (!mine()) {
         this.opts.logger.warn('[mouth] slot passed before synthesis finished — staying quiet');
         return null;
       }

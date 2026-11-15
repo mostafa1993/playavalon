@@ -16,7 +16,8 @@ export type Heard =
 /** What a smart bot sends the supervisor. */
 export type FromBot =
   | { type: 'ready' }
-  | { type: 'said'; quest: number; round: number; speaker: string; text: string };
+  | { type: 'said'; quest: number; round: number; speaker: string; text: string }
+  | { type: 'discussed'; speaker: string; text: string };
 
 export interface BotPeer {
   send(message: Heard): void;
@@ -52,8 +53,11 @@ export class RoomRelay {
       if (peer) for (const m of this.heard) peer.send(m);
       return;
     }
-    const turn: Heard = { type: 'turn', quest: message.quest, round: message.round, speaker: message.speaker, text: message.text };
-    this.heard.push(turn);
-    for (const [name, other] of this.bots) if (name !== username) other.send(turn);
+    const heard: Heard =
+      message.type === 'said'
+        ? { type: 'turn', quest: message.quest, round: message.round, speaker: message.speaker, text: message.text }
+        : { type: 'discussion', speaker: message.speaker, text: message.text };
+    this.heard.push(heard);
+    for (const [name, other] of this.bots) if (name !== username) other.send(heard);
   }
 }

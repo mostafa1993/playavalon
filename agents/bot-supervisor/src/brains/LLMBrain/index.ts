@@ -27,12 +27,14 @@ import { RuleBrain } from '../RuleBrain/index.js';
 import { seatTable } from '../seats.js';
 import { voteReady } from '../voteTiming.js';
 import { raceWithDeadline } from '../deadline.js';
+import { assassinReady } from '../assassinTiming.js';
 
 const AUTO_APPROVE_VOTE_TRACK = 4;
 /** Carbon's moves race the same prompt on Hydrogen (deadline.ts). */
 const FAST = { model: 'gemini-4-hydrogen', thinking_level: 'HIGH' } as const;
 const PROPOSE_DEADLINE_MS = 60_000;
-const ASSASSIN_DEADLINE_MS = 90_000;
+/** The assassin decides after the discussion: Carbon gets a minute more. */
+const ASSASSIN_DEADLINE_MS = 60_000;
 
 export class LLMBrain implements Brain {
   private readonly fallback = new RuleBrain();
@@ -40,6 +42,8 @@ export class LLMBrain implements Brain {
   private llmUnavailable = false;
   /** When the bot first saw the proposal it may vote on. */
   private proposalSeen: { id: string; at: number } | null = null;
+  /** When the bot first saw the assassin phase. */
+  private assassinPhaseSeenAt: number | null = null;
 
   async decide(ctx: BrainContext): Promise<Action | null> {
     const ruleAction = await this.fallback.decide(ctx);
@@ -62,6 +66,11 @@ export class LLMBrain implements Brain {
       case 'lady_investigate':
         return this.withFallback(ctx, ruleAction, () => this.decideLady(ctx));
       case 'assassin_guess':
+        // Name Merlin after the evil players' discussion (assassinTiming.ts).
+        this.assassinPhaseSeenAt ??= Date.now();
+        if (!assassinReady({ now: Date.now(), phaseSeenAt: this.assassinPhaseSeenAt, discussion: ctx.discussionClock ?? null })) {
+          return null;
+        }
         return this.withFallback(ctx, ruleAction, () => this.decideAssassin(ctx));
       case 'merlin_quiz':
         return this.withFallback(ctx, ruleAction, () => this.decideMerlinQuiz(ctx));

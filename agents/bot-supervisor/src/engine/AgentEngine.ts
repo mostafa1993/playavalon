@@ -28,7 +28,7 @@ import { jitter, randomDelayMs, sleep } from '../util/jitter.js';
 import { makeBrain } from '../brains/factory.js';
 import { TalkMemory } from '../voice/talkMemory.js';
 import { VoiceLayer, sentences, turnKey, type MyTurnInfo } from '../voice/voiceLayer.js';
-import { generateTurnSpeech } from '../voice/speechGen.js';
+import { DISCUSSION_SITUATION, generateTurnSpeech } from '../voice/speechGen.js';
 import { createBotLLM } from '../llm/client.js';
 import { createSmartView, type SmartView } from '../brains/smartView.js';
 import type { FromBot, Heard } from '../supervisor/roomRelay.js';
@@ -237,6 +237,7 @@ export class AgentEngine {
           logger: this.logger,
           smart: this.smartView,
           talkClock: this.voice?.clock ?? null,
+          discussionClock: this.voice?.discussionClock ?? null,
         };
         const action = await this.brain.decide(brainCtx);
         if (action && action.kind !== 'noop') {
@@ -320,6 +321,7 @@ export class AgentEngine {
       if (!voice) return;
       voice.setOnPrepare((info) => this.prepareSpeech(info));
       voice.setOnMyTurn((info) => void this.handleMyTurn(info));
+      voice.setOnDiscussionStart(() => void this.speakInDiscussion());
     });
   }
 
@@ -376,6 +378,33 @@ export class AgentEngine {
     } catch (err) {
       this.logger.warn(`[mouth] writing the statement failed: ${(err as Error).message}`);
       return null;
+    }
+  }
+
+  /** The assassin discussion started: an evil bot says its Merlin read, once. */
+  private async speakInDiscussion(): Promise<void> {
+    try {
+      const voice = this.voice;
+      const identity = this.observer.identity();
+      const smart = this.smartView;
+      const llm = (this.speechLLM ??= createBotLLM());
+      if (!voice || !identity || !smart || !llm || identity.role !== 'evil') return;
+      const startedAt = Date.now();
+      const obs = await this.observer.fetch();
+      const text = await generateTurnSpeech(llm, {
+        identity,
+        observation: obs,
+        smart,
+        turn: { quest: obs.game?.current_quest ?? 0, round: 0, turnIndex: 0, speakers: 0 },
+        situation: DISCUSSION_SITUATION,
+      });
+      const spoken = text ? await voice.say(text, startedAt, { free: true }) : null;
+      if (spoken) {
+        this.talkMemory?.addDiscussion(identity.display_name, spoken);
+        this.tell({ type: 'discussed', speaker: identity.display_name, text: spoken });
+      }
+    } catch (err) {
+      this.logger.warn(`[mouth] speaking in the discussion failed: ${(err as Error).message}`);
     }
   }
 

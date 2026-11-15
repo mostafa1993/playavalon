@@ -31,6 +31,8 @@ export interface BrainContext {
   /** Smart mode: the speaking timer as the bot hears it; null until it has
    *  joined the voice room (or if it can't). */
   talkClock?: TalkClock | null;
+  /** Smart mode: the assassin-phase discussion timer, as the bot hears it. */
+  discussionClock?: TalkClock | null;
 }
 
 export interface Brain {

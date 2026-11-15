@@ -38,3 +38,13 @@ test('a bot that (re)starts gets everything heard so far, once it is ready', () 
   relay.fromBot('bot_alice', { type: 'ready' });
   assert.deepEqual(a.got.map((m) => m.text), ['یک', 'دو', 'سه']);
 });
+
+test("a bot's words in the assassin discussion reach the others as discussion", () => {
+  const relay = new RoomRelay();
+  const a = peer(), b = peer();
+  relay.addBot('bot_alice', a);
+  relay.addBot('bot_bob', b);
+  relay.fromBot('bot_alice', { type: 'discussed', speaker: 'Alice', text: 'مینا مرلینه' });
+  assert.deepEqual(a.got, []);
+  assert.deepEqual(b.got, [{ type: 'discussion', speaker: 'Alice', text: 'مینا مرلینه' }]);
+});

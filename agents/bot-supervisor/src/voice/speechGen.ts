@@ -21,6 +21,8 @@ export async function generateTurnSpeech(
     observation: Observation;
     smart: SmartView;
     turn: MyTurnInfo;
+    /** What this speech is, when it isn't a speaking slot (the assassin discussion). */
+    situation?: string;
   }
 ): Promise<string> {
   const { identity, observation, smart, turn } = args;
@@ -32,10 +34,17 @@ export async function generateTurnSpeech(
     seat_table: seatTable(identity, observation),
     game_so_far: await smart.gameSoFar(observation),
     private_read: smart.privateRead(),
-    situation: situation(identity, observation, turn, nameOf),
+    situation: args.situation ?? situation(identity, observation, turn, nameOf),
   });
   return text.trim();
 }
+
+/** The assassin-phase discussion, for an evil bot. */
+export const DISCUSSION_SITUATION =
+  'Good has won three quests: this is the assassin discussion. The good players are muted; you and ' +
+  'your evil teammates talk freely for two minutes about who Merlin is, and the Assassin then names ' +
+  'one player. Say who you think Merlin is and why, from how they played (votes, teams, what they ' +
+  'said). If you are the Assassin, give your leading suspect and ask your teammates what they think.';
 
 /** What this speaking turn is, in a sentence or two for the prompt. */
 export function situation(
