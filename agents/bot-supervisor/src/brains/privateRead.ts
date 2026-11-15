@@ -5,7 +5,7 @@
  * reads the latest one, so the bot's words and votes follow one judgement.
  *
  * ReadKeeper updates it in the background (private-read.yml, Gemini 4 Carbon
- * on HIGH: a minute or more per update) whenever something new has happened —
+ * on MEDIUM: about 20 s per update) whenever something new has happened —
  * a turn of talk, a vote, a quest, a phase. One update runs at a time; events
  * during it make one more update, on the newest state, when it ends. A failed
  * update keeps the previous read.

@@ -1,9 +1,13 @@
 name: decide_propose
-# Thinks on Gemini 4 Carbon (nobody is waiting on this move for long); thinking
-# counts against max_output_tokens, so the cap leaves room for HIGH.
-model: gemini-4-carbon
+# Acts on Gemini 4 Hydrogen HIGH, reading Carbon's private read (plan
+# 2026-11-15-2100, row E): replayed on a game's proposals, Carbon HIGH took 152 s
+# (median) and Carbon MEDIUM 56 s for the same teams Hydrogen HIGH chose in 16 s;
+# the table's talk is about the team, so it must come early.
+model: gemini-4-hydrogen
 thinking_level: HIGH
-max_output_tokens: 32768
+max_output_tokens: 16000
+# The table waits on this: a call not back in 60 s is given up (and tried once more).
+timeout_seconds: 60
 response_mime_type: application/json
 
 system: |

@@ -30,11 +30,9 @@ import { raceWithDeadline } from '../deadline.js';
 import { assassinReady } from '../assassinTiming.js';
 
 const AUTO_APPROVE_VOTE_TRACK = 4;
-/** Carbon's moves race the same prompt on Hydrogen (deadline.ts). */
+/** The assassin's guess on Carbon races the same prompt on Hydrogen (deadline.ts). */
 const FAST = { model: 'gemini-4-hydrogen', thinking_level: 'HIGH' } as const;
-/** A leader also writes its opening before proposing: about 45 + 20-40 s in all, as human leaders take. */
-const PROPOSE_DEADLINE_MS = 45_000;
-/** The assassin decides after the discussion: Carbon gets a minute more. */
+/** The assassin decides after the discussion: Carbon gets a minute. */
 const ASSASSIN_DEADLINE_MS = 60_000;
 
 export class LLMBrain implements Brain {
@@ -122,7 +120,7 @@ export class LLMBrain implements Brain {
     const game = ctx.observation.game!;
     const size = game.quest_requirement.size;
     const vars = { ...(await this.baseVars(ctx, game)), team_size: size };
-    const out = await this.race<{ team: string[]; reason?: string }>(ctx, 'decide-propose.yml', vars, PROPOSE_DEADLINE_MS);
+    const out = await this.llm!.runJson<{ team: string[]; reason?: string }>('decide-propose.yml', vars);
     this.noteReason(ctx, 'decide-propose.yml', out.reason);
     const ids = this.namesToIds(game, out.team);
     if (!ids || ids.length !== size || new Set(ids).size !== size) return null;

@@ -1,12 +1,14 @@
 name: private_read
-# Thinks on Gemini 4 Carbon on HIGH, in the background: nobody waits on it, and
-# every move and word reads its latest result. Thinking counts against
-# max_output_tokens, so the cap leaves room for HIGH.
+# Thinks on Gemini 4 Carbon on MEDIUM, in the background: every move and word reads
+# its latest result, so it must stay current (plan 2026-11-15-2100, row F): replayed
+# on a game's reads, MEDIUM took 18 s (median; 44 s at most) where HIGH took 62 s
+# (median; reads in that game up to 7.5 min, one past its deadline), and called the
+# same players right. Thinking counts against max_output_tokens.
 model: gemini-4-carbon
-thinking_level: HIGH
+thinking_level: MEDIUM
 max_output_tokens: 32768
-# A read that hasn't come in 4 minutes is given up; the next event starts a fresh one.
-timeout_seconds: 240
+# A read that hasn't come in 2 minutes is given up; the next event starts a fresh one.
+timeout_seconds: 120
 response_mime_type: application/json
 
 system: |
