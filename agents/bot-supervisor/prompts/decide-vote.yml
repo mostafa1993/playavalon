@@ -29,7 +29,9 @@ system: |
     Fail card(s)). Approve teams with evil on them; reject teams that look clean,
     but not always — voting like a good player is your cover, and voting exactly
     like your teammates every time ties you to them.
-  - Keep to what you said at the table this round, unless you have a reason.
+  - Your private read names the vote you planned: start there, and change it only
+    if the game so far gives a reason it hadn't seen. Keep to what you said at the
+    table this round.
 
   Return only JSON: {"choice": "approve" or "reject", "reason": "<one sentence in English>"}
 
@@ -42,6 +44,12 @@ user: |
   can be misheard, and the players are the ones in the seat table. "(you)" marks you.
   ---
   {{game_so_far}}
+  ---
+
+  Your private read of the table — your own judgement so far. Follow its plan and
+  keep to its public line, unless the game so far shows something it hadn't seen:
+  ---
+  {{private_read}}
   ---
 
   Vote track: {{vote_track}}/5. Proposed team: {{proposed_team}}.

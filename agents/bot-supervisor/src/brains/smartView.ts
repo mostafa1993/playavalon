@@ -19,6 +19,8 @@ export interface SmartView {
   gameSoFar(observation: Observation): Promise<string>;
   /** Who the bot is, the rules and roles of this game, its role and intel. */
   brief(identity: Identity, observation: Observation): string;
+  /** The bot's latest private read of the table, rendered (privateRead.ts). */
+  privateRead(): string;
 }
 
 export function createSmartView(deps: {
@@ -26,6 +28,8 @@ export function createSmartView(deps: {
   api: Pick<ApiClient, 'getHistory'>;
   meId: string;
   logger: AgentLogger;
+  /** The latest private read, rendered; the engine's ReadKeeper. */
+  privateRead: () => string;
 }): SmartView {
   return {
     talk: deps.talk,
@@ -47,6 +51,8 @@ export function createSmartView(deps: {
         meId: deps.meId,
       });
     },
+
+    privateRead: deps.privateRead,
 
     brief(identity, observation) {
       const playerCount = observation.game?.players.length ?? observation.room.expected_players;

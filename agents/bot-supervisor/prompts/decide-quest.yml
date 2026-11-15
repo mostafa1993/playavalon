@@ -34,4 +34,10 @@ user: |
   {{game_so_far}}
   ---
 
+  Your private read of the table — your own judgement so far. Follow its plan and
+  keep to its public line, unless the game so far shows something it hadn't seen:
+  ---
+  {{private_read}}
+  ---
+
   Play your quest card. JSON only.

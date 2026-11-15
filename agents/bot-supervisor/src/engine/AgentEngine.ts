@@ -31,6 +31,8 @@ import { VoiceLayer, type MyTurnInfo } from '../voice/voiceLayer.js';
 import { generateTurnSpeech } from '../voice/speechGen.js';
 import { createBotLLM } from '../llm/client.js';
 import { createSmartView, type SmartView } from '../brains/smartView.js';
+import { ReadKeeper } from '../brains/privateRead.js';
+import { seatTable } from '../brains/seats.js';
 
 export interface AgentEngineOptions {
   config: ResolvedAgentConfig;
@@ -56,6 +58,7 @@ export class AgentEngine {
   /** Smart mode only: the bot's running memory + its LiveKit ears. */
   private talkMemory: TalkMemory | null = null;
   private smartView: SmartView | null = null;
+  private reads: ReadKeeper | null = null;
   private voice: VoiceLayer | null = null;
 
   constructor(opts: AgentEngineOptions) {
@@ -85,6 +88,14 @@ export class AgentEngine {
           talk: this.talkMemory,
           api: this.api,
           meId: this.session.getUserId(),
+          logger: this.logger,
+          privateRead: () => this.reads?.rendered() ?? '(no read yet: judge from the game so far)',
+        });
+        const readLlm = createBotLLM();
+        this.reads = new ReadKeeper({
+          llm: () => readLlm,
+          smart: this.smartView,
+          seatTable,
           logger: this.logger,
         });
       }
@@ -215,6 +226,7 @@ export class AgentEngine {
       const identity = this.observer.identity();
       if (identity) {
         this.ensureVoice(identity.display_name);
+        this.reads?.notice(identity, obs);
         const brainCtx = {
           identity,
           observation: obs,

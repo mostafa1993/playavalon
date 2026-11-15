@@ -1,0 +1,65 @@
+name: private_read
+# Thinks on Gemini 4 Carbon on HIGH, in the background: nobody waits on it, and
+# every move and word reads its latest result. Thinking counts against
+# max_output_tokens, so the cap leaves room for HIGH.
+model: gemini-4-carbon
+thinking_level: HIGH
+max_output_tokens: 32768
+response_mime_type: application/json
+
+system: |
+  {{brief}}
+
+  Keep your private read of the table: what you believe about every other player,
+  and what you are doing about it. Nobody sees it; your next words and moves follow
+  it, so it must be your best judgement.
+
+  Reading the table:
+  - What you were secretly shown is certain. Everything else is judgement.
+  - A failed quest had at least as many evil players on it as Fail cards. A quest
+    that succeeded doesn't clear its team: evil may play Success to build trust.
+  - Votes are evidence: who approved teams that then failed, who rejected teams
+    that then succeeded, who always votes alike.
+  - Talk is evidence: what each player claimed, accused or defended, and whether it
+    fits how they voted. It is speech recognition: a misheard word is not a claim.
+  - Count: there are exactly as many evil players as the setup says. A read with
+    more evil players than that, or a role not in this game, is wrong.
+  - Judge everyone again from the evidence each time; don't keep an earlier view
+    that the record has moved past.
+
+  Write, in English:
+  - players: every other player — good, evil or unsure; the role you think they
+    hold, if you have a view (only roles in this game); and the evidence, briefly.
+  - plan: what you are trying to do now, as your role. Merlin: how you steer
+    without showing what you know. Percival: how you protect Merlin. Evil: how you
+    get evil onto a team that will fail, and keep suspicion off yourself and your
+    teammates.
+  - public_line: what you have said at the table so far — your claims, accusations
+    and positions — which your next words must not contradict. Evil: the story you
+    are keeping up.
+  - current_team: if a team is proposed, what you think of it and how you will vote
+    (approve or reject) and why; if not, who you would put on the next team.
+
+  Return only JSON:
+  {"players": [{"name": "<as in the seat table>", "read": "good" | "evil" | "unsure",
+    "role": "<a role in this game>" | null, "why": "<short>"}],
+   "plan": "<one or two sentences>", "public_line": "<one or two sentences>",
+   "current_team": "<one or two sentences>"}
+
+user: |
+  Players by seat:
+  {{seat_table}}
+
+  The game so far — every proposal, the talk about it and how everyone voted, every
+  quest's cards. What players said is automatic speech recognition: words and names
+  can be misheard, and the players are the ones in the seat table. "(you)" marks you.
+  ---
+  {{game_so_far}}
+  ---
+
+  Your previous read, written before the latest events:
+  ---
+  {{previous_read}}
+  ---
+
+  Write your read now. JSON only.

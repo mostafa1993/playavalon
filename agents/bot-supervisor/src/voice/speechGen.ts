@@ -12,6 +12,7 @@ import type { SmartView } from '../brains/smartView.js';
 import type { Identity } from '../types/Identity.js';
 import type { Observation } from '../types/Observation.js';
 import type { MyTurnInfo } from './voiceLayer.js';
+import { seatTable } from '../brains/seats.js';
 
 export async function generateTurnSpeech(
   llm: LLMClient,
@@ -26,20 +27,11 @@ export async function generateTurnSpeech(
   const game = observation.game;
   const nameOf = (id: string) => game?.players.find((p) => p.id === id)?.display_name ?? 'someone';
 
-  const seats = game
-    ? [...game.players]
-        .sort((a, b) => a.seat_position - b.seat_position)
-        .map((p) => {
-          const tags = [p.is_leader ? 'leader' : '', p.id === identity.user_id ? 'you' : ''].filter(Boolean).join(', ');
-          return `seat ${p.seat_position}: ${p.display_name}${tags ? ` (${tags})` : ''}`;
-        })
-        .join('\n')
-    : observation.room.players.map((p) => p.display_name).join(', ');
-
   const text = await llm.runText('speak-turn.yml', {
     brief: smart.brief(identity, observation),
-    seat_table: seats,
+    seat_table: seatTable(identity, observation),
     game_so_far: await smart.gameSoFar(observation),
+    private_read: smart.privateRead(),
     situation: situation(identity, observation, turn, nameOf),
   });
   return text.trim();

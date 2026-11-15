@@ -14,7 +14,7 @@ import { loadPrompt } from '@avalon/shared';
 const promptsDir = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..', 'prompts');
 
 // LLMBrain.baseVars, and what each decision adds (src/brains/LLMBrain/index.ts).
-const BASE = ['brief', 'seat_table', 'quest_number', 'vote_track', 'team_size', 'fails_required', 'game_so_far'];
+const BASE = ['brief', 'seat_table', 'quest_number', 'vote_track', 'team_size', 'fails_required', 'game_so_far', 'private_read'];
 const VARS: Record<string, string[]> = {
   'decide-propose.yml': [...BASE],
   'decide-vote.yml': [...BASE, 'proposed_team'],
@@ -23,7 +23,9 @@ const VARS: Record<string, string[]> = {
   'decide-assassin.yml': [...BASE, 'candidates'],
   'decide-merlin-quiz.yml': [...BASE, 'candidates'],
   // generateTurnSpeech (src/voice/speechGen.ts)
-  'speak-turn.yml': ['brief', 'seat_table', 'game_so_far', 'situation'],
+  'speak-turn.yml': ['brief', 'seat_table', 'game_so_far', 'private_read', 'situation'],
+  // ReadKeeper.update (src/brains/privateRead.ts)
+  'private-read.yml': ['brief', 'seat_table', 'game_so_far', 'previous_read'],
 };
 
 test('every prompt file in the folder is covered here', () => {

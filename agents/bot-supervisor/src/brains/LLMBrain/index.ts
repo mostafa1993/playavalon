@@ -24,6 +24,7 @@ import type { Action } from '../../types/Action.js';
 import type { Brain, BrainContext } from '../Brain.js';
 import type { GameObservation } from '../../types/Observation.js';
 import { RuleBrain } from '../RuleBrain/index.js';
+import { seatTable } from '../seats.js';
 
 const AUTO_APPROVE_VOTE_TRACK = 4;
 
@@ -195,28 +196,16 @@ export class LLMBrain implements Brain {
 
   /** Vars every decision prompt receives. */
   private async baseVars(ctx: BrainContext, game: GameObservation): Promise<Record<string, string | number>> {
-    const seats = [...game.players]
-      .sort((a, b) => a.seat_position - b.seat_position)
-      .map((p) => {
-        const tags = [
-          p.is_leader ? 'leader' : '',
-          p.id === ctx.identity.user_id ? 'you' : '',
-          p.is_on_team ? 'on the proposed team' : '',
-        ]
-          .filter(Boolean)
-          .join(', ');
-        return `seat ${p.seat_position}: ${p.display_name}${tags ? ` (${tags})` : ''}`;
-      })
-      .join('\n');
     const smart = ctx.smart;
     return {
       brief: smart ? smart.brief(ctx.identity, ctx.observation) : `You are ${ctx.identity.display_name}, playing Avalon.`,
-      seat_table: seats,
+      seat_table: seatTable(ctx.identity, ctx.observation),
       quest_number: game.current_quest,
       vote_track: game.vote_track,
       team_size: game.quest_requirement.size,
       fails_required: game.quest_requirement.fails_required,
       game_so_far: smart ? await smart.gameSoFar(ctx.observation) : '(the game so far is unavailable)',
+      private_read: smart ? smart.privateRead() : '(no read)',
     };
   }
 
