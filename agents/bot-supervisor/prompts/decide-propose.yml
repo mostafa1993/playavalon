@@ -1,7 +1,9 @@
 name: decide_propose
-temperature: 0.5
-max_output_tokens: 4000
-thinking_budget: 2500
+# Thinks on Gemini 4 Carbon (nobody is waiting on this move for long); thinking
+# counts against max_output_tokens, so the cap leaves room for HIGH.
+model: gemini-4-carbon
+thinking_level: HIGH
+max_output_tokens: 32768
 response_mime_type: application/json
 
 system: |

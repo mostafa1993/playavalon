@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@avalon/shared": "*",
-    "@google/genai": "^1.0.0",
+    "@google/genai": "^2.32.0",
     "@livekit/rtc-node": "^0.13.25",
     "@supabase/supabase-js": "^2.47.12",
     "js-yaml": "^4.1.1",

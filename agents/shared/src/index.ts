@@ -3,8 +3,8 @@
  * (the AI reviewer and the bot players).
  */
 
-export { createLLMClient, type LLMClient, type LLMClientOptions, type PromptVars } from './llm.js';
-export { loadPrompt, fill, type PromptFile } from './prompts.js';
+export { createLLMClient, isGemini4, samplingFor, type LLMClient, type LLMClientOptions, type PromptVars } from './llm.js';
+export { loadPrompt, fill, THINKING_LEVELS, type PromptFile, type ThinkingLevelName } from './prompts.js';
 export { retry, isNetworkError, isTransientHttpStatus, type RetryOptions } from './retry.js';
 export {
   transcribe,

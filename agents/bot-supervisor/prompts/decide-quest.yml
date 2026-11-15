@@ -1,7 +1,9 @@
 name: decide_quest
-temperature: 0.4
-max_output_tokens: 4000
-thinking_budget: 2500
+# Acts on Gemini 4 Hydrogen: the table is waiting, and Hydrogen on HIGH answers in
+# ~20 s where Carbon takes 30 s to 2 min. Thinking counts against max_output_tokens.
+model: gemini-4-hydrogen
+thinking_level: HIGH
+max_output_tokens: 16000
 response_mime_type: application/json
 
 system: |

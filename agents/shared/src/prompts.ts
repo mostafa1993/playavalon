@@ -35,10 +35,19 @@ export interface PromptFile {
    * reasoning so visible output is always reachable. 0 disables thinking.
    */
   thinking_budget?: number;
+  /**
+   * Gemini 4's reasoning control (LOW, MEDIUM, HIGH), in place of
+   * `thinking_budget`, which Gemini 4 refuses (HTTP 400). Gemini 4 also
+   * ignores `temperature`; the client refuses either in a Gemini 4 prompt.
+   */
+  thinking_level?: ThinkingLevelName;
   response_mime_type?: 'application/json' | 'text/plain';
   system: string;
   user: string;
 }
+
+export const THINKING_LEVELS = ['LOW', 'MEDIUM', 'HIGH'] as const;
+export type ThinkingLevelName = (typeof THINKING_LEVELS)[number];
 
 const cache = new Map<string, PromptFile>();
 
@@ -51,6 +60,12 @@ export async function loadPrompt(promptsDir: string, fileName: string): Promise<
   const parsed = yaml.load(raw);
   if (!isPromptFile(parsed)) {
     throw new Error(`Invalid prompt file ${fileName}: missing required 'system' or 'user' fields`);
+  }
+  if (parsed.thinking_level !== undefined && !THINKING_LEVELS.includes(parsed.thinking_level)) {
+    throw new Error(`Invalid prompt file ${fileName}: thinking_level must be one of ${THINKING_LEVELS.join(', ')}`);
+  }
+  if (parsed.thinking_level !== undefined && parsed.thinking_budget !== undefined) {
+    throw new Error(`Invalid prompt file ${fileName}: set thinking_level or thinking_budget, not both`);
   }
 
   cache.set(fullPath, parsed);

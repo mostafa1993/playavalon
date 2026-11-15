@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^1.0.0",
+    "@google/genai": "^2.32.0",
     "@livekit/rtc-node": "^0.13.25",
     "js-yaml": "^4.1.1",
     "livekit-server-sdk": "^2.15.1"

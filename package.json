@@ -15,7 +15,7 @@
     "bots": "set -a; . ./.env.local; set +a; env -C agents/bot-supervisor AGENT_BASE_URL=http://localhost:3000 npx tsx src/supervisor/index.ts"
   },
   "dependencies": {
-    "@google/genai": "^1.52.0",
+    "@google/genai": "^2.32.0",
     "@livekit/components-react": "^2.9.20",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.47.12",

@@ -15,9 +15,11 @@ import {
   GoogleGenAI,
   HarmCategory,
   HarmBlockThreshold,
+  ThinkingLevel,
   type SafetySetting,
+  type ThinkingConfig,
 } from '@google/genai';
-import { loadPrompt, fill } from './prompts.js';
+import { loadPrompt, fill, type PromptFile } from './prompts.js';
 import { isNetworkError, retry } from './retry.js';
 
 // Prepended to every system prompt. Clarifies to Gemini that accusatory
@@ -49,10 +51,11 @@ export type PromptVars = Record<string, string | number | null | undefined>;
 
 /** Decoupled client options (the consumer maps its own config onto these). */
 export interface LLMClientOptions {
-  /** GCP project / Vertex location / default model. */
+  /** GCP project / Vertex location. */
   project: string;
   location: string;
-  model: string;
+  /** The model for prompts that don't name one; without it, every prompt must. */
+  model?: string;
   /** Directory holding the YAML prompt files. */
   promptsDir: string;
   retry?: {
@@ -74,10 +77,10 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
     const userText = fill(prompt.user, vars);
 
     const modelName = prompt.model ?? opts.model;
-    const temperature = prompt.temperature ?? 0.4;
+    if (!modelName) throw new Error(`${promptFile} names no model, and the client has no default`);
+    const sampling = samplingFor(promptFile, modelName, prompt);
     const maxOutputTokens = prompt.max_output_tokens ?? 4096;
     const responseMimeType = prompt.response_mime_type;
-    const thinkingBudget = prompt.thinking_budget;
 
     return retry(
       async () => {
@@ -86,10 +89,9 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
           contents: userText,
           config: {
             systemInstruction: systemText,
-            temperature,
+            ...sampling,
             maxOutputTokens,
             safetySettings: SAFETY_SETTINGS,
-            ...(thinkingBudget !== undefined ? { thinkingConfig: { thinkingBudget } } : {}),
             ...(responseMimeType ? { responseMimeType } : {}),
           },
         });
@@ -131,6 +133,41 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
         );
       }
     },
+  };
+}
+
+/** A Gemini 4 model (gemini-4-argon, -carbon, -hydrogen, …). */
+export function isGemini4(model: string): boolean {
+  return model.startsWith('gemini-4');
+}
+
+/**
+ * Temperature and thinking for one call. Gemini 4 refuses `thinking_budget`
+ * (HTTP 400) and ignores `temperature`, so a Gemini 4 prompt carrying either
+ * is refused here, where the mistake is named, rather than at the API.
+ */
+export function samplingFor(
+  promptFile: string,
+  model: string,
+  prompt: Pick<PromptFile, 'temperature' | 'thinking_budget' | 'thinking_level'>
+): { temperature?: number; thinkingConfig?: ThinkingConfig } {
+  if (isGemini4(model)) {
+    if (prompt.thinking_budget !== undefined) {
+      throw new Error(`${promptFile}: ${model} takes thinking_level, not thinking_budget`);
+    }
+    if (prompt.temperature !== undefined) {
+      throw new Error(`${promptFile}: ${model} ignores temperature; remove it from the prompt`);
+    }
+  }
+  const thinkingConfig: ThinkingConfig | undefined =
+    prompt.thinking_level !== undefined
+      ? { thinkingLevel: ThinkingLevel[prompt.thinking_level] }
+      : prompt.thinking_budget !== undefined
+        ? { thinkingBudget: prompt.thinking_budget }
+        : undefined;
+  return {
+    ...(isGemini4(model) ? {} : { temperature: prompt.temperature ?? 0.4 }),
+    ...(thinkingConfig ? { thinkingConfig } : {}),
   };
 }
 
