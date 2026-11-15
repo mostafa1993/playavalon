@@ -31,7 +31,7 @@ export {
   type QuestChangeHandler,
   type RoundChangeHandler,
 } from './timerListener.js';
-export { TurnSegmenter, type RecordedTurn, type TurnFinishedHandler } from './turnSegmenter.js';
+export { TurnSegmenter, type ActiveSpeaker, type RecordedTurn, type TurnFinishedHandler, type TurnSink } from './turnSegmenter.js';
 export {
   readRoleConfig,
   summarizeRoleConfig,
@@ -47,6 +47,6 @@ export {
   type RecordedDiscussionSegment,
   type DiscussionFinishedHandler,
 } from './discussionRecorder.js';
-export { DiscussionListener, DISCUSSION_TIMER_TOPIC, type DisplayNameResolver } from './discussionListener.js';
+export { DiscussionListener, DISCUSSION_TIMER_TOPIC, type DiscussionSink, type DisplayNameResolver } from './discussionListener.js';
 export { LiveKitListener, type ListenerOptions, type ListenerEvents } from './livekitListener.js';
 export { isLiveKitHandleError, tolerateLiveKitHandleErrors } from './nativeErrors.js';

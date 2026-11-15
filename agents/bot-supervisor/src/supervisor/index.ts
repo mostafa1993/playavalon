@@ -37,7 +37,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 import { makeLogger } from '../util/logger.js';
 import { ensureBot } from '../util/credentials.js';
-import { RoomRelay, type FromBot, type Heard } from './roomRelay.js';
+import { RoomRelay, type FromBot, type Heard, type ToBot } from './roomRelay.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUN_CLI_PATH = resolve(__dirname, '..', 'cli', 'run.ts');
@@ -46,7 +46,7 @@ const EARS_CLI_PATH = resolve(__dirname, '..', 'cli', 'ears.ts');
 const PACKAGE_DIR = resolve(__dirname, '..', '..');
 
 /** Relay to a child over IPC; a child that has just exited is logged, never fatal. */
-function sendTo(proc: ChildProcess, message: Heard, who: string): void {
+function sendTo(proc: ChildProcess, message: ToBot, who: string): void {
   if (!proc.connected) return;
   proc.send(message, (err) => {
     if (err) log.warn(`relay to ${who} failed: ${err.message}`);
@@ -155,7 +155,7 @@ function spawnAgent(roomCode: string, cfg: AgentConfigSummary, restartCount: num
   spawned.set(key, tracked);
   if (cfg.smart) {
     const room = roomHearing(roomCode);
-    room.relay.addBot(cfg.username, { send: (m: Heard) => sendTo(proc, m, cfg.username) });
+    room.relay.addBot(cfg.username, { send: (m: ToBot) => sendTo(proc, m, cfg.username) });
     proc.on('message', (m) => room.relay.fromBot(cfg.username, m as FromBot));
   }
 

@@ -56,6 +56,8 @@ function countingLlm(llm: LLMClient) {
       track(promptFile, () => llm.runText(promptFile, vars)),
     runJson: <T>(promptFile: string, vars: PromptVars) =>
       track(promptFile, () => llm.runJson<T>(promptFile, vars)),
+    // The reviewer doesn't stream; passed through uncounted.
+    streamText: llm.streamText,
   };
   const report = () => {
     const all = [...counts.values()];

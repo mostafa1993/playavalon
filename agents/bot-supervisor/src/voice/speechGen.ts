@@ -1,44 +1,76 @@
 /**
  * Turn-speech generator — what the smart bot SAYS on its speaking slot.
  *
- * One call (speak-turn.yml): the brief (rules, roles, its role and intel), the
- * game so far, and what this turn is (the intro, the leader opening or closing
- * the round, or a player answering the proposed team) → the Persian words it
- * says.
+ * speak-turn.yml: the brief (rules, roles, its role and intel), the game so
+ * far, the private read, and what this turn is (the intro, the leader opening
+ * or closing the round, or a player answering the proposed team) → the Persian
+ * words. Written ahead as a draft (Hydrogen HIGH); when the slot opens, the
+ * draft is brought up to date with what was said since (speak-update.yml,
+ * streamed), or, with no draft, the words are written then (streamed, on
+ * Hydrogen LOW). Plan 2026-11-15-2100, D3.
  */
 
-import type { LLMClient, ModelOverride } from '@avalon/shared';
+import type { LLMClient, ModelOverride, PromptVars } from '@avalon/shared';
+import { sentenceStream } from './streams.js';
+import type { TalkTurn } from './talkMemory.js';
 import type { SmartView } from '../brains/smartView.js';
 import type { Identity } from '../types/Identity.js';
 import type { Observation } from '../types/Observation.js';
 import type { MyTurnInfo } from './voiceLayer.js';
 import { seatTable } from '../brains/seats.js';
 
-export async function generateTurnSpeech(
-  llm: LLMClient,
-  args: {
-    identity: Identity;
-    observation: Observation;
-    smart: SmartView;
-    turn: MyTurnInfo;
-    /** What this speech is, when it isn't a speaking slot (the assassin discussion). */
-    situation?: string;
-    /** Another model or thinking level than speak-turn.yml names (the quick fallback). */
-    override?: ModelOverride;
-  }
-): Promise<string> {
-  const { identity, observation, smart, turn } = args;
-  const game = observation.game;
-  const nameOf = (id: string) => game?.players.find((p) => p.id === id)?.display_name ?? 'someone';
+export interface SpeechArgs {
+  identity: Identity;
+  observation: Observation;
+  smart: SmartView;
+  turn: MyTurnInfo;
+  /** What this speech is, when it isn't a speaking slot (the assassin discussion). */
+  situation?: string;
+}
 
-  const text = await llm.runText('speak-turn.yml', {
+async function speechVars(args: SpeechArgs): Promise<PromptVars> {
+  const { identity, observation, smart, turn } = args;
+  const nameOf = (id: string) => observation.game?.players.find((p) => p.id === id)?.display_name ?? 'someone';
+  return {
     brief: smart.brief(identity, observation),
     seat_table: seatTable(identity, observation),
     game_so_far: await smart.gameSoFar(observation),
     private_read: smart.privateRead(),
     situation: args.situation ?? situation(identity, observation, turn, nameOf),
-  }, args.override);
+  };
+}
+
+/** The words, written whole (a draft, ahead of the slot). */
+export async function generateTurnSpeech(llm: LLMClient, args: SpeechArgs & { override?: ModelOverride }): Promise<string> {
+  const text = await llm.runText('speak-turn.yml', await speechVars(args), args.override);
   return text.trim();
+}
+
+/** The words written now, streamed sentence by sentence (no draft to start from). */
+export async function* streamTurnSpeech(
+  llm: LLMClient,
+  args: SpeechArgs & { override: ModelOverride },
+  signal: AbortSignal
+): AsyncGenerator<string> {
+  const vars = await speechVars(args);
+  yield* sentenceStream(llm.streamText('speak-turn.yml', vars, args.override, signal));
+}
+
+/** The draft brought up to date with what is new since it was written, streamed sentence by sentence. */
+export async function* streamUpdatedSpeech(
+  llm: LLMClient,
+  args: SpeechArgs & { draft: string; newSince: string },
+  signal: AbortSignal
+): AsyncGenerator<string> {
+  const vars = { ...(await speechVars(args)), draft: args.draft, new_since: args.newSince };
+  yield* sentenceStream(llm.streamText('speak-update.yml', vars, undefined, signal));
+}
+
+/** What is new since a draft: the turns heard since, and the team if it changed. */
+export function renderNewSince(turns: readonly TalkTurn[], teamNow: string | null, teamChanged: boolean): string {
+  const lines = turns.map((t) => `${t.speaker}: ${t.text}`);
+  if (teamChanged) lines.push(teamNow ? `The team proposed now: [${teamNow}].` : 'The team proposed before has been voted on; no team is proposed now.');
+  return lines.length ? lines.join('\n') : 'Nothing said since.';
 }
 
 /** The assassin-phase discussion, for an evil bot. */

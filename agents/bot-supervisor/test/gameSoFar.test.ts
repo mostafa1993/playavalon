@@ -38,11 +38,11 @@ const history: GameHistory = {
 };
 
 const talk: TalkTurn[] = [
-  { quest: 0, round: 0, speaker: 'Reza', text: 'سلام بچه‌ها' },
-  { quest: 1, round: 0, speaker: 'Mina', text: 'رضا چرا نیما رو آوردی؟' },
-  { quest: 1, round: 1, speaker: 'Sara', text: 'به این تیم اعتماد دارم' },
-  { quest: 2, round: 0, speaker: 'Nima', text: 'سارا خیلی مطمئنه' },
-  { quest: 2, round: 1, speaker: 'Ali', text: 'یه دور دیگه' },
+  { quest: 0, round: 0, turnIndex: 1, speaker: 'Reza', text: 'سلام بچه‌ها' },
+  { quest: 1, round: 0, turnIndex: 2, speaker: 'Mina', text: 'رضا چرا نیما رو آوردی؟' },
+  { quest: 1, round: 1, turnIndex: 3, speaker: 'Sara', text: 'به این تیم اعتماد دارم' },
+  { quest: 2, round: 0, turnIndex: 4, speaker: 'Nima', text: 'سارا خیلی مطمئنه' },
+  { quest: 2, round: 1, turnIndex: 5, speaker: 'Ali', text: 'یه دور دیگه' },
 ];
 
 const text = renderGameSoFar({ history, talk, players, meId: 's' });
@@ -89,8 +89,8 @@ test('the assassin discussion comes last, with the bot marked', () => {
     history,
     talk,
     discussion: [
-      { speaker: 'Reza', text: 'به نظرم مینا مرلینه' },
-      { speaker: 'Sara', text: 'موافقم' },
+      { speaker: 'Reza', text: 'به نظرم مینا مرلینه', fromBot: false },
+      { speaker: 'Sara', text: 'موافقم', fromBot: false },
     ],
     players,
     meId: 's',

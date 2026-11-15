@@ -20,6 +20,7 @@ import {
   type SafetySetting,
   type ThinkingConfig,
 } from '@google/genai';
+import fs from 'node:fs';
 import { loadPrompt, fill, type PromptFile, type ThinkingLevelName } from './prompts.js';
 import { isNetworkError, retry } from './retry.js';
 
@@ -46,12 +47,47 @@ export interface LLMClient {
   runText: (promptFile: string, vars: PromptVars, override?: ModelOverride) => Promise<string>;
   /** Run a prompt file whose response_mime_type is application/json, return parsed JSON. */
   runJson: <T = unknown>(promptFile: string, vars: PromptVars, override?: ModelOverride) => Promise<T>;
+  /**
+   * Run a text prompt and yield its answer as it is written. Not retried: the
+   * caller decides what a slow or failed stream means. `signal` aborts it.
+   */
+  streamText: (promptFile: string, vars: PromptVars, override?: ModelOverride, signal?: AbortSignal) => AsyncGenerator<string>;
 }
 
-/** Run a prompt on another model than its file names (e.g. a faster fallback). */
+/**
+ * Run a prompt otherwise than its file says: on another model and thinking
+ * level (e.g. a faster fallback), and/or with another deadline.
+ */
 export interface ModelOverride {
-  model: string;
+  model?: string;
   thinking_level?: ThinkingLevelName;
+  timeout_seconds?: number;
+}
+
+/** The prompt file as this call runs it. */
+function withOverride(loaded: PromptFile, override?: ModelOverride): PromptFile {
+  if (!override) return loaded;
+  const onModel: PromptFile = override.model
+    ? { ...loaded, model: override.model, thinking_level: override.thinking_level, thinking_budget: undefined, temperature: undefined }
+    : override.thinking_level
+      ? { ...loaded, thinking_level: override.thinking_level, thinking_budget: undefined }
+      : loaded;
+  return override.timeout_seconds ? { ...onModel, timeout_seconds: override.timeout_seconds } : onModel;
+}
+
+/**
+ * With LLM_DUMP_FILE set, every answered call is appended to that file as a
+ * JSON line (prompt, model, level, seconds, the filled prompts, the answer):
+ * the record that measurements replay.
+ */
+function dump(entry: { prompt: string; model: string; level?: string; ms: number; system: string; user: string; output: string }): void {
+  const file = process.env.LLM_DUMP_FILE;
+  if (!file) return;
+  try {
+    fs.appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n');
+  } catch (err) {
+    console.warn(`[llm] could not record the call: ${(err as Error).message}`);
+  }
 }
 
 export type PromptVars = Record<string, string | number | null | undefined>;
@@ -94,36 +130,36 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
     }
   };
 
-  const invokeOnce = async (promptFile: string, vars: PromptVars, override?: ModelOverride): Promise<string> => {
-    const loaded = await loadPrompt(opts.promptsDir, promptFile);
-    const prompt: PromptFile = override
-      ? { ...loaded, model: override.model, thinking_level: override.thinking_level, thinking_budget: undefined, temperature: undefined }
-      : loaded;
-    const systemText = GAME_CONTEXT_PREAMBLE + fill(prompt.system, vars);
-    const userText = fill(prompt.user, vars);
-
+  /** The call as a prompt file and its vars make it. */
+  const prepare = async (promptFile: string, vars: PromptVars, override?: ModelOverride) => {
+    const prompt = withOverride(await loadPrompt(opts.promptsDir, promptFile), override);
     const modelName = prompt.model ?? opts.model;
     if (!modelName) throw new Error(`${promptFile} names no model, and the client has no default`);
-    const sampling = samplingFor(promptFile, modelName, prompt);
-    const maxOutputTokens = prompt.max_output_tokens ?? 4096;
-    const responseMimeType = prompt.response_mime_type;
+    const systemText = GAME_CONTEXT_PREAMBLE + fill(prompt.system, vars);
+    const userText = fill(prompt.user, vars);
     const timeoutSeconds = prompt.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS;
+    const config = {
+      systemInstruction: systemText,
+      ...samplingFor(promptFile, modelName, prompt),
+      maxOutputTokens: prompt.max_output_tokens ?? 4096,
+      safetySettings: SAFETY_SETTINGS,
+      ...(prompt.response_mime_type ? { responseMimeType: prompt.response_mime_type } : {}),
+    };
+    return { prompt, modelName, systemText, userText, timeoutSeconds, config };
+  };
+
+  const invokeOnce = async (promptFile: string, vars: PromptVars, override?: ModelOverride): Promise<string> => {
+    const { prompt, modelName, systemText, userText, timeoutSeconds, config } = await prepare(promptFile, vars, override);
 
     return retry(
       async () => {
+        const started = Date.now();
         let res;
         try {
           res = await ai.models.generateContent({
             model: modelName,
             contents: userText,
-            config: {
-              systemInstruction: systemText,
-              ...sampling,
-              maxOutputTokens,
-              safetySettings: SAFETY_SETTINGS,
-              ...(responseMimeType ? { responseMimeType } : {}),
-              abortSignal: AbortSignal.timeout(timeoutSeconds * 1000),
-            },
+            config: { ...config, abortSignal: AbortSignal.timeout(timeoutSeconds * 1000) },
           });
         } catch (err) {
           if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
@@ -148,6 +184,7 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
             })`
           );
         }
+        dump({ prompt: promptFile, model: modelName, level: prompt.thinking_level, ms: Date.now() - started, system: systemText, user: userText, output: text });
         return text;
       },
       {
@@ -162,7 +199,40 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
     );
   };
 
+  async function* streamText(promptFile: string, vars: PromptVars, override?: ModelOverride, signal?: AbortSignal): AsyncGenerator<string> {
+    const { prompt, modelName, systemText, userText, timeoutSeconds, config } = await prepare(promptFile, vars, override);
+    const deadline = AbortSignal.timeout(timeoutSeconds * 1000);
+    const abortSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+    const started = Date.now();
+    let output = '';
+    try {
+      const chunks = await ai.models.generateContentStream({ model: modelName, contents: userText, config: { ...config, abortSignal } });
+      for await (const chunk of chunks) {
+        if (chunk.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS) {
+          throw new OutOfTokensError(promptFile, modelName, prompt.thinking_level);
+        }
+        const text = chunk.text;
+        if (text) {
+          output += text;
+          yield text;
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+        throw new Error(
+          deadline.aborted
+            ? `LLM call for ${promptFile} passed its deadline of ${timeoutSeconds} s`
+            : `LLM call for ${promptFile} was stopped`
+        );
+      }
+      throw err;
+    }
+    if (!output) throw new Error(`LLM returned an empty stream for prompt ${promptFile}`);
+    dump({ prompt: promptFile, model: modelName, level: prompt.thinking_level, ms: Date.now() - started, system: systemText, user: userText, output });
+  }
+
   return {
+    streamText,
     runText: invoke,
     async runJson<T = unknown>(promptFile: string, vars: PromptVars, override?: ModelOverride): Promise<T> {
       const text = await invoke(promptFile, vars, override);

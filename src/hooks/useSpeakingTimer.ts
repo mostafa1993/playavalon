@@ -19,7 +19,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { RoomEvent, type RemoteParticipant } from 'livekit-client';
 import { useLiveKit } from './useLiveKit';
-import { acceptsHandOn, SPEAKING_SECONDS, SPEAKER_DONE_TOPIC } from '@/lib/domain/speaking-turn';
+import { acceptsHandOn, SPEAKING_SECONDS, SPEAKER_DONE_TOPIC, speakingSeconds } from '@/lib/domain/speaking-turn';
 
 const TIMER_DURATION = SPEAKING_SECONDS;
 const TIMER_TOPIC = 'speaking-timer';
@@ -276,7 +276,7 @@ export function useSpeakingTimer({
         ...prev,
         timerRunning: true,
         timerStartTime: Date.now(),
-        timerDuration: TIMER_DURATION,
+        timerDuration: speakingSeconds(prev.speakingOrder[prev.currentSpeakerIndex]),
       };
       pendingBroadcastRef.current = newState;
       advancedRef.current = false;

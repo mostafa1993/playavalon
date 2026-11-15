@@ -57,9 +57,9 @@ test('events during an update make one more update, on the newest state, not one
   const first = new Promise<void>((r) => (release = r));
   const { k, talk, calls } = keeper([async () => { await first; return read(1); }, async () => read(2)]);
   k.notice(me, obs('p1'));
-  talk.addTurn(2, 0, 'Ali', 'a');
+  talk.addTurn(2, 0, 1, 'Ali', 'a');
   k.notice(me, obs('p1'));
-  talk.addTurn(2, 0, 'Mina', 'b');
+  talk.addTurn(2, 0, 2, 'Mina', 'b');
   k.notice(me, obs('p1'));
   k.notice(me, obs('p1')); // nothing new
   release();
@@ -75,10 +75,10 @@ test('a failed or malformed update keeps the previous read', async () => {
   const { k, talk } = keeper([async () => read(1), async () => { throw new Error('boom'); }, async () => ({ plan: 'x' })]);
   k.notice(me, obs('p1'));
   await k.idle();
-  talk.addTurn(2, 0, 'Ali', 'a');
+  talk.addTurn(2, 0, 1, 'Ali', 'a');
   k.notice(me, obs('p1'));
   await k.idle();
-  talk.addTurn(2, 0, 'Mina', 'b');
+  talk.addTurn(2, 0, 2, 'Mina', 'b');
   k.notice(me, obs('p1'));
   await k.idle();
   assert.equal(k.updates, 1);

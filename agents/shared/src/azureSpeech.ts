@@ -304,6 +304,8 @@ export async function synthesize(
         'User-Agent': 'playavalon-agents',
       },
       body: ssml,
+      // A sentence comes back in about a second; a call that hangs is tried again.
+      signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
@@ -323,7 +325,7 @@ export async function synthesize(
       if (err instanceof AzureSpeechError) {
         return err.httpStatus !== null && isTransientHttpStatus(err.httpStatus);
       }
-      return isNetworkError(err);
+      return isNetworkError(err) || (err instanceof Error && err.name === 'TimeoutError');
     },
     onRetry: (err, attempt, delayMs) => {
       const msg = err instanceof Error ? err.message : String(err);
@@ -331,6 +333,9 @@ export async function synthesize(
     },
   });
 }
+
+/** How long one text-to-speech call may take before it is tried again. */
+const TTS_TIMEOUT_MS = 10_000;
 
 /** Escape the five XML special characters for safe SSML embedding. */
 function escapeXml(s: string): string {

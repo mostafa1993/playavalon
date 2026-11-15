@@ -6,7 +6,11 @@
  * manager's "stop" broadcast (packet loss, early disconnect, etc.).
  */
 
-import type { DiscussionRecorder } from './discussionRecorder.js';
+/** What the discussion listener drives: the recorder, or a live transcriber. */
+export interface DiscussionSink {
+  start(params: { startedAt: Date; durationSec: number; assassinIdentity: string | null }): void;
+  stop(resolveDisplayName: (identity: string) => string): void;
+}
 
 export const DISCUSSION_TIMER_TOPIC = 'discussion-timer';
 
@@ -22,12 +26,12 @@ export interface DisplayNameResolver {
 }
 
 export class DiscussionListener {
-  private recorder: DiscussionRecorder;
+  private recorder: DiscussionSink;
   private resolveDisplayName: DisplayNameResolver;
   private autoStopHandle: ReturnType<typeof setTimeout> | null = null;
   private running = false;
 
-  constructor(recorder: DiscussionRecorder, resolveDisplayName: DisplayNameResolver) {
+  constructor(recorder: DiscussionSink, resolveDisplayName: DisplayNameResolver) {
     this.recorder = recorder;
     this.resolveDisplayName = resolveDisplayName;
   }

@@ -15,6 +15,7 @@
     "@types/ws": "^8.18.1",
     "commander": "^12.1.0",
     "js-yaml": "^4.1.0",
+    "microsoft-cognitiveservices-speech-sdk": "^1.53.0",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
     "ws": "^8.21.0",

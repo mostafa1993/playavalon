@@ -23,6 +23,22 @@ export interface RecordedTurn {
 
 export type TurnFinishedHandler = (turn: RecordedTurn) => void;
 
+/** Whose turn it is, as the speaking timer says. */
+export interface ActiveSpeaker {
+  identity: string;
+  displayName: string;
+  questNumber: number;
+  roundIndex: number;
+  turnIndex: number;
+  startedAt: Date;
+}
+
+/** What the timer listener drives: a recorder of turns (this segmenter, or a live transcriber). */
+export interface TurnSink {
+  setActiveSpeaker(params: ActiveSpeaker): void;
+  clearActiveSpeaker(): void;
+}
+
 interface ActiveState {
   identity: string;
   displayName: string;
@@ -35,7 +51,7 @@ interface ActiveState {
   sampleRate: number;
 }
 
-export class TurnSegmenter {
+export class TurnSegmenter implements TurnSink {
   private active: ActiveState | null = null;
   private onFinished: TurnFinishedHandler;
 
@@ -47,14 +63,7 @@ export class TurnSegmenter {
    * Called by the timer listener when a new speaker becomes active.
    * Any previously-active speaker is flushed first.
    */
-  setActiveSpeaker(params: {
-    identity: string;
-    displayName: string;
-    questNumber: number;
-    roundIndex: number;
-    turnIndex: number;
-    startedAt: Date;
-  }): void {
+  setActiveSpeaker(params: ActiveSpeaker): void {
     this.flush();
     this.active = {
       ...params,

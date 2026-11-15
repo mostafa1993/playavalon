@@ -24,6 +24,10 @@ const VARS: Record<string, string[]> = {
   'decide-merlin-quiz.yml': [...BASE, 'candidates'],
   // generateTurnSpeech (src/voice/speechGen.ts)
   'speak-turn.yml': ['brief', 'seat_table', 'game_so_far', 'private_read', 'situation'],
+  // streamUpdatedSpeech (src/voice/speechGen.ts)
+  'speak-update.yml': ['brief', 'seat_table', 'game_so_far', 'private_read', 'situation', 'draft', 'new_since'],
+  // the discussion's replies (src/engine/discussionTalk.ts)
+  'discussion-reply.yml': ['brief', 'seat_table', 'game_so_far', 'private_read', 'discussion', 'last_line', 'you'],
   // ReadKeeper.update (src/brains/privateRead.ts)
   'private-read.yml': ['brief', 'seat_table', 'game_so_far', 'previous_read'],
 };

@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * A room's ears: one hidden listener per room with smart bots (plan row G),
- * started and stopped by the supervisor, which relays what it hears to each
- * smart bot of the room (supervisor/roomRelay.ts).
+ * A room's ears: one hidden listener per room with smart bots, started and
+ * stopped by the supervisor, which relays what it hears to each smart bot of
+ * the room (supervisor/roomRelay.ts).
  *
  * It hears every timed speaking turn (the speaking timer says whose it is) and
- * the assassin-phase discussion, transcribes each person's speech once with
- * Azure, and sends it to the supervisor over IPC. The bots' own turns are
+ * the assassin-phase discussion, and transcribes people's speech live with
+ * Azure (plan 2026-11-15-2100, D1): a turn's words go out about a second after
+ * it ends, a discussion phrase as soon as it is said. The bots' own speech is
  * skipped: each bot sends the exact words it said.
  *
  * Usage (by the supervisor): tsx src/cli/ears.ts --room <CODE>
@@ -14,18 +15,17 @@
 
 import {
   DiscussionListener,
-  DiscussionRecorder,
   LiveKitListener,
   TimerListener,
-  TurnSegmenter,
   isSilent,
   transcribe,
   type AzureSpeechConfig,
-  type RecordedDiscussion,
-  type RecordedTurn,
   tolerateLiveKitHandleErrors,
 } from '@avalon/shared';
 import type { Heard } from '../supervisor/roomRelay.js';
+import { azureRecognizers } from '../ears/recognizer.js';
+import { LiveTurns } from '../ears/liveTurns.js';
+import { LiveDiscussion } from '../ears/liveDiscussion.js';
 import { makeLogger } from '../util/logger.js';
 
 const SAMPLE_RATE = 16000;
@@ -57,45 +57,41 @@ async function main(): Promise<void> {
     language: process.env.AZURE_SPEECH_LANGUAGE || 'fa-IR',
   };
 
-  const pending = new Set<Promise<void>>();
-  const track = (task: Promise<void>) => {
-    pending.add(task);
-    void task.finally(() => pending.delete(task));
-  };
-
-  const onTurn = (turn: RecordedTurn) => {
-    if (isBot(turn.speakerIdentity)) return;
-    track(
-      (async () => {
-        if (isSilent(turn.pcm, turn.sampleRate, SILENCE_RMS_THRESHOLD)) return;
-        const { transcript } = await transcribe(azure, turn.pcm, turn.sampleRate);
-        if (!transcript.trim()) return;
-        send({ type: 'turn', quest: turn.questNumber, round: turn.roundIndex, speaker: turn.speakerDisplayName, text: transcript.trim() });
-        log.info(`heard ${turn.speakerDisplayName} (Q${turn.questNumber}/R${turn.roundIndex}, ${turn.durationSec.toFixed(0)} s)`);
-      })().catch((err) => log.warn(`turn transcription failed: ${(err as Error).message}`))
-    );
-  };
-
-  const onDiscussion = (recording: RecordedDiscussion) => {
-    for (const segment of recording.speakers) {
-      if (isBot(segment.identity)) continue;
-      track(
-        (async () => {
-          if (isSilent(segment.pcm, segment.sampleRate, SILENCE_RMS_THRESHOLD)) return;
-          const { transcript } = await transcribe(azure, segment.pcm, segment.sampleRate);
-          if (!transcript.trim()) return;
-          send({ type: 'discussion', speaker: segment.displayName, text: transcript.trim() });
-          log.info(`heard ${segment.displayName} in the assassin discussion (${segment.durationSec.toFixed(0)} s)`);
-        })().catch((err) => log.warn(`discussion transcription failed: ${(err as Error).message}`))
-      );
-    }
-  };
-
-  const segmenter = new TurnSegmenter(onTurn);
-  const recorder = new DiscussionRecorder(onDiscussion);
+  const silent = (pcm: Int16Array, rate: number) => isSilent(pcm, rate, SILENCE_RMS_THRESHOLD);
+  const transcribeClip = async (pcm: Int16Array, rate: number) => (await transcribe(azure, pcm, rate)).transcript;
+  const recognizers = azureRecognizers({ ...azure, sampleRate: SAMPLE_RATE });
   let nameOf: (identity: string) => string = (identity) => identity;
-  const timerListener = new TimerListener(segmenter, { displayName: (identity) => nameOf(identity) });
-  const discussionListener = new DiscussionListener(recorder, (identity) => nameOf(identity));
+
+  const turns = new LiveTurns({
+    recognizers,
+    isBot,
+    transcribeClip,
+    isSilent: silent,
+    onTurn: (turn) => {
+      send({ type: 'turn', quest: turn.quest, round: turn.round, turnIndex: turn.turnIndex, speaker: turn.speaker, text: turn.text });
+      log.info(
+        `heard ${turn.speaker} (Q${turn.quest}/R${turn.round}/T${turn.turnIndex}, ${turn.durationSec.toFixed(0)} s): ` +
+          `${turn.text ? `${turn.text.length} chars, ${turn.via}` : 'nothing'}, ${turn.latencyMs} ms after the turn`
+      );
+    },
+    warn: (m) => log.warn(m),
+  });
+  const discussion = new LiveDiscussion({
+    recognizers,
+    isBot,
+    nameOf: (identity) => nameOf(identity),
+    transcribeClip,
+    isSilent: silent,
+    onLine: (line) => {
+      send({ type: 'discussion', speaker: line.speaker, text: line.text, fromBot: false });
+      log.info(`heard ${line.speaker} in the assassin discussion (${line.text.length} chars, ${line.via})`);
+    },
+    onTalking: (speaker) => send({ type: 'talking', speaker }),
+    warn: (m) => log.warn(m),
+  });
+
+  const timerListener = new TimerListener(turns, { displayName: (identity) => nameOf(identity) });
+  const discussionListener = new DiscussionListener(discussion, (identity) => nameOf(identity));
 
   const listener = new LiveKitListener(
     {
@@ -110,8 +106,8 @@ async function main(): Promise<void> {
     },
     {
       onAudioFrame: (identity, data, sampleRate) => {
-        segmenter.onAudioFrame(identity, data, sampleRate);
-        recorder.onAudioFrame(identity, data, sampleRate);
+        turns.onAudioFrame(identity, data, sampleRate);
+        discussion.onAudioFrame(identity, data, sampleRate);
       },
       onTimerData: (payload) => timerListener.onPayload(payload),
       onDiscussionTimerData: (payload) => discussionListener.onPayload(payload),
@@ -134,7 +130,9 @@ async function main(): Promise<void> {
 
   const stop = async (sig: string) => {
     log.info(`got ${sig}; finishing what is being transcribed`);
-    await Promise.allSettled(Array.from(pending));
+    timerListener.finalize();
+    discussionListener.finalize();
+    await Promise.allSettled([...turns.pending(), ...discussion.pending()]);
     await listener.leave().catch(() => {});
     process.exit(0);
   };

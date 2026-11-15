@@ -10,7 +10,7 @@
  * When newActiveSpeaker changes, emit the corresponding event.
  */
 
-import type { TurnSegmenter } from './turnSegmenter.js';
+import type { TurnSink } from './turnSegmenter.js';
 
 /** Mirrors the SpeakingTimerState broadcast by src/hooks/useSpeakingTimer.ts. */
 export interface SpeakingTimerState {
@@ -40,7 +40,7 @@ export type QuestChangeHandler = (fromQuest: number, toQuest: number) => void;
 export type RoundChangeHandler = (completedQuest: number, completedRound: number) => void;
 
 export class TimerListener {
-  private segmenter: TurnSegmenter;
+  private segmenter: TurnSink;
   private resolver: ParticipantResolver;
   private activeSpeaker: string | null = null;
   // -1 = no quest seen yet; 0 = the one-time intro round; 1+ = real quests.
@@ -57,7 +57,7 @@ export class TimerListener {
   private lastLeaderIdentity: string | null = null;
 
   constructor(
-    segmenter: TurnSegmenter,
+    segmenter: TurnSink,
     resolver: ParticipantResolver,
     onQuestChanged: QuestChangeHandler = () => {},
     onRoundChanged: RoundChangeHandler = () => {}
