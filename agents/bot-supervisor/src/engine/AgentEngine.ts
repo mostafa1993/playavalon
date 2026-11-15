@@ -323,6 +323,9 @@ export class AgentEngine {
     }).then((voice) => {
       this.voice = voice;
       if (!voice) return;
+      // The intro statement needs no one else's words: write it now, well before
+      // the intro round (its first speaker's clock starts seconds after the order).
+      this.intro = this.writeSpeech({ quest: 0, round: 0, turnIndex: 0, speakers: 0 });
       voice.setOnPrepare((info) => this.prepareSpeech(info));
       voice.setOnMyTurn((info) => void this.handleMyTurn(info));
       voice.setOnDiscussionStart(() => void this.speakInDiscussion());
@@ -373,11 +376,13 @@ export class AgentEngine {
 
   /** The leader's opening of a quest's round, written when it chose its team. */
   private opening: { quest: number; text: Promise<string | null> } | null = null;
+  /** The intro statement, written when the bot joined the voice room. */
+  private intro: Promise<string | null> | null = null;
 
   /** The bot is near its turn: start writing its statement (a leader's opening is written with its proposal). */
   private prepareSpeech(info: MyTurnInfo): void {
     const key = turnKey(info);
-    if (opensRound(info)) return;
+    if (opensRound(info) || (info.quest === 0 && this.intro)) return;
     if (!this.prepared.has(key)) this.prepared.set(key, this.writeSpeech(info));
   }
 
@@ -452,7 +457,9 @@ export class AgentEngine {
       if (!voice || !identity) return;
       const opening = opensRound(info) && this.opening?.quest === info.quest ? this.opening.text : null;
       if (opening) this.opening = null;
-      const pending = opening ?? this.prepared.get(key) ?? this.writeSpeech(info);
+      const intro = info.quest === 0 ? this.intro : null;
+      if (intro) this.intro = null;
+      const pending = opening ?? intro ?? this.prepared.get(key) ?? this.writeSpeech(info);
       this.prepared.delete(key);
       const text = await this.inTime(pending, () => this.writeSpeech(info, undefined, true));
       if (!text) {
