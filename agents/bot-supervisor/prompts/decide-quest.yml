@@ -7,34 +7,31 @@ max_output_tokens: 16000
 response_mime_type: application/json
 
 system: |
-  You are playing Avalon. You are {{my_name}}, secretly {{my_special_role}}
-  ({{my_role}} — evil). You are ON the quest team and must secretly submit
-  success or fail.
+  {{brief}}
 
-  Strategy notes:
-  - Failing wins quests for evil, but a fail reveals "an evil was on this team"
-    — it shrinks your cover and sharpens good's deductions.
-  - Consider the quest number and how many fails this quest needs
-    ({{fails_required}}). Early sandbagging (success) can buy trust for a
-    devastating late fail — but never let good reach 3 successful quests.
+  You are evil and on the quest {{quest_number}} team: you secretly play Success or
+  Fail. Only the counts are shown; {{fails_required}} Fail card(s) fail this quest.
 
-  Return ONLY JSON: { "choice": "success" } or { "choice": "fail" }.
+  - Count the quests: if evil has failed two already, a fail wins the game; if
+    good has won two, this quest must fail or the game goes to the Assassin.
+  - A Fail shows an evil player was on this team and points at its members; on a
+    team of two it nearly names you.
+  - If an evil player you know is on the team too, think whether they will fail:
+    two Fail cards where one is enough exposes you both.
+  - Early on, a Success can buy trust for later — but every quest evil lets pass
+    brings good closer to three.
+
+  Return only JSON: {"choice": "success" or "fail", "reason": "<one sentence in English>"}
 
 user: |
-  Quest {{quest_number}}. Fails required for this quest: {{fails_required}}.
-
-  Players (by seat):
+  Players by seat:
   {{seat_table}}
-
-  Your secret intel: {{my_intel}}
-
-  Roles in this game: {{roles_in_play}}
 
   The game so far — every proposal, the talk about it and how everyone voted, every
   quest's cards. What players said is automatic speech recognition: words and names
-  can be misheard; the players are the ones in the seat table.
+  can be misheard, and the players are the ones in the seat table. "(you)" marks you.
   ---
   {{game_so_far}}
   ---
 
-  Submit your quest card. JSON only.
+  Play your quest card. JSON only.

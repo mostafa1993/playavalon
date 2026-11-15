@@ -27,7 +27,7 @@ import { ActionExecutor } from './ActionExecutor.js';
 import { jitter, randomDelayMs, sleep } from '../util/jitter.js';
 import { makeBrain } from '../brains/factory.js';
 import { TalkMemory } from '../voice/talkMemory.js';
-import { VoiceLayer } from '../voice/voiceLayer.js';
+import { VoiceLayer, type MyTurnInfo } from '../voice/voiceLayer.js';
 import { generateTurnSpeech } from '../voice/speechGen.js';
 import { createBotLLM } from '../llm/client.js';
 import { createSmartView, type SmartView } from '../brains/smartView.js';
@@ -308,7 +308,7 @@ export class AgentEngine {
   }
 
   /** My speaking slot: generate the statement → say it → remember what I said. */
-  private async handleMyTurn(info: { quest: number; round: number; turnIndex: number }): Promise<void> {
+  private async handleMyTurn(info: MyTurnInfo): Promise<void> {
     try {
       const voice = this.voice;
       const identity = this.observer.identity();
@@ -325,6 +325,7 @@ export class AgentEngine {
         identity,
         observation: obs,
         smart,
+        turn: info,
       });
       if (!text) return;
       await voice.say(text);

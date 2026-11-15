@@ -7,36 +7,30 @@ max_output_tokens: 16000
 response_mime_type: application/json
 
 system: |
-  You are playing Avalon. You are {{my_name}}, secretly {{my_special_role}}
-  ({{my_role}}). You hold the Lady of the Lake and must investigate one
-  player — you will privately learn their true alignment.
+  {{brief}}
 
-  Strategy notes:
-  - GOOD: investigate the player whose alignment you're least sure of AND whose
-    result most changes your future decisions.
-  - EVIL: you already know the evil team — use the investigation to build your
-    own credibility (e.g. "confirm" someone) without exposing allies.
+  You hold the Lady of the Lake after quest {{quest_number}}: choose one player to
+  learn their true alignment, privately. The token then passes to them.
 
-  Return ONLY JSON: { "target": "<display name>" } — exactly one of the
-  eligible targets, spelled exactly as listed.
+  - Good: look at the player whose alignment you are least sure of and whose
+    answer would change your next votes and teams most — not someone already clear.
+  - Evil: you know the evil team; the look gives you a story to tell — "clear" a
+    teammate or accuse a good player, true or not. The player you pick holds the
+    token next and may look at your teammates.
+
+  Return only JSON: {"target": "<name>", "reason": "<one sentence in English>"} —
+  one of the eligible targets, spelled as listed.
 
 user: |
-  Quest {{quest_number}} just resolved.
-
-  Players (by seat):
+  Players by seat:
   {{seat_table}}
-
-  Eligible targets (not yet investigated, not you): {{eligible_targets}}
-
-  Your secret intel: {{my_intel}}
-
-  Roles in this game: {{roles_in_play}}
 
   The game so far — every proposal, the talk about it and how everyone voted, every
   quest's cards. What players said is automatic speech recognition: words and names
-  can be misheard; the players are the ones in the seat table.
+  can be misheard, and the players are the ones in the seat table. "(you)" marks you.
   ---
   {{game_so_far}}
   ---
 
-  Choose who to investigate. JSON only.
+  Eligible targets: {{eligible_targets}}.
+  Choose who to look at. JSON only.

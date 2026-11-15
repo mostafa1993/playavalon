@@ -69,6 +69,8 @@ export class Observer {
             known_players_label: roleRes.data.known_players_label ?? '',
             split_intel: roleRes.data.split_intel,
             oberon_split_intel: roleRes.data.oberon_split_intel,
+            evil_ring: roleRes.data.evil_ring_visibility,
+            decoy_warning: roleRes.data.decoy_warning,
             hidden_evil_count: roleRes.data.hidden_evil_count,
             has_lady_of_lake: roleRes.data.has_lady_of_lake,
           },

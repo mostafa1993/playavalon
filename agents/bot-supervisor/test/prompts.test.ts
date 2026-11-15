@@ -14,10 +14,7 @@ import { loadPrompt } from '@avalon/shared';
 const promptsDir = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..', 'prompts');
 
 // LLMBrain.baseVars, and what each decision adds (src/brains/LLMBrain/index.ts).
-const BASE = [
-  'my_name', 'my_role', 'my_special_role', 'my_intel', 'seat_table', 'quest_number',
-  'vote_track', 'team_size', 'fails_required', 'roles_in_play', 'game_so_far',
-];
+const BASE = ['brief', 'seat_table', 'quest_number', 'vote_track', 'team_size', 'fails_required', 'game_so_far'];
 const VARS: Record<string, string[]> = {
   'decide-propose.yml': [...BASE],
   'decide-vote.yml': [...BASE, 'proposed_team'],
@@ -26,10 +23,7 @@ const VARS: Record<string, string[]> = {
   'decide-assassin.yml': [...BASE, 'candidates'],
   'decide-merlin-quiz.yml': [...BASE, 'candidates'],
   // generateTurnSpeech (src/voice/speechGen.ts)
-  'speak-turn.yml': [
-    'my_name', 'my_role', 'my_special_role', 'my_intel', 'seat_table', 'quest_number',
-    'vote_track', 'proposed_team', 'roles_in_play', 'game_so_far',
-  ],
+  'speak-turn.yml': ['brief', 'seat_table', 'game_so_far', 'situation'],
 };
 
 test('every prompt file in the folder is covered here', () => {
@@ -47,5 +41,6 @@ for (const [file, vars] of Object.entries(VARS)) {
     const used = new Set([...`${p.system}\n${p.user}`.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]));
     for (const v of used) assert.ok(vars.includes(v), `${file} asks for {{${v}}}, which no caller passes`);
     assert.ok(used.has('game_so_far'), 'the game so far');
+    assert.ok(used.has('brief'), 'the brief');
   });
 }

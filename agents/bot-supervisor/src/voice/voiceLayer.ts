@@ -49,8 +49,17 @@ const MOUTH_SAMPLE_RATE = 48000; // WebRTC-native; matches synthesize()
 const SILENCE_RMS_THRESHOLD = 250;
 const MAX_SPEECH_SEC = 45; // hard cap — never blow past the ~50s timer window
 
+/** Where the bot's slot sits: the quest (0 = the intro round), the round of
+ *  talk, its place in the speaking order and that order's length. */
+export interface MyTurnInfo {
+  quest: number;
+  round: number;
+  turnIndex: number;
+  speakers: number;
+}
+
 /** Fired once when the speaking timer reaches the bot's own slot. */
-export type MyTurnHandler = (info: { quest: number; round: number; turnIndex: number }) => void;
+export type MyTurnHandler = (info: MyTurnInfo) => void;
 
 export interface VoiceLayerOptions {
   roomCode: string;
@@ -257,7 +266,7 @@ export class VoiceLayer {
     if (key === this.lastFiredTurnKey) return; // repeated broadcasts of the same slot
     this.lastFiredTurnKey = key;
     this.opts.logger.info(`[mouth] my speaking slot started (Q${quest}/R${round})`);
-    this.onMyTurn({ quest, round, turnIndex: state.currentSpeakerIndex });
+    this.onMyTurn({ quest, round, turnIndex: state.currentSpeakerIndex, speakers: state.speakingOrder.length });
   }
 
   /**

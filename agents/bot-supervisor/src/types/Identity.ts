@@ -27,14 +27,31 @@ export type SpecialRole =
  * (e.g., plain servant sees nothing). Brain modules should treat empty
  * arrays as "no intel" not "no players exist."
  */
+/** Split intel as the role route sends it: certain evil, and a mixed pair. */
+export interface IntelGroups {
+  certainEvil: Array<{ id: string; name: string }>;
+  mixedIntel: Array<{ id: string; name: string }>;
+  hiddenCount: number;
+}
+
+/** Evil-ring visibility: the one teammate this evil player knows. */
+export interface EvilRing {
+  knownTeammate: { id: string; name: string };
+  hiddenCount: number;
+}
+
 export interface RoleIntel {
   /** Display names of players the agent can see as "evil" / Merlin candidates / etc. */
   known_players: string[];
   /** UI label describing what known_players represents ("The evil among you", etc.) */
   known_players_label: string;
-  /** If the agent is Merlin and split-intel is enabled, the two groups. */
-  split_intel?: unknown;
-  oberon_split_intel?: unknown;
+  /** Merlin with split intel (or Oberon split intel): the two groups. */
+  split_intel?: IntelGroups;
+  oberon_split_intel?: IntelGroups;
+  /** An evil player with evil-ring visibility: the one teammate known. */
+  evil_ring?: EvilRing;
+  /** Merlin with a decoy in play: the app's warning, as shown to Merlin. */
+  decoy_warning?: string;
   /** Number of evil players hidden from Merlin (Mordred/Oberon chaos). */
   hidden_evil_count?: number;
   /** Whether the agent currently holds the Lady of the Lake token. */

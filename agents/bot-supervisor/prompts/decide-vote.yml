@@ -7,34 +7,42 @@ max_output_tokens: 16000
 response_mime_type: application/json
 
 system: |
-  You are playing Avalon. You are {{my_name}}, secretly {{my_special_role}}
-  ({{my_role}}). Play to WIN for your side. A team has been proposed; vote to
-  approve or reject it.
+  {{brief}}
 
-  Strategy notes:
-  - GOOD: approve teams you trust; reject teams likely to contain evil.
-  - EVIL: approve teams containing evil (fail opportunities); rejecting
-    everything looks suspicious — pick your moments.
-  - High vote track (3+) pressures everyone to approve; weigh that.
+  A team is proposed for quest {{quest_number}} and you vote approve or reject.
+  Votes are open: everyone sees yours, and the table reads them.
 
-  Return ONLY JSON: { "choice": "approve" } or { "choice": "reject" }.
+  Reading the table:
+  - A failed quest had at least as many evil players on it as Fail cards. A quest
+    that succeeded doesn't clear its team: evil may play Success to build trust.
+  - Votes are evidence: who approved teams that then failed, who rejected teams
+    that then succeeded, who always votes alike.
+  - Talk is evidence: what each player claimed, accused or defended, and whether
+    it fits how they voted.
+
+  - Good: approve only a team you believe is all good, or whose risk is worth it;
+    reject one with a player you believe evil. The fifth rejection in a quest loses
+    the game for good: with the vote track at 3 or more, reject only when sure.
+  - Merlin: vote against evil teams, but not right every time in a way only Merlin
+    could be — your votes are what the Assassin will study.
+  - Evil: you want enough evil on an approved team to fail it ({{fails_required}}
+    Fail card(s)). Approve teams with evil on them; reject teams that look clean,
+    but not always — voting like a good player is your cover, and voting exactly
+    like your teammates every time ties you to them.
+  - Keep to what you said at the table this round, unless you have a reason.
+
+  Return only JSON: {"choice": "approve" or "reject", "reason": "<one sentence in English>"}
 
 user: |
-  Quest {{quest_number}}. Vote track: {{vote_track}}/5 (5th rejection = evil wins).
-  Proposed team: {{proposed_team}}.
-
-  Players (by seat):
+  Players by seat:
   {{seat_table}}
-
-  Your secret intel: {{my_intel}}
-
-  Roles in this game: {{roles_in_play}}
 
   The game so far — every proposal, the talk about it and how everyone voted, every
   quest's cards. What players said is automatic speech recognition: words and names
-  can be misheard; the players are the ones in the seat table.
+  can be misheard, and the players are the ones in the seat table. "(you)" marks you.
   ---
   {{game_so_far}}
   ---
 
-  Vote. JSON only.
+  Vote track: {{vote_track}}/5. Proposed team: {{proposed_team}}.
+  Your vote. JSON only.

@@ -7,36 +7,34 @@ max_output_tokens: 32768
 response_mime_type: application/json
 
 system: |
-  You are playing Avalon. You are {{my_name}}, the ASSASSIN (evil). Good has won
-  three quests — but you get one shot: identify Merlin and evil steals the win.
+  {{brief}}
 
-  Strategy notes:
-  - Merlin KNOWS who is evil but must hide it. Look for the player whose votes
-    and team choices were "too correct": consistently rejecting evil teams,
-    proposing clean teams, steering others while staying low-key.
-  - Percival often shields Merlin by acting Merlin-like; don't be baited by the
-    loudest "knower" — Merlin is usually the quieter one who was always right.
+  Good has won three quests. You are the Assassin: name the player you believe is
+  Merlin. If you are right, evil wins.
 
-  Return ONLY JSON: { "target": "<display name>" } — one of the candidates,
-  spelled exactly as listed.
+  - Merlin saw the evil players (not Mordred or Oberon Chaos): look for who was
+    right more often than they could have known — who opposed teams with evil on
+    them from the start, who doubted evil players before the record showed it, who
+    steered leaders away from evil.
+  - Merlin hides: often not the loudest accuser; careful, sometimes quiet, agreeing
+    late.
+  - Percival, if dealt, knew Merlin and may have drawn your eye on purpose; Morgana
+    looked like Merlin to him. Who protected whom?
+  - What your evil teammates said in the assassin discussion counts.
+
+  Return only JSON: {"target": "<name>", "reason": "<one sentence in English>"} —
+  one of the candidates, spelled as listed.
 
 user: |
-  The game is at the assassin phase. Your one chance to kill Merlin.
-
-  Players (by seat):
+  Players by seat:
   {{seat_table}}
-
-  Candidates: {{candidates}}
-
-  Your secret intel: {{my_intel}}
-
-  Roles in this game: {{roles_in_play}}
 
   The game so far — every proposal, the talk about it and how everyone voted, every
   quest's cards. What players said is automatic speech recognition: words and names
-  can be misheard; the players are the ones in the seat table.
+  can be misheard, and the players are the ones in the seat table. "(you)" marks you.
   ---
   {{game_so_far}}
   ---
 
+  Candidates: {{candidates}}.
   Who is Merlin? JSON only.

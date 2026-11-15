@@ -100,10 +100,11 @@ export class LLMBrain implements Brain {
   private async decidePropose(ctx: BrainContext): Promise<Action | null> {
     const game = ctx.observation.game!;
     const size = game.quest_requirement.size;
-    const out = await this.llm!.runJson<{ team: string[] }>('decide-propose.yml', {
+    const out = await this.llm!.runJson<{ team: string[]; reason?: string }>('decide-propose.yml', {
       ...(await this.baseVars(ctx, game)),
       team_size: size,
     });
+    this.noteReason(ctx, 'decide-propose.yml', out.reason);
     const ids = this.namesToIds(game, out.team);
     if (!ids || ids.length !== size || new Set(ids).size !== size) return null;
     return { kind: 'propose', team: ids };
@@ -117,10 +118,11 @@ export class LLMBrain implements Brain {
           .map((id) => game.players.find((p) => p.id === id)?.display_name ?? id)
           .join(', ')
       : '(unknown)';
-    const out = await this.llm!.runJson<{ choice: string }>('decide-vote.yml', {
+    const out = await this.llm!.runJson<{ choice: string; reason?: string }>('decide-vote.yml', {
       ...(await this.baseVars(ctx, game)),
       proposed_team: teamNames,
     });
+    this.noteReason(ctx, 'decide-vote.yml', out.reason);
     if (out.choice !== 'approve' && out.choice !== 'reject') return null;
     return { kind: 'vote', choice: out.choice };
   }
@@ -139,10 +141,11 @@ export class LLMBrain implements Brain {
 
   private async decideQuest(ctx: BrainContext): Promise<Action | null> {
     const game = ctx.observation.game!;
-    const out = await this.llm!.runJson<{ choice: string }>('decide-quest.yml', {
+    const out = await this.llm!.runJson<{ choice: string; reason?: string }>('decide-quest.yml', {
       ...(await this.baseVars(ctx, game)),
       fails_required: game.quest_requirement.fails_required,
     });
+    this.noteReason(ctx, 'decide-quest.yml', out.reason);
     if (out.choice !== 'success' && out.choice !== 'fail') return null;
     return { kind: 'quest_action', choice: out.choice };
   }
@@ -154,10 +157,11 @@ export class LLMBrain implements Brain {
     const eligible = game.players.filter(
       (p) => p.id !== ctx.identity.user_id && !lady.investigated_player_ids.includes(p.id)
     );
-    const out = await this.llm!.runJson<{ target: string }>('decide-lady.yml', {
+    const out = await this.llm!.runJson<{ target: string; reason?: string }>('decide-lady.yml', {
       ...(await this.baseVars(ctx, game)),
       eligible_targets: eligible.map((p) => p.display_name).join(', '),
     });
+    this.noteReason(ctx, 'decide-lady.yml', out.reason);
     const target = eligible.find((p) => p.display_name === out.target);
     return target ? { kind: 'lady_investigate', target_id: target.id } : null;
   }
@@ -165,10 +169,11 @@ export class LLMBrain implements Brain {
   private async decideAssassin(ctx: BrainContext): Promise<Action | null> {
     const game = ctx.observation.game!;
     const candidates = game.players.filter((p) => p.id !== ctx.identity.user_id);
-    const out = await this.llm!.runJson<{ target: string }>('decide-assassin.yml', {
+    const out = await this.llm!.runJson<{ target: string; reason?: string }>('decide-assassin.yml', {
       ...(await this.baseVars(ctx, game)),
       candidates: candidates.map((p) => p.display_name).join(', '),
     });
+    this.noteReason(ctx, 'decide-assassin.yml', out.reason);
     const target = candidates.find((p) => p.display_name === out.target);
     return target ? { kind: 'assassin_guess', target_id: target.id } : null;
   }
@@ -176,10 +181,11 @@ export class LLMBrain implements Brain {
   private async decideMerlinQuiz(ctx: BrainContext): Promise<Action | null> {
     const game = ctx.observation.game!;
     const candidates = game.players.filter((p) => p.id !== ctx.identity.user_id);
-    const out = await this.llm!.runJson<{ target: string | null }>('decide-merlin-quiz.yml', {
+    const out = await this.llm!.runJson<{ target: string | null; reason?: string }>('decide-merlin-quiz.yml', {
       ...(await this.baseVars(ctx, game)),
       candidates: candidates.map((p) => p.display_name).join(', '),
     });
+    this.noteReason(ctx, 'decide-merlin-quiz.yml', out.reason);
     if (out.target === null) return { kind: 'merlin_quiz', target_id: null };
     const target = candidates.find((p) => p.display_name === out.target);
     return target ? { kind: 'merlin_quiz', target_id: target.id } : null;
@@ -189,37 +195,34 @@ export class LLMBrain implements Brain {
 
   /** Vars every decision prompt receives. */
   private async baseVars(ctx: BrainContext, game: GameObservation): Promise<Record<string, string | number>> {
-    const { identity } = ctx;
-    const intel =
-      identity.role_intel.known_players.length > 0
-        ? `${identity.role_intel.known_players_label}: ${identity.role_intel.known_players.join(', ')}`
-        : '(no special intel)';
     const seats = [...game.players]
       .sort((a, b) => a.seat_position - b.seat_position)
       .map((p) => {
         const tags = [
           p.is_leader ? 'leader' : '',
-          p.id === ctx.identity.user_id ? 'ME' : '',
-          p.is_on_team ? 'on-team' : '',
+          p.id === ctx.identity.user_id ? 'you' : '',
+          p.is_on_team ? 'on the proposed team' : '',
         ]
           .filter(Boolean)
           .join(', ');
         return `seat ${p.seat_position}: ${p.display_name}${tags ? ` (${tags})` : ''}`;
       })
       .join('\n');
+    const smart = ctx.smart;
     return {
-      my_name: identity.display_name,
-      my_role: identity.role,
-      my_special_role: identity.special_role,
-      my_intel: intel,
+      brief: smart ? smart.brief(ctx.identity, ctx.observation) : `You are ${ctx.identity.display_name}, playing Avalon.`,
       seat_table: seats,
       quest_number: game.current_quest,
       vote_track: game.vote_track,
       team_size: game.quest_requirement.size,
       fails_required: game.quest_requirement.fails_required,
-      roles_in_play: ctx.smart ? ctx.smart.rolesInPlay(ctx.observation) : '(role setup unavailable)',
-      game_so_far: ctx.smart ? await ctx.smart.gameSoFar(ctx.observation) : '(the game so far is unavailable)',
+      game_so_far: smart ? await smart.gameSoFar(ctx.observation) : '(the game so far is unavailable)',
     };
+  }
+
+  /** Log the model's one-sentence reason, for reading a game afterwards. */
+  private noteReason(ctx: BrainContext, prompt: string, reason: string | undefined): void {
+    if (reason) ctx.logger.info(`[smart] ${prompt} reason: ${reason}`);
   }
 
   /** Map display names back to player ids; null if any name doesn't resolve. */

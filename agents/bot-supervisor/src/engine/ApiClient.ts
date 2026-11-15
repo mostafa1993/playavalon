@@ -17,6 +17,7 @@ import type { SessionManager } from './SessionManager.js';
 import type { AgentLogger } from '../util/logger.js';
 import { sleep } from '../util/jitter.js';
 import type { GameHistory } from '../types/History.js';
+import type { EvilRing, IntelGroups } from '../types/Identity.js';
 
 export interface ApiErrorBody {
   error?: { code?: string; message?: string } | string;
@@ -249,8 +250,9 @@ export interface RoleResponse {
     known_players_label?: string;
     hidden_evil_count?: number;
     has_lady_of_lake?: boolean;
-    split_intel?: unknown;
-    oberon_split_intel?: unknown;
+    split_intel?: IntelGroups;
+    oberon_split_intel?: IntelGroups;
+    evil_ring_visibility?: EvilRing;
     has_decoy?: boolean;
     decoy_warning?: string;
   };

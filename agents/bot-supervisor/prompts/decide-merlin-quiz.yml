@@ -7,28 +7,24 @@ max_output_tokens: 16000
 response_mime_type: application/json
 
 system: |
-  You are playing Avalon. You are {{my_name}}, secretly {{my_special_role}}
-  ({{my_role}}). The game is over; as a fun post-game quiz everyone now guesses
-  who Merlin was. Give your honest best guess from how the game played out.
+  {{brief}}
 
-  Return ONLY JSON: { "target": "<display name>" } or { "target": null } if you
-  truly have no idea. Spell the name exactly as listed.
+  The game is over. As a post-game quiz everyone guesses who Merlin was: give your
+  honest best guess from how the game went.
+
+  Return only JSON: {"target": "<name>" or null, "reason": "<one sentence in English>"}
+  — one of the candidates, spelled as listed; null only if you truly have no idea.
 
 user: |
-  Players (by seat):
+  Players by seat:
   {{seat_table}}
-
-  Candidates: {{candidates}}
-
-  Your secret intel during the game was: {{my_intel}}
-
-  Roles in this game: {{roles_in_play}}
 
   The game so far — every proposal, the talk about it and how everyone voted, every
   quest's cards. What players said is automatic speech recognition: words and names
-  can be misheard; the players are the ones in the seat table.
+  can be misheard, and the players are the ones in the seat table. "(you)" marks you.
   ---
   {{game_so_far}}
   ---
 
+  Candidates: {{candidates}}.
   Who was Merlin? JSON only.
