@@ -21,6 +21,11 @@
  * The supervisor is intentionally idempotent on restart: it re-discovers
  * which bots are already in each room (via room_players.is_bot), and only
  * spawns whatever's missing.
+ *
+ * Smart bots (`mode: smart`) share one set of ears per room: the supervisor
+ * starts the room's ears process (cli/ears.ts) with its first smart bot and
+ * stops it when the last one is done, and relays what it hears, and each
+ * bot's own words, to the room's smart bots over IPC (roomRelay.ts).
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -32,9 +37,11 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 import { makeLogger } from '../util/logger.js';
 import { ensureBot } from '../util/credentials.js';
+import { RoomRelay, type FromBot, type Heard } from './roomRelay.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUN_CLI_PATH = resolve(__dirname, '..', 'cli', 'run.ts');
+const EARS_CLI_PATH = resolve(__dirname, '..', 'cli', 'ears.ts');
 const CONFIGS_DIR = process.env.AGENTS_CONFIGS_DIR || resolve(__dirname, '..', '..', 'configs');
 const ENV_FILE = process.env.AGENTS_ENV_FILE || resolve(__dirname, '..', '..', '..', '..', '.env');
 const POLL_INTERVAL_MS = Number(process.env.SUPERVISOR_POLL_MS || 5000);
@@ -47,6 +54,8 @@ interface AgentConfigSummary {
   username: string;
   order: number;
   path: string;
+  /** `mode: smart` — the LLM brain, with a voice and the room's shared ears. */
+  smart: boolean;
 }
 
 interface SpawnedAgent {
@@ -88,13 +97,14 @@ function loadConfigSummaries(): AgentConfigSummary[] {
     const path = resolve(CONFIGS_DIR, f);
     try {
       const raw = readFileSync(path, 'utf8');
-      const parsed = yaml.load(raw) as { name?: string; order?: number };
+      const parsed = yaml.load(raw) as { name?: string; order?: number; mode?: string };
       if (!parsed?.name) continue;
       summaries.push({
         name: parsed.name,
         username: `bot_${parsed.name}`,
         order: typeof parsed.order === 'number' ? parsed.order : 99,
         path,
+        smart: parsed.mode === 'smart',
       });
     } catch (err) {
       log.warn(`skipping invalid config ${basename(path)}`, { error: (err as Error).message });
@@ -114,23 +124,30 @@ function spawnAgent(roomCode: string, cfg: AgentConfigSummary, restartCount: num
   // We DID pass --env-file before, and it broke in Docker because Node 20.6+
   // treats `--env-file <path>` as a native fatal flag — exit code 9 when the
   // path doesn't exist.
-  const args = ['tsx', RUN_CLI_PATH, cfg.path, '--room', roomCode];
+  const args = ['--import', 'tsx', RUN_CLI_PATH, cfg.path, '--room', roomCode];
   // Forward AGENT_BASE_URL if set (used in docker-compose to point children
   // at the in-network http://app:3000 instead of the public URL).
   if (process.env.AGENT_BASE_URL) {
     args.push('--base-url', process.env.AGENT_BASE_URL);
   }
-  const proc = spawn('npx', args, {
-    stdio: ['ignore', 'inherit', 'inherit'],
+  // A direct node child (not through npx) so the IPC channel reaches it.
+  const proc = spawn(process.execPath, args, {
+    stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
     env: process.env,
   });
   const key = `${roomCode}:${cfg.username}`;
   const tracked: SpawnedAgent = { roomCode, username: cfg.username, proc, restartCount };
   spawned.set(key, tracked);
+  if (cfg.smart) {
+    const room = roomHearing(roomCode);
+    room.relay.addBot(cfg.username, { send: (m: Heard) => { if (proc.connected) proc.send(m); } });
+    proc.on('message', (m) => room.relay.fromBot(cfg.username, m as FromBot));
+  }
 
   proc.on('exit', (code) => {
     log.info(`agent ${cfg.username} (room ${roomCode}) exited code=${code}`);
     spawned.delete(key);
+    if (cfg.smart) hearing.get(roomCode)?.relay.removeBot(cfg.username);
     // Restart only on abnormal exits AND under the retry cap. Code 0 = the
     // agent saw game_over and exited cleanly; that's its job, don't restart.
     if (code !== 0 && tracked.restartCount < MAX_RESTARTS_PER_AGENT) {
@@ -144,9 +161,64 @@ function spawnAgent(roomCode: string, cfg: AgentConfigSummary, restartCount: num
     } else if (code !== 0) {
       log.error(`agent ${cfg.username} for room ${roomCode} crashed ${MAX_RESTARTS_PER_AGENT} times; giving up`);
     }
+    if (cfg.smart) stopEarsIfDone(roomCode);
   });
 
   return tracked;
+}
+
+/** One room's shared hearing: the relay and its ears process. */
+interface RoomHearing {
+  relay: RoomRelay;
+  ears: ChildProcess | null;
+  earsRestarts: number;
+}
+const hearing = new Map<string, RoomHearing>();
+
+/** The room's hearing, starting its ears with the room's first smart bot. */
+function roomHearing(roomCode: string): RoomHearing {
+  let room = hearing.get(roomCode);
+  if (!room) {
+    room = { relay: new RoomRelay(), ears: null, earsRestarts: 0 };
+    hearing.set(roomCode, room);
+    startEars(roomCode, room);
+  }
+  return room;
+}
+
+function startEars(roomCode: string, room: RoomHearing): void {
+  log.info(`starting the ears for room ${roomCode}`);
+  const proc = spawn(process.execPath, ['--import', 'tsx', EARS_CLI_PATH, '--room', roomCode], {
+    stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+    env: process.env,
+  });
+  room.ears = proc;
+  proc.on('message', (m) => room.relay.fromEars(m as Heard));
+  proc.on('exit', (code) => {
+    if (room.ears === proc) room.ears = null;
+    if (hearing.get(roomCode) !== room || shuttingDown || code === 0) return;
+    if (room.earsRestarts >= MAX_RESTARTS_PER_AGENT) {
+      log.error(`the ears for room ${roomCode} crashed ${MAX_RESTARTS_PER_AGENT} times; the smart bots there are deaf`);
+      return;
+    }
+    room.earsRestarts += 1;
+    log.warn(`the ears for room ${roomCode} crashed (code ${code}); restart ${room.earsRestarts}/${MAX_RESTARTS_PER_AGENT}`);
+    setTimeout(() => {
+      if (hearing.get(roomCode) === room && !shuttingDown) startEars(roomCode, room);
+    }, 2000);
+  });
+}
+
+/** When no smart bot of the room is running or about to restart, stop its ears. */
+function stopEarsIfDone(roomCode: string): void {
+  // A crashed bot restarts after 2 s: look again after that.
+  setTimeout(() => {
+    const room = hearing.get(roomCode);
+    if (!room || room.relay.botCount > 0) return;
+    hearing.delete(roomCode);
+    log.info(`no smart bot left in room ${roomCode}; stopping its ears`);
+    room.ears?.kill('SIGTERM');
+  }, 3000);
 }
 
 async function reconcileOnce(supabase: SupabaseClient, configs: AgentConfigSummary[]): Promise<void> {
@@ -219,6 +291,9 @@ function shutdown(sig: string): void {
   log.info(`got ${sig}, killing ${spawned.size} child agent(s)`);
   for (const s of spawned.values()) {
     try { s.proc.kill('SIGTERM'); } catch { /* noop */ }
+  }
+  for (const room of hearing.values()) {
+    try { room.ears?.kill('SIGTERM'); } catch { /* noop */ }
   }
   setTimeout(() => {
     for (const s of spawned.values()) {

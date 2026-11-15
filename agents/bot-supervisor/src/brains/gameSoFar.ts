@@ -12,11 +12,13 @@
  */
 
 import type { GameHistory, HistoryProposal } from '../types/History.js';
-import type { TalkTurn } from '../voice/talkMemory.js';
+import type { DiscussionLine, TalkTurn } from '../voice/talkMemory.js';
 
 export interface GameSoFarInput {
   history: GameHistory | null;
   talk: readonly TalkTurn[];
+  /** The assassin-phase discussion (evil players only), if any. */
+  discussion?: readonly DiscussionLine[];
   players: ReadonlyArray<{ id: string; display_name: string }>;
   /** The bot's own player id: its name is marked "(you)". */
   meId: string;
@@ -78,6 +80,14 @@ export function renderGameSoFar(input: GameSoFarInput): string {
       const seen = l.result ? `: ${l.result.toUpperCase()} (only you know this)` : ' (only they know the result)';
       lines.push(`  Lady of the Lake: ${name(l.investigator_id)} looked at ${name(l.target_id)}${seen}`);
     }
+  }
+
+  const discussion = input.discussion ?? [];
+  if (discussion.length > 0) {
+    lines.push(
+      'Assassin-phase discussion (the evil players, talking freely):',
+      ...discussion.map((d) => `  ${speaker(d.speaker)}: ${d.text}`)
+    );
   }
 
   return lines.length > 0 ? lines.join('\n') : '(nothing has happened yet)';

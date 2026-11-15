@@ -31,6 +31,7 @@ import { VoiceLayer, sentences, turnKey, type MyTurnInfo } from '../voice/voiceL
 import { generateTurnSpeech } from '../voice/speechGen.js';
 import { createBotLLM } from '../llm/client.js';
 import { createSmartView, type SmartView } from '../brains/smartView.js';
+import type { FromBot, Heard } from '../supervisor/roomRelay.js';
 import { ReadKeeper } from '../brains/privateRead.js';
 import { seatTable } from '../brains/seats.js';
 
@@ -91,6 +92,7 @@ export class AgentEngine {
           logger: this.logger,
           privateRead: () => this.reads?.rendered() ?? '(no read yet: judge from the game so far)',
         });
+        this.listen();
         const readLlm = createBotLLM();
         this.reads = new ReadKeeper({
           llm: () => readLlm,
@@ -313,13 +315,33 @@ export class AgentEngine {
       displayName,
       voice: this.opts.config.voice,
       logger: this.logger,
-      memory: this.talkMemory,
     }).then((voice) => {
       this.voice = voice;
       if (!voice) return;
       voice.setOnPrepare((info) => this.prepareSpeech(info));
       voice.setOnMyTurn((info) => void this.handleMyTurn(info));
     });
+  }
+
+  /**
+   * The room's ears, through the supervisor: everything said, each person's
+   * words transcribed once, each smart bot's as it said them. "ready" asks for
+   * all that was heard before this bot (re)started.
+   */
+  private listen(): void {
+    if (!process.send) {
+      this.logger.warn('[ears] not run by the supervisor: no room ears, the bot hears nothing');
+      return;
+    }
+    process.on('message', (m: Heard) => {
+      if (m.type === 'turn') this.talkMemory?.addTurn(m.quest, m.round, m.speaker, m.text);
+      else if (m.type === 'discussion') this.talkMemory?.addDiscussion(m.speaker, m.text);
+    });
+    this.tell({ type: 'ready' });
+  }
+
+  private tell(message: FromBot): void {
+    if (process.send) process.send(message);
   }
 
   /** Statements being written for upcoming slots, by turn key. */
@@ -374,7 +396,10 @@ export class AgentEngine {
       }
       const spoken = await voice.say(text, slotStartedAt);
       // Remember what I said — my ears can't hear my published track.
-      if (spoken) this.talkMemory?.addTurn(info.quest, info.round, identity.display_name, spoken);
+      if (spoken) {
+        this.talkMemory?.addTurn(info.quest, info.round, identity.display_name, spoken);
+        this.tell({ type: 'said', quest: info.quest, round: info.round, speaker: identity.display_name, text: spoken });
+      }
       await voice.handOn();
     } catch (err) {
       this.logger.warn(`[mouth] speaking turn failed: ${(err as Error).message}`);

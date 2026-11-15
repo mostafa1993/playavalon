@@ -83,3 +83,20 @@ test('a proposal being voted on shows no votes; talk with no proposal yet is kep
 test('an empty game says so', () => {
   assert.equal(renderGameSoFar({ history: null, talk: [], players, meId: 's' }), '(nothing has happened yet)');
 });
+
+test('the assassin discussion comes last, with the bot marked', () => {
+  const out = renderGameSoFar({
+    history,
+    talk,
+    discussion: [
+      { speaker: 'Reza', text: 'به نظرم مینا مرلینه' },
+      { speaker: 'Sara', text: 'موافقم' },
+    ],
+    players,
+    meId: 's',
+  });
+  assert.ok(
+    out.endsWith('Assassin-phase discussion (the evil players, talking freely):\n  Reza: به نظرم مینا مرلینه\n  Sara (you): موافقم'),
+    out
+  );
+});

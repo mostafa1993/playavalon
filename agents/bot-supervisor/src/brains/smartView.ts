@@ -47,6 +47,7 @@ export function createSmartView(deps: {
       return renderGameSoFar({
         history,
         talk: deps.talk.all(),
+        discussion: deps.talk.discussion(),
         players: game?.players ?? observation.room.players,
         meId: deps.meId,
       });

@@ -1,8 +1,10 @@
 /**
- * Headless LiveKit participant that records every other participant's
- * microphone track. Feeds frames to the turn segmenter via the callback.
+ * Headless, hidden LiveKit participant that hears every other participant's
+ * microphone and the speaking- and discussion-timer messages, and hands them
+ * to callbacks. The AI reviewer and the smart bots' room ears both listen
+ * through it.
  *
- * The bot never publishes audio/video. It subscribes to audio tracks only.
+ * It never publishes audio or video. It subscribes to audio tracks only.
  */
 
 import {
@@ -15,10 +17,10 @@ import {
   type RemoteParticipant,
 } from '@livekit/rtc-node';
 import { AccessToken } from 'livekit-server-sdk';
-import { TIMER_TOPIC } from '@avalon/shared';
+import { TIMER_TOPIC } from './timerListener.js';
 import { DISCUSSION_TIMER_TOPIC } from './discussionListener.js';
 
-export interface BotOptions {
+export interface ListenerOptions {
   wsUrl: string;
   apiKey: string;
   apiSecret: string;
@@ -29,20 +31,20 @@ export interface BotOptions {
   channels: number;
 }
 
-export interface BotEvents {
+export interface ListenerEvents {
   onAudioFrame: (identity: string, data: Int16Array, sampleRate: number) => void;
   onTimerData: (payload: Uint8Array) => void;
   onDiscussionTimerData: (payload: Uint8Array) => void;
 }
 
-export class LiveKitBot {
-  private readonly opts: BotOptions;
-  private readonly events: BotEvents;
+export class LiveKitListener {
+  private readonly opts: ListenerOptions;
+  private readonly events: ListenerEvents;
   private room: Room | null = null;
   private readonly identityToName = new Map<string, string>();
   private readonly audioConsumers = new Map<string, AbortController>();
 
-  constructor(opts: BotOptions, events: BotEvents) {
+  constructor(opts: ListenerOptions, events: ListenerEvents) {
     this.opts = opts;
     this.events = events;
   }

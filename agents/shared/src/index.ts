@@ -41,3 +41,11 @@ export {
   type RolesInPlay,
   type RoleCount,
 } from './roleConfig.js';
+export {
+  DiscussionRecorder,
+  type RecordedDiscussion,
+  type RecordedDiscussionSegment,
+  type DiscussionFinishedHandler,
+} from './discussionRecorder.js';
+export { DiscussionListener, DISCUSSION_TIMER_TOPIC, type DisplayNameResolver } from './discussionListener.js';
+export { LiveKitListener, type ListenerOptions, type ListenerEvents } from './livekitListener.js';

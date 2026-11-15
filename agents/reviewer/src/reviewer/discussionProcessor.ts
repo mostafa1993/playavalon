@@ -29,7 +29,7 @@ import type {
   RawDiscussionJson,
   RawDiscussionSpeaker,
 } from '../types.js';
-import type { RecordedDiscussion } from '../bot/discussionRecorder.js';
+import type { RecordedDiscussion } from '@avalon/shared';
 
 /** Silence check + STT. A silent clip or a failed STT gives an empty transcript. */
 async function transcribeSpeaker(

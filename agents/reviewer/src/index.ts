@@ -35,11 +35,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { startWatcher } from './gamestate/watcher.js';
 import { dbRecordSource } from './gamestate/recordSource.js';
 import type { ActiveGameRow } from './gamestate/db.js';
-import { LiveKitBot } from './bot/livekitBot.js';
+import { LiveKitListener } from '@avalon/shared';
 import { TurnSegmenter } from '@avalon/shared';
 import { TimerListener } from '@avalon/shared';
-import { DiscussionRecorder, type RecordedDiscussion } from './bot/discussionRecorder.js';
-import { DiscussionListener } from './bot/discussionListener.js';
+import { DiscussionRecorder, type RecordedDiscussion } from '@avalon/shared';
+import { DiscussionListener } from '@avalon/shared';
 import { processDiscussion } from './reviewer/discussionProcessor.js';
 import { writeJsonAtomic } from './storage/atomicWrite.js';
 import { gameDir, metaPath } from './storage/layout.js';
@@ -59,7 +59,7 @@ import type { MetaJson, RecordedTurn } from './types.js';
 interface Session {
   /** The game and its folder, which every pipeline step works with. */
   ctx: PipelineContext;
-  bot: LiveKitBot;
+  bot: LiveKitListener;
   segmenter: TurnSegmenter;
   timerListener: TimerListener;
   discussionRecorder: DiscussionRecorder;
@@ -156,7 +156,7 @@ async function startSession(
     (identity) => metaByIdentity.get(identity) ?? identity
   );
 
-  const bot = new LiveKitBot(
+  const bot = new LiveKitListener(
     {
       wsUrl: config.livekit.url,
       apiKey: config.livekit.apiKey,
