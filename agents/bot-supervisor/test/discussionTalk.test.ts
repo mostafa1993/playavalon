@@ -21,9 +21,9 @@ test('a line calls for a decision unless it is mine, or one bot line too many in
   assert.equal(worthDeciding([], 'Alice'), false);
   assert.equal(worthDeciding([line('Reza')], 'Alice'), true);
   assert.equal(worthDeciding([line('Alice', true)], 'Alice'), false);
-  const bots = Array.from({ length: MAX_BOT_RUN }, (_, i) => line(`Bot${i}`, true));
-  assert.equal(worthDeciding([line('Reza'), ...bots], 'Alice'), true);
-  assert.equal(worthDeciding([line('Reza'), ...bots, line('Bob', true)], 'Alice'), false);
+  const below = Array.from({ length: MAX_BOT_RUN - 1 }, (_, i) => line(`Bot${i}`, true));
+  assert.equal(worthDeciding([line('Reza'), ...below], 'Alice'), true);
+  assert.equal(worthDeciding([line('Reza'), ...below, line('Bob', true)], 'Alice'), false, 'not after MAX_BOT_RUN bot lines in a row');
   assert.equal(botRun([line('Bob', true), line('Reza'), line('Bob', true), line('Carl', true)]), 2);
 });
 
@@ -33,7 +33,12 @@ test('someone is talking if heard within the last second', () => {
   assert.equal(someoneTalking(new Map([['Reza', now - 3_000]]), now), false);
 });
 
-function world(replies: string[], replyMs = 10) {
+const until = async (ok: () => boolean, ms = 2_000) => {
+  const end = Date.now() + ms;
+  while (!ok() && Date.now() < end) await sleep(5);
+};
+
+function world(replies: string[], replyMs = 10, speakMs = 0) {
   const talk = new TalkMemory();
   const said: string[] = [];
   const told: FromBot[] = [];
@@ -49,6 +54,7 @@ function world(replies: string[], replyMs = 10) {
   const voice = {
     async say(text: string) {
       said.push(text);
+      await sleep(speakMs);
       return text;
     },
   } as unknown as VoiceLayer;
@@ -76,10 +82,10 @@ function world(replies: string[], replyMs = 10) {
 test('the bot opens, then answers a person, taking and giving back the floor each time', async () => {
   const w = world(['به نظرم رضا مرلینه.', 'آره، چون تیم دوم رو اون چید.']);
   w.bot.start();
-  await sleep(50);
+  await until(() => w.told.some((m) => m.type === 'floor-release'));
   w.talk.addDiscussion('Reza', 'تو چرا فکر می‌کنی من مرلینم؟', false);
   w.bot.onLine();
-  await sleep(50);
+  await until(() => w.said.length === 2 && w.told.filter((m) => m.type === 'floor-release').length === 2);
   assert.deepEqual(w.said, ['به نظرم رضا مرلینه.', 'آره، چون تیم دوم رو اون چید.']);
   assert.deepEqual(
     w.told.map((m) => m.type),
@@ -105,4 +111,35 @@ test('a good bot stays out of the discussion', async () => {
   w.bot.start();
   await sleep(30);
   assert.deepEqual(w.said, []);
+});
+
+test('a person who answers while the bot is speaking is answered next', async () => {
+  const w = world(['به نظرم رضا مرلینه.', 'چون تو تیم دوم بود.'], 5, 40);
+  w.bot.start();
+  await until(() => w.said.length === 1);
+  // Reza answers while Alice is still speaking.
+  w.talk.addDiscussion('Reza', 'چرا من؟', false);
+  w.bot.onLine();
+  await until(() => w.said.length === 2);
+  assert.deepEqual(w.said, ['به نظرم رضا مرلینه.', 'چون تو تیم دوم بود.']);
+  assert.deepEqual(w.talk.discussion().map((l) => l.speaker), ['Alice', 'Reza', 'Alice'], 'my line before the answer to it');
+});
+
+test('a line heard while a decision failed is still answered', async () => {
+  const w = world(['جواب']);
+  let calls = 0;
+  (w.bot as unknown as { d: { llm: LLMClient } }).d.llm = {
+    async runJson() {
+      calls += 1;
+      await sleep(10);
+      if (calls === 1) throw new Error('timeout');
+      return { reply: 'جواب' };
+    },
+  } as unknown as LLMClient;
+  w.bot.start();
+  await sleep(2);
+  w.talk.addDiscussion('Reza', 'سلام؟', false);
+  w.bot.onLine();
+  await until(() => w.said.length === 1);
+  assert.deepEqual(w.said, ['جواب']);
 });

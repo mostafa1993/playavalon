@@ -247,8 +247,10 @@ export class TurnSpeaker {
           yield* fromSentences(sentences(d.text));
         })();
       logger.info(`[turn] no draft ready (${pending ? 'still being written: racing it' : draftPromise ? 'it failed' : 'none'}); writing the words now`);
-      const tries = hedged((signal) => streamTurnSpeech(llm, { ...args, override: QUICK_SPEECH }, signal));
-      if (pending) tries.push({ afterMs: 0, source: draftIfCurrent });
+      const tries: { afterMs: number; source: SentenceSource; aside?: boolean }[] = hedged((signal) =>
+        streamTurnSpeech(llm, { ...args, override: QUICK_SPEECH }, signal)
+      );
+      if (pending) tries.push({ afterMs: 0, source: draftIfCurrent, aside: true });
       const fresh = await firstSentence(tries, this.t.passAtMs - elapsed());
       if (fresh) {
         const which = fresh.index === 2 ? 'the draft, finished meanwhile' : `words written now (call ${fresh.index + 1})`;
@@ -263,6 +265,12 @@ export class TurnSpeaker {
       logger.warn('[turn] nothing written in time: passing the turn in a sentence');
       return { text: PASS_LINE };
     } catch (err) {
+      // E.g. the game couldn't be read: a draft in hand is still better than passing.
+      const draft = draftPromise ? await settled(draftPromise) : null;
+      if (draft && draft !== PENDING) {
+        this.d.logger.warn(`[turn] composing failed: ${(err as Error).message}; the draft as it is`);
+        return { text: draft.text };
+      }
       this.d.logger.warn(`[turn] composing failed: ${(err as Error).message}; passing the turn in a sentence`);
       return { text: PASS_LINE };
     }

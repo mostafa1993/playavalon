@@ -98,3 +98,18 @@ test('a drained stream keeps its words even when the call is stopped after they 
   await sleep(20); // the rest arrives before anyone plays it
   assert.deepEqual(await all(joined(d)), ['one', 'two', 'three']);
 });
+
+test('a try set aside does not hold back the replacement of a failed one', async () => {
+  const log: string[] = [];
+  const started = Date.now();
+  const s = await firstSentence(
+    [
+      { afterMs: 0, source: source('fail', 5, log, 'A') },
+      { afterMs: 500, source: source(['B'], 5, log, 'B') },
+      { afterMs: 0, source: source(['C'], 300, log, 'C'), aside: true },
+    ],
+    1000
+  );
+  assert.equal(s?.first, 'B');
+  assert.ok(Date.now() - started < 200, 'B started when A failed, not at 500 ms');
+});

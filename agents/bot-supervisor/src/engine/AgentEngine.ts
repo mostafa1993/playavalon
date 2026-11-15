@@ -28,7 +28,7 @@ import { ActionExecutor } from './ActionExecutor.js';
 import { jitter, randomDelayMs, sleep } from '../util/jitter.js';
 import { makeBrain } from '../brains/factory.js';
 import { TalkMemory } from '../voice/talkMemory.js';
-import { VoiceLayer } from '../voice/voiceLayer.js';
+import { VoiceLayer, turnKey } from '../voice/voiceLayer.js';
 import { TurnSpeaker } from '../voice/turnSpeaker.js';
 import { DiscussionTalk } from '../voice/discussionTalk.js';
 import { createBotLLM } from '../llm/client.js';
@@ -328,8 +328,14 @@ export class AgentEngine {
       logger: this.logger,
     }).then((voice) => {
       this.voice = voice;
+      if (!voice) return;
       const llm = createBotLLM();
-      if (!voice || !llm) return;
+      if (!llm) {
+        // No model to speak with: hand each turn on at once rather than hold the table.
+        this.logger.warn('[mouth] no LLM configured: the bot passes its speaking turns');
+        voice.setOnMyTurn((info) => void voice.handOn(turnKey(info)));
+        return;
+      }
       const deps = {
         voice,
         talk,

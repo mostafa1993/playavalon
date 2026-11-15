@@ -322,12 +322,16 @@ export class VoiceLayer {
     const mine = () => opts.free === true || this.currentActiveSpeaker === this.selfIdentity;
     const limit = opts.free ? (opts.maxSeconds ?? FREE_SPEECH_SECONDS) : SLOT_SECONDS - SLOT_MARGIN_SECONDS;
     const spoken: string[] = [];
+    // Playback runs while the next sentence is synthesised; its failure (the room
+    // gone, the track closed) is caught here and ends the speech.
+    let playbackFailed: Error | null = null;
     let playing: Promise<void> = Promise.resolve();
     let playedSeconds = 0;
     try {
       for await (const sentence of source) {
         const pcm = await synthesize(this.env.azure, sentence, { voice: this.opts.voice, sampleRate: MOUTH_SAMPLE_RATE });
         await playing;
+        if (playbackFailed) break;
         if (!mine()) {
           this.opts.logger.warn(`[mouth] the slot passed ${spoken.length ? 'while speaking' : 'before the first sentence was ready'} — stopping`);
           break;
@@ -344,14 +348,18 @@ export class VoiceLayer {
         if (spoken.length === 0) {
           this.opts.logger.info(`[mouth] speaking (${Math.round((Date.now() - startedAt) / 1000)} s into the slot)`);
         }
-        playing = this.publisher.speak(pcm);
+        playing = this.publisher.speak(pcm).catch((err: Error) => {
+          playbackFailed = err;
+        });
         spoken.push(sentence);
         playedSeconds += seconds;
       }
+      await playing;
     } catch (err) {
       this.opts.logger.warn(`[mouth] the words stopped coming: ${(err as Error).message}`);
+      await playing;
     }
-    await playing;
+    if (playbackFailed) this.opts.logger.warn(`[mouth] playback failed: ${(playbackFailed as Error).message}`);
     if (spoken.length === 0) {
       this.opts.logger.warn('[mouth] nothing said');
       return null;

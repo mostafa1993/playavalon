@@ -35,6 +35,10 @@ export interface SpeakingTimerState {
    *  these turns separately so they don't collide with Quest 1's turns. Optional:
    *  absent/false = a normal proposal round. */
   isIntro?: boolean;
+  /** Which proposal of the quest this order's talk is about: the game's vote
+   *  track when the order began (0 in the intro). Stated, so every listener
+   *  files a turn under the same round, even one that joined late. */
+  round?: number;
 }
 
 interface UseSpeakingTimerOptions {
@@ -44,6 +48,8 @@ interface UseSpeakingTimerOptions {
   questNumber: number;
   /** Feature 023: true while the game is in the one-time intro round. */
   inIntroPhase?: boolean;
+  /** The game's vote track: the order's round. */
+  voteTrack?: number;
 }
 
 interface UseSpeakingTimerReturn {
@@ -118,6 +124,7 @@ export function useSpeakingTimer({
   leaderIdentity,
   questNumber,
   inIntroPhase = false,
+  voteTrack = 0,
 }: UseSpeakingTimerOptions): UseSpeakingTimerReturn {
   const { room } = useLiveKit();
   const [state, setState] = useState<SpeakingTimerState>({
@@ -168,10 +175,11 @@ export function useSpeakingTimer({
       timerDuration: TIMER_DURATION,
       questNumber,
       isIntro: inIntroPhase,
+      round: inIntroPhase ? 0 : voteTrack,
     };
     setState(newState);
     broadcast(newState);
-  }, [isManager, seatNumbers, leaderIdentity, questNumber, inIntroPhase, broadcast]);
+  }, [isManager, seatNumbers, leaderIdentity, questNumber, inIntroPhase, voteTrack, broadcast]);
 
   // Listen for state updates from manager
   useEffect(() => {

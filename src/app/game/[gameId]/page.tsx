@@ -98,6 +98,7 @@ export default function GamePage() {
     leaderIdentity,
     questNumber: gameState?.game?.current_quest ?? 0,
     inIntroPhase: gameState?.game?.in_intro_phase ?? false,
+    voteTrack: gameState?.game?.vote_track ?? 0,
   });
 
   // Feature 023: auto-end the intro round once the last speaker is done.

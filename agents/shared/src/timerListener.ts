@@ -23,6 +23,9 @@ export interface SpeakingTimerState {
   /** True during the one-time intro round — these turns are filed under the
    *  "intro" quest so they don't collide with Quest 1. Absent = normal round. */
   isIntro?: boolean;
+  /** Which proposal of the quest the order's talk is about (the game's vote
+   *  track when the order began), as the host states it. */
+  round?: number;
 }
 
 export const TIMER_TOPIC = 'speaking-timer';
@@ -139,6 +142,10 @@ export class TimerListener {
     }
     if (currentLeader) {
       this.lastLeaderIdentity = currentLeader;
+    }
+    // The host states the round: a listener that (re)joined mid-quest agrees with the rest.
+    if (typeof state.round === 'number') {
+      this.currentRoundIndex = state.round;
     }
 
     const newSpeaker = this.deriveActiveSpeaker(state);

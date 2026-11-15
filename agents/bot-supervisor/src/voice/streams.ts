@@ -49,7 +49,10 @@ export interface Started {
  * nothing else running, is replaced straight away). Null when every try
  * fails, or none gives a sentence within `withinMs`.
  */
-export function firstSentence(tries: { afterMs: number; source: SentenceSource }[], withinMs: number): Promise<Started | null> {
+export function firstSentence(
+  tries: { afterMs: number; source: SentenceSource; /** Doesn't hold back the replacement of a failed try. */ aside?: boolean }[],
+  withinMs: number
+): Promise<Started | null> {
   return new Promise((resolve) => {
     interface Running {
       index: number;
@@ -84,16 +87,17 @@ export function firstSentence(tries: { afterMs: number; source: SentenceSource }
       }
       const r: Running = { index, ctrl, it };
       running.push(r);
-      inFlight += 1;
+      const counts = !tries[index]!.aside;
+      if (counts) inFlight += 1;
       it.next().then(
         (step) => {
-          inFlight -= 1;
+          if (counts) inFlight -= 1;
           if (step.done) onFail();
           else if (done) stop(r);
           else finish(r, step.value);
         },
         () => {
-          inFlight -= 1;
+          if (counts) inFlight -= 1;
           onFail();
         }
       );

@@ -53,7 +53,7 @@ const OPENING = { model: 'gemini-4-hydrogen', thinking_level: 'MEDIUM', timeout_
 export function worthDeciding(lines: readonly DiscussionLine[], me: string): boolean {
   const last = lines.at(-1);
   if (!last || last.speaker === me) return false;
-  return !last.fromBot || botRun(lines) <= MAX_BOT_RUN;
+  return !last.fromBot || botRun(lines) < MAX_BOT_RUN;
 }
 
 /** How many lines at the end were said by bots. */
@@ -125,18 +125,22 @@ export class DiscussionTalk {
         if (!opening && !worthDeciding(lines, me.display_name)) return;
         const heardBefore = lines.length;
         const started = Date.now();
-        const reply = await this.write(me, opening);
-        this.d.logger.info(`[discussion] ${reply ? 'reply' : 'staying quiet'} decided in ${((Date.now() - started) / 1000).toFixed(1)} s${opening ? ' (opening)' : ''}`);
-        opening = false;
-        if (this.d.talk.discussion().length !== heardBefore) {
-          this.d.logger.info('[discussion] more was said meanwhile; thinking again');
-          this.again = true;
-          continue;
+        try {
+          const reply = await this.write(me, opening);
+          this.d.logger.info(`[discussion] ${reply ? 'reply' : 'staying quiet'} decided in ${((Date.now() - started) / 1000).toFixed(1)} s${opening ? ' (opening)' : ''}`);
+          opening = false;
+          if (this.d.talk.discussion().length !== heardBefore) {
+            this.d.logger.info('[discussion] more was said meanwhile; thinking again');
+            this.again = true;
+            continue;
+          }
+          if (reply) await this.say(me, reply, heardBefore);
+        } catch (err) {
+          // A line heard meanwhile (again) still gets its answer.
+          this.d.logger.warn(`[discussion] replying failed: ${(err as Error).message}`);
+          opening = false;
         }
-        if (reply) await this.say(me, reply, heardBefore);
       } while (this.again && this.active);
-    } catch (err) {
-      this.d.logger.warn(`[discussion] replying failed: ${(err as Error).message}`);
     } finally {
       this.deciding = false;
     }
@@ -182,11 +186,16 @@ export class DiscussionTalk {
         this.again = true;
         return;
       }
+      // My line goes into the record as I start it: a person who answers while I
+      // speak comes after it, and is the latest line when I think again.
+      const line = this.d.talk.addDiscussion(me.display_name, reply, true);
       const spoken = await this.d.voice.say(reply, Date.now(), { free: true, maxSeconds: REPLY_SECONDS });
       if (spoken) {
+        if (line) line.text = spoken;
         this.d.logger.info(`[mouth] said in the discussion: ${spoken}`);
-        this.d.talk.addDiscussion(me.display_name, spoken, true);
         this.d.tell({ type: 'discussed', speaker: me.display_name, text: spoken });
+      } else {
+        this.d.talk.removeDiscussion(line);
       }
     } finally {
       if (gotFloor) this.d.tell({ type: 'floor-release' });

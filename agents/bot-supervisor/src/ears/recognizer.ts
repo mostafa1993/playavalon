@@ -83,9 +83,22 @@ export function azureRecognizers(config: { key: string; region: string; language
             closed = true;
             stream.close();
           }
-          await Promise.race([stopped, new Promise((resolve) => setTimeout(resolve, END_WAIT_MS))]);
-          recognizer.close();
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const finished = await Promise.race([
+            stopped.then(() => true),
+            new Promise<boolean>((resolve) => {
+              timer = setTimeout(() => resolve(false), END_WAIT_MS);
+            }),
+          ]);
+          clearTimeout(timer);
+          try {
+            recognizer.close();
+          } catch {
+            // already closed
+          }
           if (failure) throw new Error(failure);
+          // Words may still be on their way: not a complete turn (the caller transcribes the clip).
+          if (!finished) throw new Error(`no end from the service within ${END_WAIT_MS / 1000} s`);
           return phrases.join(' ');
         },
       };

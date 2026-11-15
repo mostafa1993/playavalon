@@ -43,9 +43,19 @@ export class TalkMemory {
     if (clean) this.turns.push({ quest, round, turnIndex, speaker, text: clean });
   }
 
-  addDiscussion(speaker: string, text: string, fromBot: boolean): void {
+  /** A discussion line; returns it (a bot's own line is recorded as it starts, and may be corrected). */
+  addDiscussion(speaker: string, text: string, fromBot: boolean): DiscussionLine | null {
     const clean = text.trim();
-    if (clean) this.discussionLines.push({ speaker, text: clean, fromBot });
+    if (!clean) return null;
+    const line = { speaker, text: clean, fromBot };
+    this.discussionLines.push(line);
+    return line;
+  }
+
+  /** Take back a line recorded as it started but never said. */
+  removeDiscussion(line: DiscussionLine | null): void {
+    const i = line ? this.discussionLines.indexOf(line) : -1;
+    if (i >= 0) this.discussionLines.splice(i, 1);
   }
 
   /** Whether this turn's words (or its silence) have been heard. */

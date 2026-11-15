@@ -44,7 +44,8 @@ export class RoomRelay {
   private readonly floorQueue: string[] = [];
   private floorTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private readonly floorMaxMs = 30_000) {}
+  /** Longer than a bot holds it: up to 12 s waiting for quiet, then a reply of up to 20 s. */
+  constructor(private readonly floorMaxMs = 45_000) {}
 
   /** A smart bot of the room; it gets the backlog once it says it is ready. */
   addBot(username: string, peer: BotPeer): void {
