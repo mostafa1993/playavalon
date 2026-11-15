@@ -9,16 +9,19 @@
  * 3. Clockwise from there, skipping leader
  * 4. Leader speaks last (defends)
  *
- * Timer: 50s countdown, auto-advance when it hits 0 (no auto-mute — the manager
- * force-mutes manually; see forceMuteParticipant in useLiveKit)
+ * Timer: 50s countdown (30s for a smart bot), auto-advance when it hits 0 (no
+ * auto-mute — the manager force-mutes manually; see forceMuteParticipant in
+ * useLiveKit). A bot that has finished hands its turn on early (SPEAKER_DONE_TOPIC);
+ * the rules are in src/lib/domain/speaking-turn.ts.
  * Manager controls: start timer (auto-advance + auto-reset)
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { RoomEvent, type RemoteParticipant } from 'livekit-client';
 import { useLiveKit } from './useLiveKit';
+import { acceptsHandOn, SPEAKING_SECONDS, SPEAKER_DONE_TOPIC, speakingSeconds } from '@/lib/domain/speaking-turn';
 
-const TIMER_DURATION = 50; // seconds
+const TIMER_DURATION = SPEAKING_SECONDS;
 const TIMER_TOPIC = 'speaking-timer';
 
 export interface SpeakingTimerState {
@@ -117,6 +120,8 @@ export function useSpeakingTimer({
   });
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const advancedRef = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   // Track the (leader + intro-flag) we last generated the order for.
   // Regenerating on leader change handles all rotation triggers (rejected
   // proposal, new quest, Lady investigation); adding the intro-flag also gives
@@ -211,6 +216,21 @@ export function useSpeakingTimer({
     });
   }, [isManager]);
 
+  // A bot that has finished hands its turn on (manager only acts): the same
+  // move as the manager's skip, accepted only from the speaker whose clock runs.
+  useEffect(() => {
+    if (!room || !isManager) return;
+    const handleHandOn = (_payload: Uint8Array, participant?: RemoteParticipant, _kind?: unknown, topic?: string) => {
+      if (topic !== SPEAKER_DONE_TOPIC) return;
+      if (!acceptsHandOn(stateRef.current, participant?.identity)) return;
+      advanceToNext();
+    };
+    room.on(RoomEvent.DataReceived, handleHandOn);
+    return () => {
+      room.off(RoomEvent.DataReceived, handleHandOn);
+    };
+  }, [room, isManager, advanceToNext]);
+
   // Timer countdown
   useEffect(() => {
     if (!state.timerRunning || !state.timerStartTime) {
@@ -245,6 +265,7 @@ export function useSpeakingTimer({
         ...prev,
         timerRunning: true,
         timerStartTime: Date.now(),
+        timerDuration: speakingSeconds(prev.speakingOrder[prev.currentSpeakerIndex]),
       };
       pendingBroadcastRef.current = newState;
       advancedRef.current = false;

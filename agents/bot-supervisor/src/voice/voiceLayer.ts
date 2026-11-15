@@ -9,10 +9,13 @@
  * audio per turn (shared TurnSegmenter), transcribes completed turns
  * (Azure STT) into the TalkMemory the LLMBrain reads.
  *
- * Mouth: when the timer reaches the bot's own slot, fires onMyTurn (once per
- * turn); the engine generates the statement and calls say() — Azure TTS →
- * publishAudioTrack (the Phase-0-proven path). Guards: skip if the slot
- * already passed, hard-cap the audio length to fit the timer window.
+ * Mouth: when the bot is next in the speaking order it fires onPrepare, so the
+ * engine writes its statement while the speaker before it talks; when the
+ * timer reaches its own slot it fires onMyTurn (once per turn), and the engine
+ * calls say() — Azure TTS → publishAudioTrack — then handOn(), which tells the
+ * host's browser the turn is done. say() fits the words to the time left in
+ * the slot (whole sentences dropped from the end), and stays quiet if the
+ * slot has passed.
  *
  * Entirely optional: if LiveKit/Azure env is missing or the join fails, the
  * bot plays on silent + deaf (the brain notes the empty transcript).
@@ -48,7 +51,12 @@ import type { AgentLogger } from '../util/logger.js';
 const EAR_SAMPLE_RATE = 16000; // matches the reviewer's STT rate
 const MOUTH_SAMPLE_RATE = 48000; // WebRTC-native; matches synthesize()
 const SILENCE_RMS_THRESHOLD = 250;
-const MAX_SPEECH_SEC = 45; // hard cap — never blow past the ~50s timer window
+/** A bot's speaking turn, as the host's timer gives it (src/lib/domain/speaking-turn.ts). */
+export const SLOT_SECONDS = 30;
+/** Stop this long before the slot's end. */
+const SLOT_MARGIN_SECONDS = 1.5;
+/** The bot's "my turn is done" message to the host (src/lib/domain/speaking-turn.ts). */
+const SPEAKER_DONE_TOPIC = 'speaker-done';
 
 /** Where the bot's slot sits: the quest (0 = the intro round), the round of
  *  talk, its place in the speaking order and that order's length. */
@@ -61,6 +69,19 @@ export interface MyTurnInfo {
 
 /** Fired once when the speaking timer reaches the bot's own slot. */
 export type MyTurnHandler = (info: MyTurnInfo) => void;
+
+/** Fired once when the bot becomes the next speaker (or is queued to speak): time to write. */
+export type PrepareHandler = (info: MyTurnInfo) => void;
+
+/** The turn a MyTurnInfo is about, the same for its prepare and its slot. */
+export function turnKey(info: Pick<MyTurnInfo, 'quest' | 'round' | 'turnIndex'>): string {
+  return `${info.quest}:${info.round}:${info.turnIndex}`;
+}
+
+/** Sentences of a Persian statement, end punctuation kept. */
+export function sentences(text: string): string[] {
+  return (text.match(/[^.!?؟…]+[.!?؟…]*/g) ?? [text]).map((x) => x.trim()).filter(Boolean);
+}
 
 export interface VoiceLayerOptions {
   roomCode: string;
@@ -118,7 +139,9 @@ export class VoiceLayer {
   private publisher: AudioPublisher | null = null;
   private currentActiveSpeaker: string | null = null;
   private lastFiredTurnKey: string | null = null;
+  private lastPreparedKey: string | null = null;
   private onMyTurn: MyTurnHandler | null = null;
+  private onPrepare: PrepareHandler | null = null;
 
   private constructor(
     private readonly env: VoiceEnv,
@@ -131,6 +154,11 @@ export class VoiceLayer {
   /** Register the engine's my-turn handler (fired once per speaking slot). */
   setOnMyTurn(handler: MyTurnHandler): void {
     this.onMyTurn = handler;
+  }
+
+  /** Register the engine's prepare handler (fired once per upcoming slot). */
+  setOnPrepare(handler: PrepareHandler): void {
+    this.onPrepare = handler;
   }
 
   /**
@@ -167,7 +195,7 @@ export class VoiceLayer {
       roomJoin: true,
       canPublish: true, // the mouth
       canSubscribe: true,
-      canPublishData: false,
+      canPublishData: true, // the "my turn is done" message
     });
 
     const onTurnFinished = (turn: RecordedTurn) => {
@@ -262,10 +290,11 @@ export class VoiceLayer {
         : null;
     this.currentActiveSpeaker = active;
     this.clock.onState(state);
-    if (active !== this.selfIdentity || !this.onMyTurn) return;
-
     const quest = state.isIntro ? 0 : state.questNumber;
     const round = timerListener.getCurrentRoundIndex();
+    this.watchForNext(state, quest, round);
+    if (active !== this.selfIdentity || !this.onMyTurn) return;
+
     const key = `${quest}:${round}:${state.currentSpeakerIndex}`;
     if (key === this.lastFiredTurnKey) return; // repeated broadcasts of the same slot
     this.lastFiredTurnKey = key;
@@ -273,28 +302,67 @@ export class VoiceLayer {
     this.onMyTurn({ quest, round, turnIndex: state.currentSpeakerIndex, speakers: state.speakingOrder.length });
   }
 
+  /** The bot is next (or queued and not started): fire onPrepare once for that slot. */
+  private watchForNext(state: SpeakingTimerState, quest: number, round: number): void {
+    if (!this.onPrepare || !state.speakingOrder) return;
+    let mine = -1;
+    for (let i = state.currentSpeakerIndex; i < state.speakingOrder.length; i += 1) {
+      if (state.speakingOrder[i] === this.selfIdentity) {
+        mine = i;
+        break;
+      }
+    }
+    if (mine < 0 || mine - state.currentSpeakerIndex > 1) return;
+    const info = { quest, round, turnIndex: mine, speakers: state.speakingOrder.length };
+    const key = turnKey(info);
+    if (key === this.lastPreparedKey) return;
+    this.lastPreparedKey = key;
+    this.opts.logger.info(`[mouth] next to speak (Q${quest}/R${round}) — preparing`);
+    this.onPrepare(info);
+  }
+
   /**
-   * Speak a Persian statement into the room: TTS → publish. Skips (with a log)
-   * if the slot already moved on by the time synthesis finished. Audio is
-   * hard-capped to MAX_SPEECH_SEC so the bot never tramples the next speaker.
+   * Speak a Persian statement into the room: TTS → publish, fitted to the time
+   * left in the slot that started at `slotStartedAt`: whole sentences are
+   * dropped from the end until it fits. Stays quiet if the slot has passed or
+   * no sentence fits. Returns the words it spoke, or null.
    */
-  async say(text: string): Promise<void> {
-    if (!this.room) return;
-    const pcm = await synthesize(this.env.azure, text, {
-      voice: this.opts.voice,
-      sampleRate: MOUTH_SAMPLE_RATE,
-    });
-    if (this.currentActiveSpeaker !== this.selfIdentity) {
-      this.opts.logger.warn('[mouth] slot passed before synthesis finished — staying quiet');
-      return;
+  async say(text: string, slotStartedAt: number): Promise<string | null> {
+    if (!this.room) return null;
+    let parts = sentences(text);
+    while (parts.length > 0) {
+      const left = SLOT_SECONDS - SLOT_MARGIN_SECONDS - (Date.now() - slotStartedAt) / 1000;
+      const pcm = await synthesize(this.env.azure, parts.join(' '), {
+        voice: this.opts.voice,
+        sampleRate: MOUTH_SAMPLE_RATE,
+      });
+      if (this.currentActiveSpeaker !== this.selfIdentity) {
+        this.opts.logger.warn('[mouth] slot passed before synthesis finished — staying quiet');
+        return null;
+      }
+      const seconds = pcm.length / MOUTH_SAMPLE_RATE;
+      if (seconds > left) {
+        this.opts.logger.info(`[mouth] ${seconds.toFixed(0)} s of speech for ${Math.max(0, left).toFixed(0)} s left — dropping a sentence`);
+        parts = parts.slice(0, -1);
+        continue;
+      }
+      if (!this.publisher) {
+        this.publisher = await publishAudioTrack(this.room, { sampleRate: MOUTH_SAMPLE_RATE });
+      }
+      this.opts.logger.info(`[mouth] speaking (${seconds.toFixed(0)} s, ${Math.round((Date.now() - slotStartedAt) / 1000)} s into the slot)`);
+      await this.publisher.speak(pcm);
+      return parts.join(' ');
     }
-    const maxSamples = MAX_SPEECH_SEC * MOUTH_SAMPLE_RATE;
-    const capped = pcm.length > maxSamples ? pcm.subarray(0, maxSamples) : pcm;
-    if (!this.publisher) {
-      this.publisher = await publishAudioTrack(this.room, { sampleRate: MOUTH_SAMPLE_RATE });
-    }
-    this.opts.logger.info(`[mouth] speaking (${(capped.length / MOUTH_SAMPLE_RATE).toFixed(0)}s)`);
-    await this.publisher.speak(capped);
+    this.opts.logger.warn('[mouth] no sentence fits the time left — staying quiet');
+    return null;
+  }
+
+  /** Tell the host's browser this bot's turn is done (it moves to the next speaker). */
+  async handOn(): Promise<void> {
+    if (!this.room || this.currentActiveSpeaker !== this.selfIdentity) return;
+    await this.room.localParticipant
+      ?.publishData(new TextEncoder().encode(JSON.stringify({ at: Date.now() })), { reliable: true, topic: SPEAKER_DONE_TOPIC })
+      .catch((err: Error) => this.opts.logger.warn(`[mouth] hand-on failed: ${err.message}`));
   }
 
   private async processTurn(turn: RecordedTurn): Promise<void> {

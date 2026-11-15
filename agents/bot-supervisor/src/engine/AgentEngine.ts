@@ -27,7 +27,7 @@ import { ActionExecutor } from './ActionExecutor.js';
 import { jitter, randomDelayMs, sleep } from '../util/jitter.js';
 import { makeBrain } from '../brains/factory.js';
 import { TalkMemory } from '../voice/talkMemory.js';
-import { VoiceLayer, type MyTurnInfo } from '../voice/voiceLayer.js';
+import { VoiceLayer, sentences, turnKey, type MyTurnInfo } from '../voice/voiceLayer.js';
 import { generateTurnSpeech } from '../voice/speechGen.js';
 import { createBotLLM } from '../llm/client.js';
 import { createSmartView, type SmartView } from '../brains/smartView.js';
@@ -316,34 +316,66 @@ export class AgentEngine {
       memory: this.talkMemory,
     }).then((voice) => {
       this.voice = voice;
-      if (voice) voice.setOnMyTurn((info) => void this.handleMyTurn(info));
+      if (!voice) return;
+      voice.setOnPrepare((info) => this.prepareSpeech(info));
+      voice.setOnMyTurn((info) => void this.handleMyTurn(info));
     });
   }
 
-  /** My speaking slot: generate the statement → say it → remember what I said. */
+  /** Statements being written for upcoming slots, by turn key. */
+  private readonly prepared = new Map<string, Promise<string | null>>();
+
+  /** The bot is next to speak: start writing its statement now. */
+  private prepareSpeech(info: MyTurnInfo): void {
+    const key = turnKey(info);
+    if (!this.prepared.has(key)) this.prepared.set(key, this.writeSpeech(info));
+  }
+
+  /**
+   * Write the statement for a slot. When the bot leads and opens the round, it
+   * presents its team, so it waits (up to a minute) for its own proposal.
+   */
+  private async writeSpeech(info: MyTurnInfo): Promise<string | null> {
+    const started = Date.now();
+    try {
+      const identity = this.observer.identity();
+      const smart = this.smartView;
+      const llm = (this.speechLLM ??= createBotLLM());
+      if (!identity || !smart || !llm) return null;
+      let obs = await this.observer.fetch();
+      const opens = info.quest > 0 && info.turnIndex === 0;
+      for (let waited = 0; opens && !obs.game?.current_proposal && waited < 60_000; waited += 2_000) {
+        await sleep(2_000);
+        obs = await this.observer.fetch();
+      }
+      const text = await generateTurnSpeech(llm, { identity, observation: obs, smart, turn: info });
+      this.logger.info(`[mouth] statement written in ${Math.round((Date.now() - started) / 1000)} s (${sentences(text).length} sentences)`);
+      return text || null;
+    } catch (err) {
+      this.logger.warn(`[mouth] writing the statement failed: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** My speaking slot: say the statement prepared for it (or write it now), remember it, hand the turn on. */
   private async handleMyTurn(info: MyTurnInfo): Promise<void> {
+    const slotStartedAt = Date.now();
+    const key = turnKey(info);
     try {
       const voice = this.voice;
       const identity = this.observer.identity();
-      const smart = this.smartView;
-      if (!voice || !identity || !smart) return;
-      const obs = await this.observer.fetch().catch(() => null);
-      if (!obs) return;
-      const llm = (this.speechLLM ??= createBotLLM());
-      if (!llm) {
-        this.logger.warn('[mouth] no LLM configured — staying quiet this turn');
+      if (!voice || !identity) return;
+      const pending = this.prepared.get(key) ?? this.writeSpeech(info);
+      this.prepared.delete(key);
+      const text = await pending;
+      if (!text) {
+        await voice.handOn();
         return;
       }
-      const text = await generateTurnSpeech(llm, {
-        identity,
-        observation: obs,
-        smart,
-        turn: info,
-      });
-      if (!text) return;
-      await voice.say(text);
-      // Remember my own statement — my ears can't hear my published track.
-      this.talkMemory?.addTurn(info.quest, info.round, identity.display_name, text);
+      const spoken = await voice.say(text, slotStartedAt);
+      // Remember what I said — my ears can't hear my published track.
+      if (spoken) this.talkMemory?.addTurn(info.quest, info.round, identity.display_name, spoken);
+      await voice.handOn();
     } catch (err) {
       this.logger.warn(`[mouth] speaking turn failed: ${(err as Error).message}`);
     }
