@@ -323,9 +323,13 @@ export class VoiceLayer {
     return null;
   }
 
-  /** Tell the host's browser this bot's turn is done (it moves to the next speaker). */
-  async handOn(): Promise<void> {
-    if (!this.room || this.currentActiveSpeaker !== this.selfIdentity) return;
+  /**
+   * Tell the host's browser this bot's turn — the one `key` names — is done (it
+   * moves to the next speaker). Not sent once that slot has passed: a late
+   * "done" must not end a later slot of the same bot.
+   */
+  async handOn(key: string): Promise<void> {
+    if (!this.room || this.currentActiveSpeaker !== this.selfIdentity || key !== this.lastFiredTurnKey) return;
     await this.room.localParticipant
       ?.publishData(new TextEncoder().encode(JSON.stringify({ at: Date.now() })), { reliable: true, topic: SPEAKER_DONE_TOPIC })
       .catch((err: Error) => this.opts.logger.warn(`[mouth] hand-on failed: ${err.message}`));

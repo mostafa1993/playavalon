@@ -102,3 +102,9 @@ test('the brief names the bot, its role and its intel', () => {
   assert.match(brief, /Your role: Assassin \(evil\)/);
   assert.match(brief, /What you were secretly shown when roles were dealt:\nYour evil allies: Nima\./);
 });
+
+test('holding the Lady comes from the game when given, not from the deal', () => {
+  const dealtIt = identity({ intel: { has_lady_of_lake: true } });
+  assert.equal(renderIntel(dealtIt, false), 'You were shown no one: you know only your own role.');
+  assert.equal(renderIntel(identity({}), true), 'You hold the Lady of the Lake.');
+});

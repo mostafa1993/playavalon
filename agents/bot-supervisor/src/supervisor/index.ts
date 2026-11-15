@@ -42,6 +42,16 @@ import { RoomRelay, type FromBot, type Heard } from './roomRelay.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUN_CLI_PATH = resolve(__dirname, '..', 'cli', 'run.ts');
 const EARS_CLI_PATH = resolve(__dirname, '..', 'cli', 'ears.ts');
+/** agents/bot-supervisor: children start here, where `--import tsx` resolves. */
+const PACKAGE_DIR = resolve(__dirname, '..', '..');
+
+/** Relay to a child over IPC; a child that has just exited is logged, never fatal. */
+function sendTo(proc: ChildProcess, message: Heard, who: string): void {
+  if (!proc.connected) return;
+  proc.send(message, (err) => {
+    if (err) log.warn(`relay to ${who} failed: ${err.message}`);
+  });
+}
 const CONFIGS_DIR = process.env.AGENTS_CONFIGS_DIR || resolve(__dirname, '..', '..', 'configs');
 const ENV_FILE = process.env.AGENTS_ENV_FILE || resolve(__dirname, '..', '..', '..', '..', '.env');
 const POLL_INTERVAL_MS = Number(process.env.SUPERVISOR_POLL_MS || 5000);
@@ -130,17 +140,22 @@ function spawnAgent(roomCode: string, cfg: AgentConfigSummary, restartCount: num
   if (process.env.AGENT_BASE_URL) {
     args.push('--base-url', process.env.AGENT_BASE_URL);
   }
-  // A direct node child (not through npx) so the IPC channel reaches it.
+  // A direct node child (not through npx) so the IPC channel reaches it, started
+  // in this package's folder, from which `--import tsx` resolves.
   const proc = spawn(process.execPath, args, {
     stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
     env: process.env,
+    cwd: PACKAGE_DIR,
   });
+  // A send to a child that has just exited fails (EPIPE) on the ChildProcess;
+  // unheard, that error would end the supervisor and every bot it runs.
+  proc.on('error', (err) => log.warn(`agent ${cfg.username} (room ${roomCode}): ${err.message}`));
   const key = `${roomCode}:${cfg.username}`;
   const tracked: SpawnedAgent = { roomCode, username: cfg.username, proc, restartCount };
   spawned.set(key, tracked);
   if (cfg.smart) {
     const room = roomHearing(roomCode);
-    room.relay.addBot(cfg.username, { send: (m: Heard) => { if (proc.connected) proc.send(m); } });
+    room.relay.addBot(cfg.username, { send: (m: Heard) => sendTo(proc, m, cfg.username) });
     proc.on('message', (m) => room.relay.fromBot(cfg.username, m as FromBot));
   }
 
@@ -191,7 +206,9 @@ function startEars(roomCode: string, room: RoomHearing): void {
   const proc = spawn(process.execPath, ['--import', 'tsx', EARS_CLI_PATH, '--room', roomCode], {
     stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
     env: process.env,
+    cwd: PACKAGE_DIR,
   });
+  proc.on('error', (err) => log.warn(`the ears for room ${roomCode}: ${err.message}`));
   room.ears = proc;
   proc.on('message', (m) => room.relay.fromEars(m as Heard));
   proc.on('exit', (code) => {

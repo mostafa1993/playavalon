@@ -363,7 +363,12 @@ export class AgentEngine {
    */
   private async inTime(prepared: Promise<string | null>, quick: () => Promise<string | null>): Promise<string | null> {
     const early = await Promise.race([prepared, sleep(QUICK_AFTER_MS).then(() => undefined)]);
-    if (early !== undefined) return early;
+    // Ready, and not failed: say it. A prepared statement that failed (null) gets the quick one.
+    if (early) return early;
+    if (early === null) {
+      this.logger.info('[mouth] the prepared statement failed; writing a quick one');
+      return quick();
+    }
     this.logger.info('[mouth] the statement is not ready; writing a quick one as well');
     const fast = quick();
     const first = await Promise.race([prepared.then((t) => ({ t, from: 'prepared' })), fast.then((t) => ({ t, from: 'quick' }))]);
@@ -407,7 +412,13 @@ export class AgentEngine {
       const smart = this.smartView;
       const llm = (this.speechLLM ??= createBotLLM());
       if (!identity || !smart || !llm) return null;
-      const obs = await this.observer.fetch();
+      let obs = await this.observer.fetch();
+      // A quest round's talk is about the team proposed: a statement prepared
+      // before the leader proposes waits for the team (the quick one doesn't).
+      for (let waited = 0; !situation && !quick && info.quest > 0 && !obs.game?.current_proposal && waited < TEAM_WAIT_MS; waited += 2_000) {
+        await sleep(2_000);
+        obs = await this.observer.fetch();
+      }
       const text = await generateTurnSpeech(llm, {
         identity, observation: obs, smart, turn: info, situation, override: quick ? QUICK_SPEECH : undefined,
       });
@@ -463,7 +474,7 @@ export class AgentEngine {
       this.prepared.delete(key);
       const text = await this.inTime(pending, () => this.writeSpeech(info, undefined, true));
       if (!text) {
-        await voice.handOn();
+        await voice.handOn(key);
         return;
       }
       const spoken = await voice.say(text, slotStartedAt);
@@ -473,7 +484,7 @@ export class AgentEngine {
         this.talkMemory?.addTurn(info.quest, info.round, identity.display_name, spoken);
         this.tell({ type: 'said', quest: info.quest, round: info.round, speaker: identity.display_name, text: spoken });
       }
-      await voice.handOn();
+      await voice.handOn(key);
     } catch (err) {
       this.logger.warn(`[mouth] speaking turn failed: ${(err as Error).message}`);
     }
@@ -510,6 +521,8 @@ function opensRound(info: MyTurnInfo): boolean {
   return info.quest > 0 && info.turnIndex === 0;
 }
 
+/** How long a statement prepared before the leader proposes waits for the team. */
+const TEAM_WAIT_MS = 90_000;
 /** How long into its slot the bot waits for its prepared statement before writing a quick one too. */
 const QUICK_AFTER_MS = 6_000;
 /** The quick statement: Hydrogen on LOW, about 7-10 s. */

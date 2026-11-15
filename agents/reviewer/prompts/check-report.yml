@@ -4,6 +4,8 @@ name: check_report
 model: gemini-4-argon
 thinking_level: HIGH
 max_output_tokens: 32768
+# A long game's report and check took 8.5 min together in the 2026-11-15 replays: room past the 600 s default.
+timeout_seconds: 1200
 response_mime_type: application/json
 system: |
   You check a post-game report of one game of Avalon before its players read it. The

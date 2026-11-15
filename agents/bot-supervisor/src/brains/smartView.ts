@@ -57,7 +57,7 @@ export function createSmartView(deps: {
 
     brief(identity, observation) {
       const playerCount = observation.game?.players.length ?? observation.room.expected_players;
-      return renderBrief(identity, observation.room.role_config, playerCount);
+      return renderBrief(identity, observation.room.role_config, playerCount, observation.game?.lady_of_lake?.is_holder);
     },
   };
 }

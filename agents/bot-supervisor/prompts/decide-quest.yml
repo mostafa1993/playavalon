@@ -4,6 +4,8 @@ name: decide_quest
 model: gemini-4-hydrogen
 thinking_level: HIGH
 max_output_tokens: 16000
+# The table waits on this: a call not back in 60 s is given up (and tried once more).
+timeout_seconds: 60
 response_mime_type: application/json
 
 system: |

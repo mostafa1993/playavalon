@@ -133,8 +133,12 @@ export function renderMyRole(identity: Identity): string {
   return ROLE_TEXT[identity.special_role] ?? `${identity.special_role} (${identity.role})`;
 }
 
-/** Everything the bot was secretly shown when roles were dealt. */
-export function renderIntel(identity: Identity): string {
+/**
+ * Everything the bot was secretly shown when roles were dealt, and whether it
+ * holds the Lady of the Lake now (`holdsLady`, from the game; the identity's
+ * flag is from the deal and goes stale when the token passes).
+ */
+export function renderIntel(identity: Identity, holdsLady = identity.role_intel.has_lady_of_lake ?? false): string {
   const intel = identity.role_intel;
   const lines: string[] = [];
   const split = intel.split_intel ?? intel.oberon_split_intel;
@@ -154,7 +158,7 @@ export function renderIntel(identity: Identity): string {
     lines.push(`${hidden} evil player(s) are hidden from you.`);
   }
   if (intel.decoy_warning) lines.push(intel.decoy_warning);
-  if (intel.has_lady_of_lake) lines.push('You hold the Lady of the Lake.');
+  if (holdsLady) lines.push('You hold the Lady of the Lake.');
   return lines.length > 0 ? lines.join('\n') : 'You were shown no one: you know only your own role.';
 }
 
@@ -169,7 +173,8 @@ function names(group: ReadonlyArray<{ name: string }>): string {
 export function renderBrief(
   identity: Identity,
   roleConfig: Record<string, unknown> | null,
-  playerCount: number
+  playerCount: number,
+  holdsLady?: boolean
 ): string {
   return [
     `You are ${identity.display_name}, playing Avalon by voice with a table of Persian-speaking ` +
@@ -178,6 +183,6 @@ export function renderBrief(
     renderRules(roleConfig, playerCount),
     '',
     `Your role: ${renderMyRole(identity)}`,
-    `What you were secretly shown when roles were dealt:\n${renderIntel(identity)}`,
+    `What you were secretly shown when roles were dealt:\n${renderIntel(identity, holdsLady)}`,
   ].join('\n');
 }

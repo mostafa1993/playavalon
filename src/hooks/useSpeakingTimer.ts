@@ -102,6 +102,16 @@ function generateSpeakingOrder(
     : [leaderIdentity, ...clockwise, leaderIdentity];
 }
 
+/** The next speaker's turn, not started; past the last speaker, the order is done. */
+function nextSpeaker(prev: SpeakingTimerState): SpeakingTimerState {
+  return {
+    ...prev,
+    currentSpeakerIndex: Math.min(prev.currentSpeakerIndex + 1, prev.speakingOrder.length),
+    timerRunning: false,
+    timerStartTime: null,
+  };
+}
+
 export function useSpeakingTimer({
   isManager,
   seatNumbers,
@@ -120,8 +130,6 @@ export function useSpeakingTimer({
   });
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const advancedRef = useRef(false);
-  const stateRef = useRef(state);
-  stateRef.current = state;
   // Track the (leader + intro-flag) we last generated the order for.
   // Regenerating on leader change handles all rotation triggers (rejected
   // proposal, new quest, Lady investigation); adding the intro-flag also gives
@@ -200,16 +208,21 @@ export function useSpeakingTimer({
   // `currentSpeaker` resolves to null (done state) instead of sticking on the leader.
   const advanceToNext = useCallback(() => {
     if (!isManager) return;
-
     setState((prev) => {
-      const nextIndex = prev.currentSpeakerIndex + 1;
-      const clamped = Math.min(nextIndex, prev.speakingOrder.length);
-      const newState: SpeakingTimerState = {
-        ...prev,
-        currentSpeakerIndex: clamped,
-        timerRunning: false,
-        timerStartTime: null,
-      };
+      const newState = nextSpeaker(prev);
+      pendingBroadcastRef.current = newState;
+      advancedRef.current = false;
+      return newState;
+    });
+  }, [isManager]);
+
+  // A bot's "done": checked against the latest state inside the update, so a
+  // "done" that crosses the auto-advance or the manager's skip can't advance twice.
+  const handOn = useCallback((senderIdentity: string | undefined) => {
+    if (!isManager) return;
+    setState((prev) => {
+      if (!acceptsHandOn(prev, senderIdentity)) return prev;
+      const newState = nextSpeaker(prev);
       pendingBroadcastRef.current = newState;
       advancedRef.current = false;
       return newState;
@@ -221,15 +234,13 @@ export function useSpeakingTimer({
   useEffect(() => {
     if (!room || !isManager) return;
     const handleHandOn = (_payload: Uint8Array, participant?: RemoteParticipant, _kind?: unknown, topic?: string) => {
-      if (topic !== SPEAKER_DONE_TOPIC) return;
-      if (!acceptsHandOn(stateRef.current, participant?.identity)) return;
-      advanceToNext();
+      if (topic === SPEAKER_DONE_TOPIC) handOn(participant?.identity);
     };
     room.on(RoomEvent.DataReceived, handleHandOn);
     return () => {
       room.off(RoomEvent.DataReceived, handleHandOn);
     };
-  }, [room, isManager, advanceToNext]);
+  }, [room, isManager, handOn]);
 
   // Timer countdown
   useEffect(() => {
