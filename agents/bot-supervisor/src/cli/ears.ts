@@ -23,6 +23,7 @@ import {
   type AzureSpeechConfig,
   type RecordedDiscussion,
   type RecordedTurn,
+  tolerateLiveKitHandleErrors,
 } from '@avalon/shared';
 import type { Heard } from '../supervisor/roomRelay.js';
 import { makeLogger } from '../util/logger.js';
@@ -33,6 +34,8 @@ const SILENCE_RMS_THRESHOLD = 250;
 const args = process.argv.slice(2);
 const room = args[args.indexOf('--room') + 1];
 const log = makeLogger(`ears:${room}`);
+// LiveKit's native layer can throw while dropping its own handles; the ears keep listening.
+tolerateLiveKitHandleErrors(log);
 
 /** People speak; bots join as bot_<name> and send their own words. */
 const isBot = (identity: string) => identity.startsWith('bot_');
@@ -116,7 +119,17 @@ async function main(): Promise<void> {
   );
   nameOf = (identity) => listener.displayNameFor(identity) || identity;
 
-  await listener.join();
+  // LiveKit's native layer can fail a first connect (seen: "handle not found"); try again.
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await listener.join();
+      break;
+    } catch (err) {
+      if (attempt >= 3) throw err;
+      log.warn(`joining the room failed (${(err as Error).message}); attempt ${attempt + 1} of 3 in 2 s`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
   log.info('listening to the room');
 
   const stop = async (sig: string) => {

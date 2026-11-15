@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadAgentConfig } from '../config/loader.js';
 import { makeLogger } from '../util/logger.js';
+import { tolerateLiveKitHandleErrors } from '@avalon/shared';
 import { AgentEngine } from '../engine/AgentEngine.js';
 
 interface ParsedOpts {
@@ -87,6 +88,8 @@ async function main(): Promise<void> {
   }
 
   const logger = makeLogger(config.name);
+  // LiveKit's native layer can throw while dropping its own handles; the bot plays on.
+  tolerateLiveKitHandleErrors(logger);
   logger.info('starting', {
     config: config.config_path,
     room: opts.room.toUpperCase(),

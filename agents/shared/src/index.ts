@@ -49,3 +49,4 @@ export {
 } from './discussionRecorder.js';
 export { DiscussionListener, DISCUSSION_TIMER_TOPIC, type DisplayNameResolver } from './discussionListener.js';
 export { LiveKitListener, type ListenerOptions, type ListenerEvents } from './livekitListener.js';
+export { isLiveKitHandleError, tolerateLiveKitHandleErrors } from './nativeErrors.js';

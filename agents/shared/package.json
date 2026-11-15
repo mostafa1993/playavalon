@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@google/genai": "^2.32.0",
-    "@livekit/rtc-node": "^0.13.25",
+    "@livekit/rtc-node": "^0.13.35",
     "js-yaml": "^4.1.1",
     "livekit-server-sdk": "^2.15.1"
   },

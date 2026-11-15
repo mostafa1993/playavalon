@@ -160,15 +160,20 @@ export class VoiceLayer {
       opts.logger.warn('[mouth] LiveKit/Azure env incomplete — playing silent');
       return null;
     }
-    const layer = new VoiceLayer(env, opts);
-    try {
-      await layer.join();
-      opts.logger.info('[mouth] joined LiveKit; keeping time by the speaking timer');
-      return layer;
-    } catch (err) {
-      opts.logger.warn(`[mouth] LiveKit join failed (${(err as Error).message}) — playing silent`);
-      return null;
+    // LiveKit's native layer can fail a first connect (seen: "handle not found"); try again.
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const layer = new VoiceLayer(env, opts);
+      try {
+        await layer.join();
+        opts.logger.info('[mouth] joined LiveKit; keeping time by the speaking timer');
+        return layer;
+      } catch (err) {
+        opts.logger.warn(`[mouth] LiveKit join failed (${(err as Error).message}), attempt ${attempt} of 3`);
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 2000));
+      }
     }
+    opts.logger.warn('[mouth] could not join LiveKit — playing silent');
+    return null;
   }
 
   private async join(): Promise<void> {

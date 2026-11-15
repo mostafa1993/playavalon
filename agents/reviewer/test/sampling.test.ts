@@ -58,3 +58,11 @@ test('the loader refuses an unknown thinking level, or a level with a budget', a
   assert.equal((await loadPrompt(dir, 'ok.yml')).thinking_level, 'MEDIUM');
   await fs.rm(dir, { recursive: true });
 });
+
+test('LiveKit native handle errors are recognised, others are not', async () => {
+  const { isLiveKitHandleError } = await import('@avalon/shared');
+  assert.equal(isLiveKitHandleError(new Error('trying to drop an invalid handle')), true);
+  assert.equal(isLiveKitHandleError(new Error('failed to handle request: invalid request: handle not found (FfiRequest …)')), true);
+  assert.equal(isLiveKitHandleError(new Error('ECONNREFUSED')), false);
+  assert.equal(isLiveKitHandleError('trying to drop an invalid handle'), false);
+});
