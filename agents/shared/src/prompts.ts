@@ -41,6 +41,12 @@ export interface PromptFile {
    * ignores `temperature`; the client refuses either in a Gemini 4 prompt.
    */
   thinking_level?: ThinkingLevelName;
+  /**
+   * How long one call may take before it is given up (and retried as a
+   * timeout). Default 600. A call with no deadline once hung a smart bot's
+   * private read for the rest of a game.
+   */
+  timeout_seconds?: number;
   response_mime_type?: 'application/json' | 'text/plain';
   system: string;
   user: string;

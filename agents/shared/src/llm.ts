@@ -107,20 +107,31 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
     const sampling = samplingFor(promptFile, modelName, prompt);
     const maxOutputTokens = prompt.max_output_tokens ?? 4096;
     const responseMimeType = prompt.response_mime_type;
+    const timeoutSeconds = prompt.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS;
 
     return retry(
       async () => {
-        const res = await ai.models.generateContent({
-          model: modelName,
-          contents: userText,
-          config: {
-            systemInstruction: systemText,
-            ...sampling,
-            maxOutputTokens,
-            safetySettings: SAFETY_SETTINGS,
-            ...(responseMimeType ? { responseMimeType } : {}),
-          },
-        });
+        let res;
+        try {
+          res = await ai.models.generateContent({
+            model: modelName,
+            contents: userText,
+            config: {
+              systemInstruction: systemText,
+              ...sampling,
+              maxOutputTokens,
+              safetySettings: SAFETY_SETTINGS,
+              ...(responseMimeType ? { responseMimeType } : {}),
+              abortSignal: AbortSignal.timeout(timeoutSeconds * 1000),
+            },
+          });
+        } catch (err) {
+          if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+            // Retried as a transient error ("deadline" in the message).
+            throw new Error(`LLM call for ${promptFile} passed its deadline of ${timeoutSeconds} s`);
+          }
+          throw err;
+        }
 
         const text = res.text;
         if (res.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS) {
@@ -165,6 +176,9 @@ export function createLLMClient(opts: LLMClientOptions): LLMClient {
     },
   };
 }
+
+/** How long one model call may take, unless its prompt says otherwise. */
+const DEFAULT_TIMEOUT_SECONDS = 600;
 
 /** A call whose answer hit its output cap: empty, or cut off. */
 export class OutOfTokensError extends Error {

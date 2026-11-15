@@ -5,6 +5,8 @@ name: private_read
 model: gemini-4-carbon
 thinking_level: HIGH
 max_output_tokens: 32768
+# A read that hasn't come in 4 minutes is given up; the next event starts a fresh one.
+timeout_seconds: 240
 response_mime_type: application/json
 
 system: |
