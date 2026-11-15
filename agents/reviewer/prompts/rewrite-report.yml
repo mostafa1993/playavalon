@@ -1,10 +1,10 @@
 name: rewrite_report
-model: gemini-3.1-pro-preview
-temperature: 0.2
+# Argon on HIGH, as the check it follows.
+# Thinking counts against max_output_tokens (32,768 at most per non-streaming call).
+model: gemini-4-argon
+thinking_level: HIGH
 max_output_tokens: 16000
-thinking_budget: 6000
 response_mime_type: application/json
-
 system: |
   You correct a post-game report of one game of Avalon before its players read it.
   The game was played by voice, in Persian. A check tied every statement of the report

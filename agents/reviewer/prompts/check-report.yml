@@ -1,10 +1,10 @@
 name: check_report
-model: gemini-3.1-pro-preview
-temperature: 0
-max_output_tokens: 60000
-thinking_budget: 12000
+# Argon on HIGH: the step that catches invented facts, on the model that invents fewest.
+# Thinking counts against max_output_tokens (32,768 at most per non-streaming call).
+model: gemini-4-argon
+thinking_level: HIGH
+max_output_tokens: 32768
 response_mime_type: application/json
-
 system: |
   You check a post-game report of one game of Avalon before its players read it. The
   game was played by voice, in Persian. The report was written from the game record

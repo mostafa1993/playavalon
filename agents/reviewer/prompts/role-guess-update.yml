@@ -1,10 +1,10 @@
 name: role_guess_update
-model: gemini-3.1-pro-preview
-temperature: 0.3
-max_output_tokens: 16000
-thinking_budget: 6000
+# Carbon on HIGH: reasoning; it runs in the background each round.
+# Thinking counts against max_output_tokens (32,768 at most per non-streaming call).
+model: gemini-4-carbon
+thinking_level: HIGH
+max_output_tokens: 32768
 response_mime_type: application/json
-
 system: |
   You watch one game of Avalon, a social-deduction game played by voice, in Persian,
   as a detective. You never learn anyone's role: you deduce each player's role from

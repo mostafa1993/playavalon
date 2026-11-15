@@ -1,9 +1,10 @@
 name: correct_transcript
-model: gemini-3.1-pro-preview
-temperature: 0.2
+# Argon on MEDIUM: as good as 3.1 Pro on the names, ten times faster, twenty times cheaper (.tasks/2026-11-15-1407-proofread-models).
+# Thinking counts against max_output_tokens (32,768 at most per non-streaming call).
+model: gemini-4-argon
+thinking_level: MEDIUM
 max_output_tokens: 10000
 response_mime_type: text/plain
-
 system: |
   You are a Persian (fa-IR) proofreader specialized in fixing speech-to-text
   transcription errors. The input is a raw Persian STT transcript of one player

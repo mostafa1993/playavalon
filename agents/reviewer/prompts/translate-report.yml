@@ -1,10 +1,10 @@
 name: translate_report
-model: gemini-3.1-pro-preview
-temperature: 0.1
+# Argon: faithful, and invents least.
+# Thinking counts against max_output_tokens (32,768 at most per non-streaming call).
+model: gemini-4-argon
+thinking_level: MEDIUM
 max_output_tokens: 32768
-thinking_budget: 4096
 response_mime_type: application/json
-
 system: |
   You translate the post-game report of one game of Avalon, a social-deduction game its
   players played by voice in Persian, from Persian into English. The players read the
