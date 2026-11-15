@@ -103,6 +103,7 @@ export class Observer {
         is_connected: p.is_connected,
       })),
       roles_distributed: rolesDistributed,
+      role_config: data.room.role_config ?? null,
     };
 
     // Fetch in-game state once the game has started OR if we've cached a

@@ -16,7 +16,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import url from 'node:url';
 import { loadPrompt, fill, type PromptFile } from '@avalon/shared';
-import { formatRolesInPlay, summarizeRoleConfig } from '../src/gamestate/roleConfig.js';
+import { formatRolesInPlay, summarizeRoleConfig } from '@avalon/shared';
 
 const promptsDir = path.resolve(
   path.dirname(url.fileURLToPath(import.meta.url)),

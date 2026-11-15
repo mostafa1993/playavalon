@@ -32,3 +32,12 @@ export {
   type RoundChangeHandler,
 } from './timerListener.js';
 export { TurnSegmenter, type RecordedTurn, type TurnFinishedHandler } from './turnSegmenter.js';
+export {
+  readRoleConfig,
+  summarizeRoleConfig,
+  roleCounts,
+  formatRolesInPlay,
+  type PublicRoleConfig,
+  type RolesInPlay,
+  type RoleCount,
+} from './roleConfig.js';

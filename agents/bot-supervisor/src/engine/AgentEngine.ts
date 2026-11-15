@@ -30,6 +30,7 @@ import { TalkMemory } from '../voice/talkMemory.js';
 import { VoiceLayer } from '../voice/voiceLayer.js';
 import { generateTurnSpeech } from '../voice/speechGen.js';
 import { createBotLLM } from '../llm/client.js';
+import { createSmartView, type SmartView } from '../brains/smartView.js';
 
 export interface AgentEngineOptions {
   config: ResolvedAgentConfig;
@@ -54,6 +55,7 @@ export class AgentEngine {
   private heartbeatTimer: NodeJS.Timeout | null = null;
   /** Smart mode only: the bot's running memory + its LiveKit ears. */
   private talkMemory: TalkMemory | null = null;
+  private smartView: SmartView | null = null;
   private voice: VoiceLayer | null = null;
 
   constructor(opts: AgentEngineOptions) {
@@ -79,6 +81,12 @@ export class AgentEngine {
       // display_name (required for the visible player join → speaking turn).
       if (this.opts.config.mode === 'smart') {
         this.talkMemory = new TalkMemory();
+        this.smartView = createSmartView({
+          talk: this.talkMemory,
+          api: this.api,
+          meId: this.session.getUserId(),
+          logger: this.logger,
+        });
       }
       await this.mainLoop();
     } finally {
@@ -213,7 +221,7 @@ export class AgentEngine {
           options: this.brainOptionsForCtx(),
           rng: Math.random,
           logger: this.logger,
-          talk: this.talkMemory,
+          smart: this.smartView,
         };
         const action = await this.brain.decide(brainCtx);
         if (action && action.kind !== 'noop') {
@@ -304,7 +312,8 @@ export class AgentEngine {
     try {
       const voice = this.voice;
       const identity = this.observer.identity();
-      if (!voice || !identity) return;
+      const smart = this.smartView;
+      if (!voice || !identity || !smart) return;
       const obs = await this.observer.fetch().catch(() => null);
       if (!obs) return;
       const llm = (this.speechLLM ??= createBotLLM());
@@ -315,7 +324,7 @@ export class AgentEngine {
       const text = await generateTurnSpeech(llm, {
         identity,
         observation: obs,
-        talk: this.talkMemory,
+        smart,
       });
       if (!text) return;
       await voice.say(text);

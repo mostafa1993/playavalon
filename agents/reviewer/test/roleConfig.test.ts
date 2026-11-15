@@ -11,7 +11,7 @@ import {
   readRoleConfig,
   roleCounts,
   summarizeRoleConfig,
-} from '../src/gamestate/roleConfig.js';
+} from '@avalon/shared';
 
 test('with Merlin, the line lists Merlin and the Assassin with the chosen roles', () => {
   const roles = summarizeRoleConfig(5, { merlin: true, percival: true, morgana: true });

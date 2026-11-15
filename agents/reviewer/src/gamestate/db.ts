@@ -7,7 +7,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { GameMetaSnapshot } from '../types.js';
-import { readRoleConfig, summarizeRoleConfig } from './roleConfig.js';
+import { readRoleConfig, summarizeRoleConfig } from '@avalon/shared';
 
 export function createDbClient(url: string, serviceRoleKey: string): SupabaseClient {
   return createClient(url, serviceRoleKey, {

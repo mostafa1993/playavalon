@@ -1,54 +1,38 @@
 /**
- * TalkMemory — the smart bot's running memory of the game.
+ * TalkMemory — everything said at the table, turn by turn, as the smart bot
+ * heard it (its own statements included, as it said them).
  *
- * Two streams, kept in arrival order:
- *   - talk:   transcribed speaking turns ({quest, round, speaker, text})
- *   - events: game-mechanics facts the brain derives from observation deltas
- *             (proposals, vote outcomes, quest advances)
+ * A turn is filed under the quest and the round of talk it belongs to: the
+ * round is the speaking timer's count of leader changes within the quest, so
+ * round r is the talk about the quest's proposal r+1 (the leader proposes,
+ * then the table talks, then it votes). Quest 0 is the intro round.
  *
- * Rendered as a single chronological log for the LLM prompts, trimmed to a
- * char budget from the OLDEST side (recent context matters most in Avalon).
+ * Nothing is trimmed: a whole game is far below the model's context window,
+ * and the early quests matter to the end.
  */
 
-interface Entry {
-  at: number;
-  line: string;
+export interface TalkTurn {
+  quest: number;
+  round: number;
+  speaker: string;
+  text: string;
 }
 
 export class TalkMemory {
-  private entries: Entry[] = [];
+  private readonly turns: TalkTurn[] = [];
 
   addTurn(quest: number, round: number, speaker: string, text: string): void {
     const clean = text.trim();
     if (!clean) return;
-    this.entries.push({
-      at: Date.now(),
-      line: `[Q${quest}/R${round}] ${speaker}: ${clean}`,
-    });
+    this.turns.push({ quest, round, speaker, text: clean });
   }
 
-  addEvent(text: string): void {
-    this.entries.push({ at: Date.now(), line: `[game] ${text}` });
+  /** Every turn so far, in the order heard. */
+  all(): readonly TalkTurn[] {
+    return this.turns;
   }
 
   get size(): number {
-    return this.entries.length;
-  }
-
-  /** Chronological log, trimmed from the oldest side to ~maxChars. */
-  render(maxChars = 12_000): string {
-    if (this.entries.length === 0) return '(nothing said or recorded yet)';
-    const lines: string[] = [];
-    let total = 0;
-    for (let i = this.entries.length - 1; i >= 0; i -= 1) {
-      const line = this.entries[i]!.line;
-      total += line.length + 1;
-      if (total > maxChars) {
-        lines.push('[...older discussion trimmed...]');
-        break;
-      }
-      lines.push(line);
-    }
-    return lines.reverse().join('\n');
+    return this.turns.length;
   }
 }

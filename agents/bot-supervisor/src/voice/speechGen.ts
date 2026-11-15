@@ -1,25 +1,25 @@
 /**
  * Turn-speech generator — what the smart bot SAYS on its speaking slot.
  *
- * One LLM call: identity + intel + game state + the full talk/events memory →
- * a substantive Persian statement (~30-45s spoken) that plays to win for the
- * bot's side. The prompt is speak-turn.yml.
+ * One LLM call: identity + intel + game state + the game so far (history and
+ * talk) → a Persian statement that plays to win for the bot's side. The prompt
+ * is speak-turn.yml.
  */
 
 import type { LLMClient } from '@avalon/shared';
 import type { Identity } from '../types/Identity.js';
 import type { Observation } from '../types/Observation.js';
-import type { TalkMemory } from './talkMemory.js';
+import type { SmartView } from '../brains/smartView.js';
 
 export async function generateTurnSpeech(
   llm: LLMClient,
   args: {
     identity: Identity;
     observation: Observation;
-    talk: TalkMemory | null;
+    smart: SmartView;
   }
 ): Promise<string> {
-  const { identity, observation, talk } = args;
+  const { identity, observation, smart } = args;
   const game = observation.game;
 
   const intel =
@@ -58,7 +58,8 @@ export async function generateTurnSpeech(
     quest_number: game?.current_quest ?? 0,
     vote_track: game?.vote_track ?? 0,
     proposed_team: proposal,
-    talk_log: talk?.render() ?? '(no transcript available)',
+    roles_in_play: smart.rolesInPlay(observation),
+    game_so_far: await smart.gameSoFar(observation),
   });
   return text.trim();
 }

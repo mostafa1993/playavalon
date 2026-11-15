@@ -1,14 +1,12 @@
 /**
- * Role-configuration summary for the BLIND reviewer.
- *
- * The blind detective never learns who has which role, but the game's SETUP is
- * public knowledge in Avalon: how many good/evil seats there are and which
- * special roles were enabled. Giving the detective that lets it constrain its
- * guesses to roles that actually exist in this match.
+ * The public role setup of a game: how many good and evil seats there are and
+ * which special roles were dealt. Who holds which role is secret; the setup is
+ * not (the lobby shows it). The blind reviewer's detective and the smart bots
+ * both reason within it.
  *
  * This mirrors `computeRolesInPlay` / `ROLE_RATIOS` from the web app
- * (src/lib/domain/role-config.ts, src/lib/utils/constants.ts). The reviewer is a
- * separate package and can't import from `src/`, so the small amount of logic
+ * (src/lib/domain/role-config.ts, src/lib/utils/constants.ts). The agents are
+ * separate packages and can't import from `src/`, so the small amount of logic
  * is duplicated here. Keep the two in sync if the app's role rules change.
  */
 
@@ -23,7 +21,7 @@ const ROLE_RATIOS: Record<number, { good: number; evil: number }> = {
 };
 
 /** The subset of rooms.role_config fields that affect which roles are in play. */
-export interface ReviewerRoleConfig {
+export interface PublicRoleConfig {
   /** True: Merlin and the Assassin are dealt. False: neither is; the
    *  Assassin's seat is a plain Minion. */
   merlin: boolean;
@@ -36,11 +34,11 @@ export interface ReviewerRoleConfig {
 }
 
 /** A stored rooms.role_config, refused unless `merlin` is a boolean. */
-export function readRoleConfig(raw: unknown): ReviewerRoleConfig {
+export function readRoleConfig(raw: unknown): PublicRoleConfig {
   if (typeof raw !== 'object' || raw === null || typeof (raw as { merlin?: unknown }).merlin !== 'boolean') {
     throw new Error(`role_config has no boolean merlin: ${JSON.stringify(raw)}`);
   }
-  return raw as ReviewerRoleConfig;
+  return raw as PublicRoleConfig;
 }
 
 export interface RolesInPlay {
@@ -58,7 +56,7 @@ export interface RolesInPlay {
  */
 export function summarizeRoleConfig(
   playerCount: number,
-  config: ReviewerRoleConfig
+  config: PublicRoleConfig
 ): RolesInPlay | null {
   const ratio = ROLE_RATIOS[playerCount];
   if (!ratio) return null;

@@ -16,6 +16,7 @@
 import type { SessionManager } from './SessionManager.js';
 import type { AgentLogger } from '../util/logger.js';
 import { sleep } from '../util/jitter.js';
+import type { GameHistory } from '../types/History.js';
 
 export interface ApiErrorBody {
   error?: { code?: string; message?: string } | string;
@@ -93,6 +94,12 @@ export class ApiClient {
 
   async getGame(gameId: string): Promise<GameStateResponse> {
     return this.get(`/api/games/${gameId}`);
+  }
+
+  /** The game as the table saw it: proposals, revealed votes, quests, the Lady. */
+  async getHistory(gameId: string): Promise<GameHistory> {
+    const res = await this.get<{ data: GameHistory }>(`/api/games/${gameId}/history`);
+    return res.data;
   }
 
   async proposeTeam(gameId: string, teamMemberIds: string[]): Promise<unknown> {
@@ -213,6 +220,8 @@ export interface RoomDetailsResponse {
       status: 'waiting' | 'roles_distributed' | 'started' | 'closed';
       expected_players: number;
       manager_id: string;
+      /** The public role setup (the lobby's view; no dealt secrets). */
+      role_config?: Record<string, unknown> | null;
     };
     players: Array<{
       id: string;

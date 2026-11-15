@@ -30,9 +30,13 @@ user: |
 
   Your secret intel: {{my_intel}}
 
-  What has been said at the table + game events so far (chronological):
+  Roles in this game: {{roles_in_play}}
+
+  The game so far — every proposal, the talk about it and how everyone voted, every
+  quest's cards. What players said is automatic speech recognition: words and names
+  can be misheard; the players are the ones in the seat table.
   ---
-  {{talk_log}}
+  {{game_so_far}}
   ---
 
   Choose who to investigate. JSON only.

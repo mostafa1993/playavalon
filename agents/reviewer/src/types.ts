@@ -6,7 +6,7 @@
 // use the same speaking-timer machinery); re-exported for reviewer-local use.
 export type { SpeakingTimerState, RecordedTurn } from '@avalon/shared';
 
-import type { RolesInPlay } from './gamestate/roleConfig.js';
+import type { RolesInPlay } from '@avalon/shared';
 import type { GameOutcome } from './gamestate/db.js';
 
 /** Minimal view of the game + players + roles pulled from Supabase. */

@@ -26,7 +26,7 @@
 
 import { buildGameRecord, cutRecord } from '../gamestate/record.js';
 import type { RecordSource } from '../gamestate/recordSource.js';
-import { formatRolesInPlay, roleCounts, type RolesInPlay } from '../gamestate/roleConfig.js';
+import { formatRolesInPlay, roleCounts, type RolesInPlay } from '@avalon/shared';
 import type { PipelineContext } from '../pipeline.js';
 import { writeJsonAtomic } from '../storage/atomicWrite.js';
 import { guessLogPath } from '../storage/layout.js';

@@ -20,7 +20,7 @@ import {
   writeBlindReport,
   writeGodReport,
 } from '../src/reviewer/finalReport.js';
-import { summarizeRoleConfig } from '../src/gamestate/roleConfig.js';
+import { summarizeRoleConfig } from '@avalon/shared';
 import type {
   BlindGameRecord,
   GameMetaSnapshot,

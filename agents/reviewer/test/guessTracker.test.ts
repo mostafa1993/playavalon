@@ -13,7 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { LLMClient, PromptVars } from '@avalon/shared';
 import type { RecordSource } from '../src/gamestate/recordSource.js';
-import { summarizeRoleConfig, type RolesInPlay } from '../src/gamestate/roleConfig.js';
+import { summarizeRoleConfig, type RolesInPlay } from '@avalon/shared';
 import type { PipelineContext } from '../src/pipeline.js';
 import { checkRead, GuessTracker } from '../src/reviewer/guessTracker.js';
 import type { DiscussionJson, GameMetaSnapshot, RecordPlayer, TurnJson } from '../src/types.js';

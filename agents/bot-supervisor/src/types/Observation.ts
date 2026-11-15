@@ -40,6 +40,8 @@ export interface RoomObservation {
   players: PlayerObservation[];
   /** True once the room transitions to roles_distributed. */
   roles_distributed: boolean;
+  /** The public role setup (the lobby's view, no dealt secrets); null if absent. */
+  role_config: Record<string, unknown> | null;
 }
 
 export interface GameObservation {

@@ -17,7 +17,7 @@
  */
 
 import type { LLMClient } from '@avalon/shared';
-import { formatRolesInPlay, type RolesInPlay } from '../gamestate/roleConfig.js';
+import { formatRolesInPlay, type RolesInPlay } from '@avalon/shared';
 import type { GameLog } from '../pipeline.js';
 import {
   SUMMARY_FORMAT,

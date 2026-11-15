@@ -14,8 +14,8 @@
  *   - quest: good always succeeds; lunatic always fails; brute can only fail
  *     Q1-Q3 — the LLM is only consulted when a genuine choice exists.
  *
- * Phase 2 scope: decisions from the API observation + role intel only.
- * Phase 3 adds the STT discussion memory; Phase 4 adds speaking.
+ * Every decision prompt gets the game so far (the public history and the talk,
+ * `gameSoFar.ts`) and the public role setup, through the engine's SmartView.
  */
 
 import type { LLMClient } from '@avalon/shared';
@@ -31,14 +31,8 @@ export class LLMBrain implements Brain {
   private readonly fallback = new RuleBrain();
   private llm: LLMClient | null = null;
   private llmUnavailable = false;
-  // Mechanics tracking — observation deltas become memory events the prompts see.
-  private lastProposalId: string | null = null;
-  private lastVoteTrack: number | null = null;
-  private lastQuest: number | null = null;
-  private lastPhase: string | null = null;
 
   async decide(ctx: BrainContext): Promise<Action | null> {
-    this.trackMechanics(ctx);
     const ruleAction = await this.fallback.decide(ctx);
     if (!ruleAction) return null;
 
@@ -107,7 +101,7 @@ export class LLMBrain implements Brain {
     const game = ctx.observation.game!;
     const size = game.quest_requirement.size;
     const out = await this.llm!.runJson<{ team: string[] }>('decide-propose.yml', {
-      ...this.baseVars(ctx, game),
+      ...(await this.baseVars(ctx, game)),
       team_size: size,
     });
     const ids = this.namesToIds(game, out.team);
@@ -124,7 +118,7 @@ export class LLMBrain implements Brain {
           .join(', ')
       : '(unknown)';
     const out = await this.llm!.runJson<{ choice: string }>('decide-vote.yml', {
-      ...this.baseVars(ctx, game),
+      ...(await this.baseVars(ctx, game)),
       proposed_team: teamNames,
     });
     if (out.choice !== 'approve' && out.choice !== 'reject') return null;
@@ -146,7 +140,7 @@ export class LLMBrain implements Brain {
   private async decideQuest(ctx: BrainContext): Promise<Action | null> {
     const game = ctx.observation.game!;
     const out = await this.llm!.runJson<{ choice: string }>('decide-quest.yml', {
-      ...this.baseVars(ctx, game),
+      ...(await this.baseVars(ctx, game)),
       fails_required: game.quest_requirement.fails_required,
     });
     if (out.choice !== 'success' && out.choice !== 'fail') return null;
@@ -161,7 +155,7 @@ export class LLMBrain implements Brain {
       (p) => p.id !== ctx.identity.user_id && !lady.investigated_player_ids.includes(p.id)
     );
     const out = await this.llm!.runJson<{ target: string }>('decide-lady.yml', {
-      ...this.baseVars(ctx, game),
+      ...(await this.baseVars(ctx, game)),
       eligible_targets: eligible.map((p) => p.display_name).join(', '),
     });
     const target = eligible.find((p) => p.display_name === out.target);
@@ -172,7 +166,7 @@ export class LLMBrain implements Brain {
     const game = ctx.observation.game!;
     const candidates = game.players.filter((p) => p.id !== ctx.identity.user_id);
     const out = await this.llm!.runJson<{ target: string }>('decide-assassin.yml', {
-      ...this.baseVars(ctx, game),
+      ...(await this.baseVars(ctx, game)),
       candidates: candidates.map((p) => p.display_name).join(', '),
     });
     const target = candidates.find((p) => p.display_name === out.target);
@@ -183,7 +177,7 @@ export class LLMBrain implements Brain {
     const game = ctx.observation.game!;
     const candidates = game.players.filter((p) => p.id !== ctx.identity.user_id);
     const out = await this.llm!.runJson<{ target: string | null }>('decide-merlin-quiz.yml', {
-      ...this.baseVars(ctx, game),
+      ...(await this.baseVars(ctx, game)),
       candidates: candidates.map((p) => p.display_name).join(', '),
     });
     if (out.target === null) return { kind: 'merlin_quiz', target_id: null };
@@ -191,42 +185,10 @@ export class LLMBrain implements Brain {
     return target ? { kind: 'merlin_quiz', target_id: target.id } : null;
   }
 
-  // ── mechanics memory ──────────────────────────────────────────────────────
-
-  /** Turn observation deltas into memory events (proposals, votes, quests). */
-  private trackMechanics(ctx: BrainContext): void {
-    const game = ctx.observation.game;
-    const talk = ctx.talk;
-    if (!game || !talk) return;
-    const nameOf = (id: string) => game.players.find((p) => p.id === id)?.display_name ?? id;
-
-    const proposal = game.current_proposal;
-    if (proposal && proposal.id !== this.lastProposalId) {
-      this.lastProposalId = proposal.id;
-      talk.addEvent(
-        `Quest ${game.current_quest}: ${nameOf(proposal.leader_id)} proposed team [${proposal.team_member_ids.map(nameOf).join(', ')}]`
-      );
-    }
-    if (this.lastVoteTrack !== null && game.vote_track > this.lastVoteTrack) {
-      talk.addEvent(`The proposal was REJECTED (vote track now ${game.vote_track}/5)`);
-    }
-    this.lastVoteTrack = game.vote_track;
-    if (this.lastPhase === 'voting' && game.phase === 'quest') {
-      talk.addEvent('The team was APPROVED — quest in progress');
-    }
-    this.lastPhase = game.phase;
-    if (this.lastQuest !== null && game.current_quest > this.lastQuest) {
-      // The API doesn't expose the result — players' reactions (in the talk
-      // transcript) usually reveal it.
-      talk.addEvent(`Quest ${this.lastQuest} finished; the game moved on to quest ${game.current_quest}`);
-    }
-    this.lastQuest = game.current_quest;
-  }
-
   // ── prompt context ────────────────────────────────────────────────────────
 
   /** Vars every decision prompt receives. */
-  private baseVars(ctx: BrainContext, game: GameObservation): Record<string, string | number> {
+  private async baseVars(ctx: BrainContext, game: GameObservation): Promise<Record<string, string | number>> {
     const { identity } = ctx;
     const intel =
       identity.role_intel.known_players.length > 0
@@ -255,7 +217,8 @@ export class LLMBrain implements Brain {
       vote_track: game.vote_track,
       team_size: game.quest_requirement.size,
       fails_required: game.quest_requirement.fails_required,
-      talk_log: ctx.talk?.render() ?? '(no transcript available — reason from the game state alone)',
+      roles_in_play: ctx.smart ? ctx.smart.rolesInPlay(ctx.observation) : '(role setup unavailable)',
+      game_so_far: ctx.smart ? await ctx.smart.gameSoFar(ctx.observation) : '(the game so far is unavailable)',
     };
   }
 
