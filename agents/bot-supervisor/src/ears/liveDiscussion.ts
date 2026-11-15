@@ -3,9 +3,10 @@
  *
  * While the discussion timer runs, each person who speaks gets a live
  * recognition session; every phrase goes to the bots as it is recognised (a
- * pause ends a phrase), and while words are being recognised the bots are told
- * that person is talking, so nobody is talked over. Bots are not listened to:
- * each bot reports what it said itself.
+ * pause ends a phrase). While a person's audio is loud enough to be speech the
+ * bots are told that person is talking — at once, from the audio level, not
+ * seconds later from the recogniser — so nobody is talked over. Bots are not
+ * listened to: each bot reports what it said itself.
  *
  * Each person's audio is also kept; if their live session fails, it is
  * transcribed whole when the discussion ends, as before.
@@ -33,6 +34,8 @@ export interface LiveDiscussionOptions {
   onLine: (line: { speaker: string; text: string; via: 'live' | 'clip' }) => void;
   /** Someone is talking (sent at most every TALKING_EVERY_MS per person). */
   onTalking: (speaker: string) => void;
+  /** A frame this loud (RMS) or louder is speech. */
+  talkingRms: number;
   warn: (message: string) => void;
 }
 
@@ -83,6 +86,14 @@ export class LiveDiscussion implements DiscussionSink {
     speaker.frames.push(copy);
     speaker.samples += copy.length;
     speaker.session?.write(copy);
+    if (rms(copy) >= this.opts.talkingRms) this.talking(speaker);
+  }
+
+  private talking(speaker: Speaker): void {
+    const now = Date.now();
+    if (now - speaker.lastTalkingAt < TALKING_EVERY_MS) return;
+    speaker.lastTalkingAt = now;
+    this.opts.onTalking(speaker.name);
   }
 
   private open(identity: string, sampleRate: number): Speaker {
@@ -91,12 +102,7 @@ export class LiveDiscussion implements DiscussionSink {
     try {
       speaker.session = this.opts.recognizers.open({
         onPhrase: (text) => this.opts.onLine({ speaker: name, text, via: 'live' }),
-        onSpeaking: () => {
-          const now = Date.now();
-          if (now - speaker.lastTalkingAt < TALKING_EVERY_MS) return;
-          speaker.lastTalkingAt = now;
-          this.opts.onTalking(name);
-        },
+        onSpeaking: () => this.talking(speaker),
       });
     } catch (err) {
       this.opts.warn(`live recognition could not start for ${name} in the discussion: ${(err as Error).message}`);
@@ -124,4 +130,10 @@ export class LiveDiscussion implements DiscussionSink {
     const text = (await this.opts.transcribeClip(pcm, speaker.sampleRate)).trim();
     if (text) this.opts.onLine({ speaker: speaker.name, text, via: 'clip' });
   }
+}
+
+function rms(pcm: Int16Array): number {
+  let sum = 0;
+  for (const x of pcm) sum += x * x;
+  return pcm.length ? Math.sqrt(sum / pcm.length) : 0;
 }

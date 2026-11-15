@@ -30,6 +30,8 @@ import { makeLogger } from '../util/logger.js';
 
 const SAMPLE_RATE = 16000;
 const SILENCE_RMS_THRESHOLD = 250;
+/** A frame (10 ms at 16 kHz) this loud is someone talking, for "don't talk over them". */
+const TALKING_RMS = 500;
 
 const args = process.argv.slice(2);
 const room = args[args.indexOf('--room') + 1];
@@ -87,6 +89,7 @@ async function main(): Promise<void> {
       log.info(`heard ${line.speaker} in the assassin discussion (${line.text.length} chars, ${line.via})`);
     },
     onTalking: (speaker) => send({ type: 'talking', speaker }),
+    talkingRms: TALKING_RMS,
     warn: (m) => log.warn(m),
   });
 

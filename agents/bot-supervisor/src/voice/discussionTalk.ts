@@ -48,6 +48,11 @@ const WAIT_FOR_TURN_MS = 12_000;
 const REPLY_SECONDS = 20;
 /** The opening: a little more thought, nobody is waiting on it yet. */
 const OPENING = { model: 'gemini-4-hydrogen', thinking_level: 'MEDIUM', timeout_seconds: 30 } as const;
+/** A person still talking is waited for (this long at most) before deciding: a line comes in phrases. */
+const SETTLE_MAX_MS = 8_000;
+/** A decision not back in this long gets a second call alongside (the opening: OPENING_HEDGE_MS). */
+const HEDGE_MS = 4_500;
+const OPENING_HEDGE_MS = 10_000;
 
 /** Whether the latest line calls for a decision: someone else's, and not a bot's past MAX_BOT_RUN in a row. */
 export function worthDeciding(lines: readonly DiscussionLine[], me: string): boolean {
@@ -121,12 +126,14 @@ export class DiscussionTalk {
         this.again = false;
         const me = this.d.identity();
         if (!this.active || !me) return;
+        // A person's line comes in phrases, one per pause: decide once they have finished.
+        if (!opening) await this.untilQuiet(SETTLE_MAX_MS);
         const lines = this.d.talk.discussion();
         if (!opening && !worthDeciding(lines, me.display_name)) return;
         const heardBefore = lines.length;
         const started = Date.now();
         try {
-          const reply = await this.write(me, opening);
+          const reply = await this.writeHedged(me, opening);
           this.d.logger.info(`[discussion] ${reply ? 'reply' : 'staying quiet'} decided in ${((Date.now() - started) / 1000).toFixed(1)} s${opening ? ' (opening)' : ''}`);
           opening = false;
           if (this.d.talk.discussion().length !== heardBefore) {
@@ -144,6 +151,45 @@ export class DiscussionTalk {
     } finally {
       this.deciding = false;
     }
+  }
+
+  /** Until nobody has been heard talking for QUIET_MS, at most `maxMs`. */
+  private async untilQuiet(maxMs: number): Promise<void> {
+    const until = Date.now() + maxMs;
+    while (someoneTalking(this.lastTalking, Date.now()) && Date.now() < until) await sleep(100);
+  }
+
+  /** write(), with a second call alongside if the first is slow (or failed); the first answer counts. */
+  private writeHedged(me: Identity, opening: boolean): Promise<string> {
+    return new Promise((resolve, reject) => {
+      let done = false;
+      let started = 0;
+      let failed = 0;
+      const go = () => {
+        started += 1;
+        this.write(me, opening).then(
+          (reply) => {
+            if (!done) {
+              done = true;
+              resolve(reply);
+            }
+          },
+          (err) => {
+            failed += 1;
+            if (done || failed < started) return;
+            if (started < 2) go();
+            else {
+              done = true;
+              reject(err);
+            }
+          }
+        );
+      };
+      go();
+      setTimeout(() => {
+        if (!done && started < 2) go();
+      }, opening ? OPENING_HEDGE_MS : HEDGE_MS);
+    });
   }
 
   private async write(me: Identity, opening: boolean): Promise<string> {

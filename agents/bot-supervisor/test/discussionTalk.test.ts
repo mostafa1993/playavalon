@@ -143,3 +143,38 @@ test('a line heard while a decision failed is still answered', async () => {
   await until(() => w.said.length === 1);
   assert.deepEqual(w.said, ['جواب']);
 });
+
+test('the bot waits until the person has finished before deciding, and decides once', async () => {
+  const w = world(['جواب']);
+  (w.bot as unknown as { active: boolean }).active = true;
+  w.bot.onTalking('Reza');
+  w.talk.addDiscussion('Reza', 'تکه‌ی اول،', false);
+  w.bot.onLine();
+  // Reza keeps talking for a while, then finishes his sentence.
+  const talk = setInterval(() => w.bot.onTalking('Reza'), 300);
+  await sleep(600);
+  w.talk.addDiscussion('Reza', 'تکه‌ی دوم.', false);
+  w.bot.onLine();
+  clearInterval(talk);
+  await until(() => w.said.length === 1, 4_000);
+  assert.equal(w.decisions(), 1, 'one decision, on the whole line');
+});
+
+test('a slow decision gets a second call alongside; the first answer counts', async () => {
+  const w = world(['x']);
+  let calls = 0;
+  (w.bot as unknown as { d: { llm: LLMClient } }).d.llm = {
+    async runJson() {
+      calls += 1;
+      if (calls === 1) await sleep(60_000); // hangs
+      return { reply: 'جواب دوم' };
+    },
+  } as unknown as LLMClient;
+  (w.bot as unknown as { active: boolean }).active = true;
+  w.talk.addDiscussion('Reza', 'سلام؟', false);
+  const started = Date.now();
+  w.bot.onLine();
+  await until(() => w.said.length === 1, 7_000);
+  assert.deepEqual(w.said, ['جواب دوم']);
+  assert.ok(Date.now() - started < 6_500, 'answered by the second call');
+});
