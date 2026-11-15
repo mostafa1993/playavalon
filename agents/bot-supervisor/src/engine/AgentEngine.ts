@@ -30,6 +30,7 @@ import { makeBrain } from '../brains/factory.js';
 import { TalkMemory } from '../voice/talkMemory.js';
 import { VoiceLayer, sentences, turnKey, type MyTurnInfo } from '../voice/voiceLayer.js';
 import { DISCUSSION_SITUATION, generateTurnSpeech } from '../voice/speechGen.js';
+import { pickStatement, settled } from '../voice/pickStatement.js';
 import { createBotLLM } from '../llm/client.js';
 import { createSmartView, type SmartView } from '../brains/smartView.js';
 import type { FromBot, Heard } from '../supervisor/roomRelay.js';
@@ -327,6 +328,7 @@ export class AgentEngine {
       // the intro round (its first speaker's clock starts seconds after the order).
       this.intro = this.writeSpeech({ quest: 0, round: 0, turnIndex: 0, speakers: 0 });
       voice.setOnPrepare((info) => this.prepareSpeech(info));
+      voice.setOnNext((info) => void this.prepareBackup(info));
       voice.setOnMyTurn((info) => void this.handleMyTurn(info));
       voice.setOnDiscussionStart(() => void this.speakInDiscussion());
     });
@@ -356,27 +358,46 @@ export class AgentEngine {
   /** Statements being written for upcoming slots, by turn key. */
   private readonly prepared = new Map<string, Promise<string | null>>();
 
+  /** Quick statements written as backups when the bot was next up, by turn key. */
+  private readonly backups = new Map<string, Promise<string | null>>();
+
+  /** The statement the bot will say in this slot, as far as it is known now. */
+  private statementFor(info: MyTurnInfo): Promise<string | null> | undefined {
+    if (opensRound(info)) return this.opening?.quest === info.quest ? this.opening.text : undefined;
+    if (info.quest === 0 && this.intro) return this.intro;
+    return this.prepared.get(turnKey(info));
+  }
+
+  /** Slots that have opened, by turn key: a backup is no use once its slot has. */
+  private readonly slotsOpened = new Set<string>();
+
   /**
-   * The prepared statement if it is ready within QUICK_AFTER_MS of the slot
-   * opening; otherwise a quick one is written too, and whichever comes first
-   * is said — the bot speaks in its turn rather than miss it.
+   * The bot is next up: unless its statement is already written, write a quick
+   * one too, so the slot can start with words, not silence. In a quest round
+   * the backup waits for the team, as the prepared statement does (a leader
+   * opening the round doesn't: the team is its own), but only until the slot
+   * opens; then a quick one is written there and then.
    */
-  private async inTime(prepared: Promise<string | null>, quick: () => Promise<string | null>): Promise<string | null> {
-    const early = await Promise.race([prepared, sleep(QUICK_AFTER_MS).then(() => undefined)]);
-    // Ready, and not failed: say it. A prepared statement that failed (null) gets the quick one.
-    if (early) return early;
-    if (early === null) {
-      this.logger.info('[mouth] the prepared statement failed; writing a quick one');
-      return quick();
+  private async prepareBackup(info: MyTurnInfo): Promise<void> {
+    const key = turnKey(info);
+    const written = async () => {
+      const statement = this.statementFor(info);
+      return !!statement && typeof (await settled(statement)) === 'string';
+    };
+    try {
+      if (this.backups.has(key) || (await written())) return;
+      if (info.quest > 0 && !opensRound(info)) {
+        while (!(await this.observer.fetch()).game?.current_proposal) {
+          if (this.slotsOpened.has(key)) return;
+          await sleep(2_000);
+        }
+      }
+      if (this.slotsOpened.has(key) || this.backups.has(key) || (await written())) return;
+      this.logger.info(`[mouth] next up and the statement is not ready (Q${info.quest}/R${info.round}): writing a quick one as a backup`);
+      this.backups.set(key, this.writeSpeech(info, undefined, true));
+    } catch (err) {
+      this.logger.warn(`[mouth] preparing the backup statement failed: ${(err as Error).message}`);
     }
-    this.logger.info('[mouth] the statement is not ready; writing a quick one as well');
-    const fast = quick();
-    const first = await Promise.race([prepared.then((t) => ({ t, from: 'prepared' })), fast.then((t) => ({ t, from: 'quick' }))]);
-    if (first.t) {
-      this.logger.info(`[mouth] saying the ${first.from} statement`);
-      return first.t;
-    }
-    return first.from === 'prepared' ? fast : prepared;
   }
 
   /** The leader's opening of a quest's round, written when it chose its team. */
@@ -472,7 +493,17 @@ export class AgentEngine {
       if (intro) this.intro = null;
       const pending = opening ?? intro ?? this.prepared.get(key) ?? this.writeSpeech(info);
       this.prepared.delete(key);
-      const text = await this.inTime(pending, () => this.writeSpeech(info, undefined, true));
+      this.slotsOpened.add(key);
+      const backup = this.backups.get(key);
+      this.backups.delete(key);
+      const picked = await pickStatement(pending, backup, () => this.writeSpeech(info, undefined, true), GRACE_MS);
+      if (picked.from === 'quick') {
+        const why = picked.raced ? 'the statement was not ready' : 'the statement failed';
+        this.logger.info(`[mouth] saying the quick statement${backup ? ' written when next up' : ''} (${why})`);
+      } else if (picked.raced) {
+        this.logger.info('[mouth] saying the prepared statement (it came before the quick one)');
+      }
+      const text = picked.text;
       if (!text) {
         await voice.handOn(key);
         return;
@@ -523,7 +554,7 @@ function opensRound(info: MyTurnInfo): boolean {
 
 /** How long a statement prepared before the leader proposes waits for the team. */
 const TEAM_WAIT_MS = 90_000;
-/** How long into its slot the bot waits for its prepared statement before writing a quick one too. */
-const QUICK_AFTER_MS = 6_000;
-/** The quick statement: Hydrogen on LOW, about 7-10 s. */
+/** How long into its slot the bot waits for its prepared statement when a quick one is ready or on its way. */
+const GRACE_MS = 1_500;
+/** The quick statement: Hydrogen on LOW, about 6 s. */
 const QUICK_SPEECH = { model: 'gemini-4-hydrogen', thinking_level: 'LOW' } as const;

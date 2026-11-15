@@ -37,8 +37,8 @@ import { TalkClock } from './talkClock.js';
 import type { AgentLogger } from '../util/logger.js';
 
 const MOUTH_SAMPLE_RATE = 48000; // WebRTC-native; matches synthesize()
-/** A bot's speaking turn, as the host's timer gives it (src/lib/domain/speaking-turn.ts). */
-export const SLOT_SECONDS = 30;
+/** A speaking turn, as the host's timer gives it (SPEAKING_SECONDS in src/lib/domain/speaking-turn.ts). */
+export const SLOT_SECONDS = 50;
 /** Stop this long before the slot's end. */
 const SLOT_MARGIN_SECONDS = 1.5;
 /** The bot's "my turn is done" message to the host (src/lib/domain/speaking-turn.ts). */
@@ -58,6 +58,9 @@ export type MyTurnHandler = (info: MyTurnInfo) => void;
 
 /** Fired once when the bot is within two speakers of its slot (or queued): time to write. */
 export type PrepareHandler = (info: MyTurnInfo) => void;
+
+/** Fired once when the bot is the next speaker (or up, its clock not yet started). */
+export type NextHandler = (info: MyTurnInfo) => void;
 
 /** The turn a MyTurnInfo is about, the same for its prepare and its slot. */
 export function turnKey(info: Pick<MyTurnInfo, 'quest' | 'round' | 'turnIndex'>): string {
@@ -125,8 +128,10 @@ export class VoiceLayer {
   private currentActiveSpeaker: string | null = null;
   private lastFiredTurnKey: string | null = null;
   private lastPreparedKey: string | null = null;
+  private lastNextKey: string | null = null;
   private onMyTurn: MyTurnHandler | null = null;
   private onPrepare: PrepareHandler | null = null;
+  private onNext: NextHandler | null = null;
 
   private constructor(
     private readonly env: VoiceEnv,
@@ -143,6 +148,11 @@ export class VoiceLayer {
   /** Register the engine's prepare handler (fired once per upcoming slot). */
   setOnPrepare(handler: PrepareHandler): void {
     this.onPrepare = handler;
+  }
+
+  /** Register the engine's next-up handler (fired once per upcoming slot, one speaker ahead). */
+  setOnNext(handler: NextHandler): void {
+    this.onNext = handler;
   }
 
   /** Register the engine's handler for the assassin-phase discussion starting. */
@@ -265,9 +275,12 @@ export class VoiceLayer {
     }
   }
 
-  /** The bot is one of the next two speakers (or queued): fire onPrepare once for that slot. */
+  /**
+   * The bot is one of the next two speakers (or queued): fire onPrepare once for
+   * that slot; and when it is the next one (or up, its clock not started), onNext.
+   */
   private watchForNext(state: SpeakingTimerState, quest: number, round: number): void {
-    if (!this.onPrepare || !state.speakingOrder) return;
+    if (!state.speakingOrder) return;
     let mine = -1;
     for (let i = state.currentSpeakerIndex; i < state.speakingOrder.length; i += 1) {
       if (state.speakingOrder[i] === this.selfIdentity) {
@@ -279,10 +292,15 @@ export class VoiceLayer {
     if (mine < 0 || mine - state.currentSpeakerIndex > 2) return;
     const info = { quest, round, turnIndex: mine, speakers: state.speakingOrder.length };
     const key = turnKey(info);
-    if (key === this.lastPreparedKey) return;
-    this.lastPreparedKey = key;
-    this.opts.logger.info(`[mouth] next to speak (Q${quest}/R${round}) — preparing`);
-    this.onPrepare(info);
+    if (key !== this.lastPreparedKey && this.onPrepare) {
+      this.lastPreparedKey = key;
+      this.opts.logger.info(`[mouth] next to speak (Q${quest}/R${round}) — preparing`);
+      this.onPrepare(info);
+    }
+    if (mine - state.currentSpeakerIndex <= 1 && key !== this.lastNextKey && this.onNext) {
+      this.lastNextKey = key;
+      this.onNext(info);
+    }
   }
 
   /**
