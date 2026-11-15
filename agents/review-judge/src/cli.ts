@@ -6,8 +6,8 @@
  * Writes <dir>/verdicts.json (every sentence with its kind and verdict, and the
  * English–Persian differences) and <dir>/measures.json (the plan's four
  * measures). Needs Vertex AI credentials: GCP_PROJECT_ID, GCP_LLM_LOCATION
- * (default global, where the preview models are served), GCP_LLM_MODEL (default gemini-3.1-pro-preview) and
- * GOOGLE_APPLICATION_CREDENTIALS.
+ * (default global, where the preview models are served) and GOOGLE_APPLICATION_CREDENTIALS. Each
+ * prompt names its model (gemini-3.1-pro-preview: the measuring stick stays the same).
  */
 
 import fs from 'node:fs/promises';
@@ -41,7 +41,6 @@ async function main(): Promise<void> {
   const llm = createLLMClient({
     project,
     location: process.env.GCP_LLM_LOCATION ?? 'global',
-    model: process.env.GCP_LLM_MODEL ?? 'gemini-3.1-pro-preview',
     promptsDir: path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..', 'prompts'),
     retry: { maxAttempts: 3, baseDelayMs: 1000 },
   });

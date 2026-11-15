@@ -57,7 +57,6 @@ export interface PipelineConfig {
   gemini: {
     project: string;
     location: string;
-    model: string;
   };
   /** YAML prompts dir. */
   promptsDir: string;
@@ -146,11 +145,8 @@ export function loadPipelineConfig(): PipelineConfig {
   return {
     gemini: {
       project: required('GCP_PROJECT_ID'),
-      location: optional('GCP_LLM_LOCATION', 'us-central1'),
-      // Currently only Gemini models work here (the SDK is @google-cloud/vertexai).
-      // The env var is named generically so we can swap to a different Vertex-hosted
-      // model family later without renaming config.
-      model: optional('GCP_LLM_MODEL', 'gemini-3.1-pro-preview'),
+      // Gemini 4 is served on global, us and eu. Each prompt names its model.
+      location: optional('GCP_LLM_LOCATION', 'global'),
     },
     // Relative path resolves to CWD: /app/prompts in the Docker image
     // (WORKDIR /app) and ./prompts locally when running `npm run dev`.

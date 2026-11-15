@@ -10,10 +10,15 @@
  * answer the model stopped before its end (out of tokens, a safety block)
  * ends with the prompt's cut-off note, so the player can tell.
  *
+ * The model is gemini-3.1-pro-preview. Asked the same ten questions on a
+ * replayed game (2026-11-15), it answered all ten right, first words in about
+ * 12 s; Gemini 4 Argon on MEDIUM answered in 2-5 s but one answer in ten
+ * carried wrong counts, and on HIGH it was right but took up to 90 s
+ * (.tasks/2026-11-15-1520-chat-argon). The chat waits for a better trade.
+ *
  * Authentication is Application Default Credentials: GOOGLE_APPLICATION_CREDENTIALS
- * names the service-account file. GCP_PROJECT_ID, GCP_LLM_LOCATION and
- * GCP_LLM_MODEL are the reviewer's own variables; without GCP_PROJECT_ID the
- * app has no chat.
+ * names the service-account file. GCP_PROJECT_ID and GCP_LLM_LOCATION are the
+ * reviewer's own variables; without GCP_PROJECT_ID the app has no chat.
  */
 
 import {
@@ -43,7 +48,8 @@ const SAFETY_SETTINGS: SafetySetting[] = [
 
 const MAX_ATTEMPTS = 3;
 const BASE_DELAY_MS = 500;
-/** Gemini 3's thinking counts against it: room for the thinking and an answer. */
+const MODEL = 'gemini-3.1-pro-preview';
+/** Thinking counts against it: room for the thinking and an answer. */
 const MAX_OUTPUT_TOKENS = 16384;
 export const ANSWER_TIMEOUT_MS = 120_000;
 
@@ -60,20 +66,17 @@ export function modelConfigured(): boolean {
   return Boolean(process.env.GCP_PROJECT_ID);
 }
 
-let client: { ai: GoogleGenAI; model: string } | null = null;
+let client: GoogleGenAI | null = null;
 
-function getClient(): { ai: GoogleGenAI; model: string } {
+function getClient(): GoogleGenAI {
   if (!client) {
     const project = process.env.GCP_PROJECT_ID;
     if (!project) throw new Error('GCP_PROJECT_ID is not set: the review chat has no model');
-    client = {
-      ai: new GoogleGenAI({
-        vertexai: true,
-        project,
-        location: process.env.GCP_LLM_LOCATION ?? 'global',
-      }),
-      model: process.env.GCP_LLM_MODEL ?? 'gemini-3.1-pro-preview',
-    };
+    client = new GoogleGenAI({
+      vertexai: true,
+      project,
+      location: process.env.GCP_LLM_LOCATION ?? 'global',
+    });
   }
   return client;
 }
@@ -85,7 +88,7 @@ function getClient(): { ai: GoogleGenAI; model: string } {
  * ANSWER_TIMEOUT_MS, whether it is still opening or partway through.
  */
 export async function streamAnswer(prompt: ChatPrompt): Promise<AsyncIterable<string>> {
-  const { ai, model } = getClient();
+  const ai = getClient();
 
   const timeout = new AbortController();
   const timer = setTimeout(
@@ -105,7 +108,7 @@ export async function streamAnswer(prompt: ChatPrompt): Promise<AsyncIterable<st
       withRetry(
         () =>
           ai.models.generateContentStream({
-            model,
+            model: MODEL,
             contents: prompt.contents,
             config: {
               systemInstruction: GAME_CONTEXT_PREAMBLE + prompt.systemInstruction,

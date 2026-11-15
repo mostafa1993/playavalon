@@ -62,7 +62,6 @@ export function createPipelineLlm(config: PipelineConfig): LLMClient {
   return createLLMClient({
     project: config.gemini.project,
     location: config.gemini.location,
-    model: config.gemini.model,
     promptsDir: config.promptsDir,
     retry: config.retry,
   });

@@ -4,8 +4,8 @@
  * Returns null when the env isn't configured (callers degrade gracefully).
  *
  * Every bot prompt names its own model (Gemini 4 Carbon to think, Hydrogen to
- * act), so there is no default model here, and none borrowed from the
- * reviewer's GCP_LLM_MODEL. Gemini 4 is served on `global`, `us` and `eu`.
+ * act), so there is no default model here. Gemini 4 is served on `global`,
+ * `us` and `eu`.
  */
 
 import { createLLMClient, type LLMClient } from '@avalon/shared';

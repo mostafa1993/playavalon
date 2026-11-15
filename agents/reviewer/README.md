@@ -125,13 +125,9 @@ See repo-root `.env.example`. Required vars:
 - `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` — e.g. `eastus`.
 - `AZURE_SPEECH_LANGUAGE` — defaults to `fa-IR`.
 - `GCP_PROJECT_ID` — GCP project for Vertex AI.
-- `GCP_LLM_LOCATION` — region for the LLM model, defaults to `us-central1`.
-  Separate from any future embedding-model location.
-- `GCP_LLM_MODEL` — defaults to `gemini-3.1-pro-preview`. Must currently be
-  a Gemini model ID (the SDK is Google's). Renamed from `GEMINI_MODEL` for
-  future flexibility if the code is later adapted to another Vertex-hosted
-  model. Individual prompts can override this via a `model:` field in their
-  YAML.
+- `GCP_LLM_LOCATION` — where the models are served, defaults to `global`
+  (Gemini 4 is served on `global`, `us` and `eu`). Each prompt names its model
+  and thinking level in its YAML (`model:`, `thinking_level:`).
 - `GOOGLE_APPLICATION_CREDENTIALS` — path to a service-account JSON file
   with the `Vertex AI User` role. In Docker, mount the file as a volume:
   `./secrets/vertex-sa.json:/run/secrets/vertex-sa.json:ro` and set
@@ -240,7 +236,7 @@ Inputs:
   In blind mode the roster comes from the export's `players` rows only.
 - `--runs` (default 1), `--concurrency` — turns in flight (default 6).
 - Environment: what the service reads for the model — `GCP_PROJECT_ID`,
-  `GCP_LLM_LOCATION` (`global` for the preview models), `GCP_LLM_MODEL`,
+  `GCP_LLM_LOCATION` (`global`),
   `GOOGLE_APPLICATION_CREDENTIALS`, `TRANSCRIPT_CORRECTION_ENABLED`,
   `LOW_CONFIDENCE_THRESHOLD`, `RETRY_*`, `PROMPTS_DIR`. No database, LiveKit or Azure.
 
