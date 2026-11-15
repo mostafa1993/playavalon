@@ -1,4 +1,9 @@
 name: charlie
 order: 3
+# Smart (the LLM player with a voice, Gemini 4): the first four bots a room asks
+# for are smart, ~$1.50-3 each a game; set `mode: stupid` and restart the
+# bot-supervisor to go back to the rule bot.
+mode: smart
+voice: fa-IR-FaridNeural
 brain:
   type: rule
