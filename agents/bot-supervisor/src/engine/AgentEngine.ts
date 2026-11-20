@@ -31,6 +31,7 @@ import { TalkMemory } from '../voice/talkMemory.js';
 import { VoiceLayer, turnKey } from '../voice/voiceLayer.js';
 import { TurnSpeaker } from '../voice/turnSpeaker.js';
 import { DiscussionTalk } from '../voice/discussionTalk.js';
+import { LobbyTalk } from '../voice/lobbyTalk.js';
 import { createBotLLM } from '../llm/client.js';
 import { createSmartView, type SmartView } from '../brains/smartView.js';
 import type { FromBot, ToBot } from '../supervisor/roomRelay.js';
@@ -225,11 +226,21 @@ export class AgentEngine {
         return;
       }
 
+      // Smart: in the lobby, before the game, the bot sits in the voice room and
+      // answers when called by name (plan 2026-11-20 lobby talk).
+      this.lobbyStage(obs);
+
       // We can only ask the Brain to decide if we have our identity (post-distribution).
       // Pre-distribution there's nothing to decide anyway — just wait.
       const identity = this.observer.identity();
       if (identity) {
         this.ensureVoice(identity.display_name);
+        // The intro's words need no one else's: drafted as soon as the role is dealt.
+        if (this.turns && !this.introDrafted) {
+          this.introDrafted = true;
+          // Not for a bot restarted after the intro round.
+          if (!obs.game || obs.game.in_intro_phase) this.turns.writeIntro();
+        }
         this.reads?.notice(identity, obs);
         const brainCtx = {
           identity,
@@ -311,10 +322,27 @@ export class AgentEngine {
     return false;
   }
 
-  /** Smart mode: join LiveKit (the mouth) once, as soon as we know who we are. */
+  /** Smart mode: join LiveKit (the mouth) once, as soon as the bot is seated (in the lobby) or knows who it is. */
   private voiceStarted = false;
   private turns: TurnSpeaker | null = null;
   private discussionTalk: DiscussionTalk | null = null;
+  private lobbyTalk: LobbyTalk | null = null;
+  private introDrafted = false;
+
+  /** In the lobby: join the voice room and listen for its name; once the game begins, stop. */
+  private lobbyStage(obs: Observation): void {
+    if (this.opts.config.mode !== 'smart') return;
+    const inLobby = (obs.room.status === 'waiting' || obs.room.status === 'roles_distributed') && !obs.game;
+    const me = obs.room.players.find((p) => p.id === this.session?.getUserId());
+    if (inLobby && me) {
+      this.ensureVoice(me.display_name);
+      if (this.lobbyTalk && !this.lobbyTalk.isActive() && !this.lobbyOver) this.lobbyTalk.start(me.display_name);
+    } else if (!inLobby && this.lobbyTalk?.isActive()) {
+      this.lobbyOver = true;
+      this.lobbyTalk.stop();
+    }
+  }
+  private lobbyOver = false;
   private ensureVoice(displayName: string): void {
     if (this.opts.config.mode !== 'smart' || this.voiceStarted || !this.talkMemory || !this.smartView) return;
     this.voiceStarted = true;
@@ -348,8 +376,17 @@ export class AgentEngine {
       };
       this.turns = new TurnSpeaker(deps);
       this.discussionTalk = new DiscussionTalk(deps);
-      // The intro's words need no one else's: drafted now, well before the intro round.
-      this.turns.writeIntro();
+      this.lobbyTalk = new LobbyTalk({
+        voice,
+        talk,
+        llm,
+        fetch: () => this.observer.fetch(),
+        myId: this.session!.getUserId(),
+        tell: (m: FromBot) => this.tell(m),
+        logger: this.logger,
+        persona: this.opts.config.persona,
+        callNames: this.opts.config.call_names,
+      });
       voice.setOnPrepare((info) => this.turns?.prepare(info));
       voice.setOnMyTurn((info) => void this.turns?.myTurn(info));
       voice.setOnDiscussionStart(() => this.discussionTalk?.start());
@@ -378,10 +415,18 @@ export class AgentEngine {
           this.talkMemory?.addDiscussion(m.speaker, m.text, m.fromBot);
           this.discussionTalk?.onLine();
           return;
+        case 'lobby':
+          if (!m.fromBot) this.logger.info(`[lobby] heard ${m.speaker}: ${m.text}`);
+          this.talkMemory?.addLobby(m.speaker, m.text, m.fromBot);
+          this.lobbyTalk?.onLine();
+          return;
         case 'talking':
           this.discussionTalk?.onTalking(m.speaker);
+          this.lobbyTalk?.onTalking(m.speaker);
           return;
         case 'floor':
+          // The floor goes to whoever asked for it: the lobby or the discussion.
+          if (this.lobbyTalk?.onFloor()) return;
           if (this.discussionTalk) this.discussionTalk.onFloor();
           else this.tell({ type: 'floor-release' });
       }

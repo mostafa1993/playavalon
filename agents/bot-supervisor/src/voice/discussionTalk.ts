@@ -24,6 +24,7 @@ import type { Identity } from '../types/Identity.js';
 import type { Observation } from '../types/Observation.js';
 import type { AgentLogger } from '../util/logger.js';
 import { seatTable } from '../brains/seats.js';
+import { hedged } from './hedge.js';
 import type { DiscussionLine, TalkMemory } from './talkMemory.js';
 import type { VoiceLayer } from './voiceLayer.js';
 
@@ -133,7 +134,7 @@ export class DiscussionTalk {
         const heardBefore = lines.length;
         const started = Date.now();
         try {
-          const reply = await this.writeHedged(me, opening);
+          const reply = await hedged(() => this.write(me, opening), opening ? OPENING_HEDGE_MS : HEDGE_MS);
           this.d.logger.info(`[discussion] ${reply ? 'reply' : 'staying quiet'} decided in ${((Date.now() - started) / 1000).toFixed(1)} s${opening ? ' (opening)' : ''}`);
           opening = false;
           if (this.d.talk.discussion().length !== heardBefore) {
@@ -157,39 +158,6 @@ export class DiscussionTalk {
   private async untilQuiet(maxMs: number): Promise<void> {
     const until = Date.now() + maxMs;
     while (someoneTalking(this.lastTalking, Date.now()) && Date.now() < until) await sleep(100);
-  }
-
-  /** write(), with a second call alongside if the first is slow (or failed); the first answer counts. */
-  private writeHedged(me: Identity, opening: boolean): Promise<string> {
-    return new Promise((resolve, reject) => {
-      let done = false;
-      let started = 0;
-      let failed = 0;
-      const go = () => {
-        started += 1;
-        this.write(me, opening).then(
-          (reply) => {
-            if (!done) {
-              done = true;
-              resolve(reply);
-            }
-          },
-          (err) => {
-            failed += 1;
-            if (done || failed < started) return;
-            if (started < 2) go();
-            else {
-              done = true;
-              reject(err);
-            }
-          }
-        );
-      };
-      go();
-      setTimeout(() => {
-        if (!done && started < 2) go();
-      }, opening ? OPENING_HEDGE_MS : HEDGE_MS);
-    });
   }
 
   private async write(me: Identity, opening: boolean): Promise<string> {

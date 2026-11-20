@@ -229,6 +229,7 @@ export interface RoomDetailsResponse {
       display_name: string;
       is_manager: boolean;
       is_connected: boolean;
+      is_bot?: boolean;
     }>;
     current_player: { id: string; display_name: string; is_manager: boolean };
     confirmations?: {

@@ -69,6 +69,12 @@ export const AgentConfigSchema = z.object({
   /** Azure neural voice for the smart bot's spoken turns — pick by the bot's
    *  gender: fa-IR-DilaraNeural (female, default) / fa-IR-FaridNeural (male). */
   voice: z.string().default('fa-IR-DilaraNeural'),
+  /** A smart bot in the lobby (plan 2026-11-20 lobby talk): who it is, in a few
+   *  English sentences (its manner, tastes, how it plays), for answering people. */
+  persona: z.string().default(''),
+  /** The spellings of its name it answers to in the lobby, as speech recognition
+   *  writes them (Persian script) and as typed; its display name always counts. */
+  call_names: z.array(z.string()).default([]),
   /** Used by the Phase-4 supervisor to pick the first N agents. No-op in P0-P3. */
   order: z.number().int().nonnegative().default(99),
   credentials: CredentialsConfig,

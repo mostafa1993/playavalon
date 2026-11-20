@@ -28,6 +28,8 @@ const VARS: Record<string, string[]> = {
   'speak-update.yml': ['brief', 'seat_table', 'game_so_far', 'private_read', 'situation', 'draft', 'new_since'],
   // the discussion's replies (src/engine/discussionTalk.ts)
   'discussion-reply.yml': ['brief', 'seat_table', 'game_so_far', 'private_read', 'discussion', 'last_line', 'you'],
+  // LobbyTalk.write (src/voice/lobbyTalk.ts): the lobby, before the game (no brief, no game yet)
+  'lobby-chat.yml': ['name', 'persona', 'players', 'setup', 'lobby', 'caller', 'request'],
   // ReadKeeper.update (src/brains/privateRead.ts)
   'private-read.yml': ['brief', 'seat_table', 'game_so_far', 'previous_read'],
 };
@@ -46,6 +48,7 @@ for (const [file, vars] of Object.entries(VARS)) {
     assert.equal(p.thinking_budget, undefined);
     const used = new Set([...`${p.system}\n${p.user}`.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]));
     for (const v of used) assert.ok(vars.includes(v), `${file} asks for {{${v}}}, which no caller passes`);
+    if (file === 'lobby-chat.yml') return; // before the game: no game so far, no role
     assert.ok(used.has('game_so_far'), 'the game so far');
     assert.ok(used.has('brief'), 'the brief');
   });

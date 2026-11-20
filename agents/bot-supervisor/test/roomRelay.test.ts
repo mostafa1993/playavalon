@@ -84,3 +84,13 @@ test('a bot that leaves, or keeps the floor too long, loses it', async () => {
   await new Promise((r) => setTimeout(r, 60));
   assert.equal(relay.floor, null);
 });
+
+test("a bot's lobby answer reaches the others as a bot's lobby line, and is kept", () => {
+  const relay = new RoomRelay();
+  const a = peer(), b = peer();
+  relay.addBot('bot_parisa', a);
+  relay.addBot('bot_koorosh', b);
+  relay.fromBot('bot_parisa', { type: 'lobby-said', speaker: 'Parisa', text: 'سلام' });
+  assert.deepEqual(a.got, []);
+  assert.deepEqual(b.got, [{ type: 'lobby', speaker: 'Parisa', text: 'سلام', fromBot: true }]);
+});

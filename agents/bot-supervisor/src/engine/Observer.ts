@@ -103,6 +103,7 @@ export class Observer {
         display_name: p.display_name,
         is_manager: p.is_manager,
         is_connected: p.is_connected,
+        is_bot: p.is_bot === true,
       })),
       roles_distributed: rolesDistributed,
       role_config: data.room.role_config ?? null,

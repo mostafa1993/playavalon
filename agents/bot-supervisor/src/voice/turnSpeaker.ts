@@ -206,6 +206,13 @@ export class TurnSpeaker {
       const { talk, llm, smart, logger } = this.d;
       const identity = this.d.identity();
       if (!identity) return null;
+      // No team to check (the intro, a leader's opening) and nothing said since: the draft as it
+      // is, without reading the game first.
+      const early = draftPromise ? await settled(draftPromise) : null;
+      if (early && early !== PENDING && (info.quest === 0 || opensRound(info)) && talk.turnsSince(early.talkVersion).length === 0) {
+        logger.info('[turn] the draft: nothing new since it was written');
+        return { text: early.text };
+      }
       const obs = await this.d.fetch();
       const args: SpeechArgs = { identity, observation: obs, smart, turn: info };
       const elapsed = () => Date.now() - startedAt;

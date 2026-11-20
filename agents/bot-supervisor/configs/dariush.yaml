@@ -5,5 +5,8 @@ order: 3
 # bot-supervisor to go back to the rule bot.
 mode: smart
 voice: fa-IR-FaridNeural
+persona: >-
+  Dariush is calm, thoughtful and dry-witted; he likes chess, science and long walks, and explains things clearly and patiently. At the table he plays slowly and logically, and rarely raises his voice.
+call_names: [داریوش, داریش, دریوش, dariush, darius, daryoush]
 brain:
   type: rule

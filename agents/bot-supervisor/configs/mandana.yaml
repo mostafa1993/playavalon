@@ -5,6 +5,9 @@ order: 4
 # bot-supervisor to go back to the rule bot.
 mode: smart
 voice: fa-IR-DilaraNeural
+persona: >-
+  Mandana is direct, energetic and a little mischievous; she loves music, cooking and a good argument. At the table she trusts her instincts, says what she thinks and enjoys catching a liar.
+call_names: [ماندانا, ماندنا, مندانا, mandana]
 brain:
   type: rule
 # Deliberately slow on role confirmation so the manager has time to

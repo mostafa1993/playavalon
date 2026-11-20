@@ -5,7 +5,8 @@
  * the room (supervisor/roomRelay.ts).
  *
  * It hears every timed speaking turn (the speaking timer says whose it is) and
- * the assassin-phase discussion, and transcribes people's speech live with
+ * the assassin-phase discussion — and before the game, the lobby's chat — and
+ * transcribes people's speech live with
  * Azure (plan 2026-11-15-2100, D1): a turn's words go out about a second after
  * it ends, a discussion phrase as soon as it is said. The bots' own speech is
  * skipped: each bot sends the exact words it said.
@@ -26,6 +27,7 @@ import type { Heard } from '../supervisor/roomRelay.js';
 import { azureRecognizers } from '../ears/recognizer.js';
 import { LiveTurns } from '../ears/liveTurns.js';
 import { LiveDiscussion } from '../ears/liveDiscussion.js';
+import { LiveLobby } from '../ears/liveLobby.js';
 import { makeLogger } from '../util/logger.js';
 
 const SAMPLE_RATE = 16000;
@@ -93,6 +95,20 @@ async function main(): Promise<void> {
     warn: (m) => log.warn(m),
   });
 
+  // Before the game: the lobby's chat, for the bots to answer when called by name.
+  const lobby = new LiveLobby({
+    recognizers,
+    isBot,
+    nameOf: (identity) => nameOf(identity),
+    onLine: (line) => {
+      send({ type: 'lobby', speaker: line.speaker, text: line.text, fromBot: false });
+      log.info(`heard ${line.speaker} in the lobby (${line.text.length} chars)`);
+    },
+    onTalking: (speaker) => send({ type: 'talking', speaker }),
+    talkingRms: TALKING_RMS,
+    warn: (m) => log.warn(m),
+  });
+
   const timerListener = new TimerListener(turns, { displayName: (identity) => nameOf(identity) });
   const discussionListener = new DiscussionListener(discussion, (identity) => nameOf(identity));
 
@@ -109,10 +125,18 @@ async function main(): Promise<void> {
     },
     {
       onAudioFrame: (identity, data, sampleRate) => {
+        lobby.onAudioFrame(identity, data, sampleRate);
         turns.onAudioFrame(identity, data, sampleRate);
         discussion.onAudioFrame(identity, data, sampleRate);
       },
-      onTimerData: (payload) => timerListener.onPayload(payload),
+      onTimerData: (payload) => {
+        // The game has begun: the lobby is over.
+        if (lobby.isActive()) {
+          lobby.stop();
+          log.info('the game has begun: no longer listening to the lobby');
+        }
+        timerListener.onPayload(payload);
+      },
       onDiscussionTimerData: (payload) => discussionListener.onPayload(payload),
     }
   );
@@ -135,7 +159,8 @@ async function main(): Promise<void> {
     log.info(`got ${sig}; finishing what is being transcribed`);
     timerListener.finalize();
     discussionListener.finalize();
-    await Promise.allSettled([...turns.pending(), ...discussion.pending()]);
+    lobby.stop();
+    await Promise.allSettled([...turns.pending(), ...discussion.pending(), ...lobby.pending()]);
     await listener.leave().catch(() => {});
     process.exit(0);
   };

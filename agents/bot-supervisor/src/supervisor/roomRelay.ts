@@ -8,7 +8,7 @@
  * heard is kept, and a bot that (re)starts gets it all when it says it is
  * ready ("X is talking" is passed on, not kept).
  *
- * In the discussion the relay also keeps the floor (plan 2026-11-15-2100, D4):
+ * In the discussion and the lobby the relay also keeps the floor (plan 2026-11-15-2100, D4):
  * one bot speaks at a time, in the order they asked; a bot that doesn't give
  * the floor back within floorMaxMs loses it.
  */
@@ -19,7 +19,9 @@ export type Heard =
   | { type: 'turn'; quest: number; round: number; turnIndex: number; speaker: string; text: string }
   /** A line of the assassin discussion. */
   | { type: 'discussion'; speaker: string; text: string; fromBot: boolean }
-  /** A person is talking in the discussion right now. */
+  /** A line of the lobby's talk, before the game (plan 2026-11-20 lobby talk). */
+  | { type: 'lobby'; speaker: string; text: string; fromBot: boolean }
+  /** A person is talking right now (the discussion, the lobby). */
   | { type: 'talking'; speaker: string };
 
 /** What the supervisor sends a bot: what was heard, or "the floor is yours". */
@@ -30,6 +32,7 @@ export type FromBot =
   | { type: 'ready' }
   | { type: 'said'; quest: number; round: number; turnIndex: number; speaker: string; text: string }
   | { type: 'discussed'; speaker: string; text: string }
+  | { type: 'lobby-said'; speaker: string; text: string }
   | { type: 'floor-request' }
   | { type: 'floor-release' };
 
@@ -90,11 +93,14 @@ export class RoomRelay {
         if (this.floorHolder === username) this.releaseFloor();
         return;
       case 'said':
-      case 'discussed': {
+      case 'discussed':
+      case 'lobby-said': {
         const heard: Heard =
           message.type === 'said'
             ? { type: 'turn', quest: message.quest, round: message.round, turnIndex: message.turnIndex, speaker: message.speaker, text: message.text }
-            : { type: 'discussion', speaker: message.speaker, text: message.text, fromBot: true };
+            : message.type === 'discussed'
+              ? { type: 'discussion', speaker: message.speaker, text: message.text, fromBot: true }
+              : { type: 'lobby', speaker: message.speaker, text: message.text, fromBot: true };
         this.heard.push(heard);
         for (const [name, other] of this.bots) if (name !== username) other.send(heard);
       }

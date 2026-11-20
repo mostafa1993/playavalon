@@ -31,9 +31,13 @@ export interface DiscussionLine {
   fromBot: boolean;
 }
 
+/** A line of the lobby's talk, before the game. */
+export type LobbyLine = DiscussionLine;
+
 export class TalkMemory {
   private readonly turns: TalkTurn[] = [];
   private readonly discussionLines: DiscussionLine[] = [];
+  private readonly lobbyLines: LobbyLine[] = [];
   private readonly over = new Set<string>();
 
   /** A turn's words; '' when nothing was said (the turn is still noted as over). */
@@ -56,6 +60,25 @@ export class TalkMemory {
   removeDiscussion(line: DiscussionLine | null): void {
     const i = line ? this.discussionLines.indexOf(line) : -1;
     if (i >= 0) this.discussionLines.splice(i, 1);
+  }
+
+  /** A lobby line; returns it (a bot's own line is recorded as it starts, and may be corrected). */
+  addLobby(speaker: string, text: string, fromBot: boolean): LobbyLine | null {
+    const clean = text.trim();
+    if (!clean) return null;
+    const line = { speaker, text: clean, fromBot };
+    this.lobbyLines.push(line);
+    return line;
+  }
+
+  removeLobby(line: LobbyLine | null): void {
+    const i = line ? this.lobbyLines.indexOf(line) : -1;
+    if (i >= 0) this.lobbyLines.splice(i, 1);
+  }
+
+  /** The lobby's talk, before the game (not part of the game so far). */
+  lobby(): readonly LobbyLine[] {
+    return this.lobbyLines;
   }
 
   /** Whether this turn's words (or its silence) have been heard. */

@@ -28,6 +28,8 @@ export interface PlayerObservation {
   is_manager: boolean;
   is_leader?: boolean;
   is_connected: boolean;
+  /** A bot's seat (the room's lobby view). */
+  is_bot?: boolean;
 }
 
 export interface RoomObservation {
