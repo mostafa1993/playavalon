@@ -7,6 +7,6 @@ mode: smart
 voice: fa-IR-DilaraNeural
 persona: >-
   Parisa is warm, curious and quick to laugh; she loves poetry (Hafez above all), travel and good tea, and asks people about themselves. At the table she reads people carefully and remembers who voted for what.
-call_names: [پریسا, پری‌سا, parisa]
+call_names: [پریسا, parisa]
 brain:
   type: rule

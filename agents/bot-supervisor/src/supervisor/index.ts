@@ -196,14 +196,19 @@ function roomHearing(roomCode: string): RoomHearing {
   if (!room) {
     room = { relay: new RoomRelay(), ears: null, earsRestarts: 0 };
     hearing.set(roomCode, room);
-    startEars(roomCode, room);
+    startEars(roomCode, room, true);
   }
   return room;
 }
 
-function startEars(roomCode: string, room: RoomHearing): void {
-  log.info(`starting the ears for room ${roomCode}`);
-  const proc = spawn(process.execPath, ['--import', 'tsx', EARS_CLI_PATH, '--room', roomCode], {
+/**
+ * The room's ears. `lobby`: the room is waiting, so they listen to its lobby
+ * too; a restart (after a crash, the game perhaps under way) doesn't.
+ */
+function startEars(roomCode: string, room: RoomHearing, lobby: boolean): void {
+  log.info(`starting the ears for room ${roomCode}${lobby ? '' : ' (not the lobby)'}`);
+  const args = ['--import', 'tsx', EARS_CLI_PATH, '--room', roomCode, ...(lobby ? [] : ['--no-lobby'])];
+  const proc = spawn(process.execPath, args, {
     stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
     env: process.env,
     cwd: PACKAGE_DIR,
@@ -221,7 +226,7 @@ function startEars(roomCode: string, room: RoomHearing): void {
     room.earsRestarts += 1;
     log.warn(`the ears for room ${roomCode} crashed (code ${code}); restart ${room.earsRestarts}/${MAX_RESTARTS_PER_AGENT}`);
     setTimeout(() => {
-      if (hearing.get(roomCode) === room && !shuttingDown) startEars(roomCode, room);
+      if (hearing.get(roomCode) === room && !shuttingDown) startEars(roomCode, room, false);
     }, 2000);
   });
 }

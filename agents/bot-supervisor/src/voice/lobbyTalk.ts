@@ -9,11 +9,14 @@
  * the first is slow), then goes quiet again. It remembers the lobby's talk, so
  * a later call can follow on from an earlier one. The model may still stay
  * quiet when the name only came up in passing. More of the caller's words
- * while the answer is being written mean it is written again with them.
+ * while the answer is being written mean it is written again with them (twice
+ * at most). Someone else calling meanwhile is answered next.
  *
- * One voice at a time: the bot asks the supervisor for the floor and waits
- * until nobody is talking. Bots answer people only, never each other. Roles
- * aren't in its prompt: nothing to let slip. Once the game begins it stops.
+ * One voice at a time: the bot asks the supervisor for the floor (waiting its
+ * turn behind other bots) and then for a quiet moment; if the lobby won't go
+ * quiet it lets the answer go rather than talk over people. Bots answer people
+ * only, never each other. Roles aren't in its prompt: nothing to let slip.
+ * Once the game begins it stops, mid-answer too (after the sentence it is on).
  */
 
 import type { LLMClient } from '@avalon/shared';
@@ -27,14 +30,18 @@ import type { LobbyLine, TalkMemory } from './talkMemory.js';
 import type { VoiceLayer } from './voiceLayer.js';
 
 export interface LobbyTiming {
-  /** Nobody heard talking for this long: the person has finished. */
+  /** Nobody heard talking for this long: a quiet moment to speak in. */
   quietMs: number;
+  /** The caller silent this long: they have finished (longer than a pause between two sentences). */
+  doneMs: number;
   /** The longest the bot waits for a caller to finish before answering. */
   settleMaxMs: number;
   /** An answer not written in this long gets a second call alongside. */
   hedgeMs: number;
-  /** The longest the bot waits for the floor, and then for quiet. */
-  waitForTurnMs: number;
+  /** The longest the bot waits for the floor (other bots named first answer before it). */
+  floorWaitMs: number;
+  /** The longest it then waits for a quiet moment before letting the answer go. */
+  quietWaitMs: number;
 }
 
 export interface LobbyTalkDeps {
@@ -52,7 +59,9 @@ export interface LobbyTalkDeps {
   timing?: Partial<LobbyTiming>;
 }
 
-const TIMING: LobbyTiming = { quietMs: 1_000, settleMaxMs: 8_000, hedgeMs: 4_500, waitForTurnMs: 15_000 };
+const TIMING: LobbyTiming = { quietMs: 1_000, doneMs: 1_500, settleMaxMs: 8_000, hedgeMs: 4_500, floorWaitMs: 90_000, quietWaitMs: 15_000 };
+/** Times an answer is written again because the caller said more meanwhile. */
+const MAX_REWRITES = 2;
 /** An answer is one to three short sentences. */
 const ANSWER_SECONDS = 25;
 /** The lobby talk a prompt gets: the latest lines. */
@@ -64,8 +73,10 @@ export class LobbyTalk {
   private again = false;
   private myName = '';
   private names: string[] = [];
-  /** Lobby lines before this index are answered or passed over. */
+  /** Lobby lines before this index hold no call left to answer. */
   private seen = 0;
+  /** Lines answered (a caller's request), so a later scan doesn't take them as calls again. */
+  private readonly handled = new WeakSet<LobbyLine>();
   private readonly lastTalking = new Map<string, number>();
   private floorGranted: (() => void) | null = null;
   private readonly t: LobbyTiming;
@@ -122,12 +133,12 @@ export class LobbyTalk {
     return true;
   }
 
-  /** The first call to me after `seen`: a person's line that holds my name. */
+  /** The first call to me after `seen` not yet answered: a person's line that holds my name. */
   private nextCall(): { index: number; speaker: string } | null {
     const lines = this.d.talk.lobby();
     for (let i = this.seen; i < lines.length; i += 1) {
       const line = lines[i]!;
-      if (!line.fromBot && mentions(line.text, this.names)) return { index: i, speaker: line.speaker };
+      if (!line.fromBot && !this.handled.has(line) && mentions(line.text, this.names)) return { index: i, speaker: line.speaker };
     }
     return null;
   }
@@ -144,30 +155,41 @@ export class LobbyTalk {
           if (this.again) continue;
           return;
         }
-        // A request comes in phrases: answer once the caller has finished.
-        await this.untilQuiet(this.t.settleMaxMs);
-        const lines = this.d.talk.lobby();
-        const request = callerWords(lines, call);
-        this.seen = lines.length;
-        const started = Date.now();
-        let answer: string;
-        try {
-          answer = await hedged(() => this.write(call.speaker, request), this.t.hedgeMs);
-        } catch (err) {
-          this.d.logger.warn(`[lobby] answering ${call.speaker} failed: ${(err as Error).message}`);
-          continue;
-        }
-        // The caller said more while it was being written: write it again with all of it.
-        if (this.d.talk.lobby().slice(this.seen).some((l) => !l.fromBot && l.speaker === call.speaker)) {
-          this.d.logger.info(`[lobby] ${call.speaker} said more meanwhile; answering all of it`);
-          this.seen = call.index;
-          continue;
-        }
-        this.d.logger.info(`[lobby] ${answer ? 'answer' : 'staying quiet'} for ${call.speaker}, written in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+        const answer = await this.answer(call);
+        if (!this.active) return;
+        // Everything before the call is past; the caller's request is answered; others' calls since are next.
+        this.seen = call.index + 1;
         if (answer) await this.say(answer);
       }
     } finally {
       this.busy = false;
+    }
+  }
+
+  /** Write the answer to a call once the caller has finished (again if they say more meanwhile). */
+  private async answer(call: { index: number; speaker: string }): Promise<string> {
+    for (let rewrites = 0; ; rewrites += 1) {
+      // A request comes in phrases: answer once the caller has finished.
+      await this.untilQuiet(this.t.settleMaxMs, this.t.doneMs);
+      if (!this.active) return '';
+      const lines = this.d.talk.lobby();
+      const upTo = lines.length;
+      const request = callerLines(lines, call);
+      const started = Date.now();
+      let answer = '';
+      try {
+        answer = await hedged(() => this.write(call.speaker, request.map((l) => l.text).join(' ')), this.t.hedgeMs);
+      } catch (err) {
+        this.d.logger.warn(`[lobby] answering ${call.speaker} failed: ${(err as Error).message}`);
+      }
+      const more = this.d.talk.lobby().slice(upTo).some((l) => !l.fromBot && l.speaker === call.speaker);
+      if (more && rewrites < MAX_REWRITES && this.active) {
+        this.d.logger.info(`[lobby] ${call.speaker} said more meanwhile; answering all of it`);
+        continue;
+      }
+      for (const l of callerLines(this.d.talk.lobby(), call)) this.handled.add(l);
+      this.d.logger.info(`[lobby] ${answer ? 'answer' : 'staying quiet'} for ${call.speaker}, written in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+      return answer;
     }
   }
 
@@ -193,34 +215,43 @@ export class LobbyTalk {
     return (out.reply ?? '').trim();
   }
 
-  private async untilQuiet(maxMs: number): Promise<void> {
+  private async untilQuiet(maxMs: number, quietMs = this.t.quietMs): Promise<void> {
     const until = Date.now() + maxMs;
-    while (this.someoneTalking() && Date.now() < until) await sleep(100);
+    while (this.someoneTalking(quietMs) && Date.now() < until) await sleep(100);
   }
 
-  private someoneTalking(): boolean {
+  private someoneTalking(quietMs = this.t.quietMs): boolean {
     const now = Date.now();
-    for (const at of this.lastTalking.values()) if (now - at < this.t.quietMs) return true;
+    for (const at of this.lastTalking.values()) if (now - at < quietMs) return true;
     return false;
   }
 
-  /** Get the floor, wait for quiet, say it, give the floor back. */
+  /** Get the floor (in turn behind other bots), wait for quiet, say it, give the floor back. */
   private async say(answer: string): Promise<void> {
     const granted = new Promise<void>((resolve) => {
       this.floorGranted = resolve;
     });
     this.d.tell({ type: 'floor-request' });
-    const gotFloor = await Promise.race([granted.then(() => true), sleep(this.t.waitForTurnMs).then(() => false)]);
+    const gotFloor = await Promise.race([granted.then(() => true), sleep(this.t.floorWaitMs).then(() => false)]);
     this.floorGranted = null;
     try {
       if (!gotFloor || !this.active) {
-        this.d.logger.info('[lobby] no floor in time; letting the answer go');
+        if (this.active) this.d.logger.info('[lobby] no floor in time; letting the answer go');
         return;
       }
-      await this.untilQuiet(this.t.waitForTurnMs);
+      await this.untilQuiet(this.t.quietWaitMs);
+      if (!this.active) return;
+      if (this.someoneTalking()) {
+        this.d.logger.info("[lobby] the lobby didn't go quiet; letting the answer go rather than talk over people");
+        return;
+      }
       // My line goes into the record as I start it: what's said meanwhile comes after it.
       const line = this.d.talk.addLobby(this.myName, answer, true);
-      const spoken = await this.d.voice.say(answer, Date.now(), { free: true, maxSeconds: ANSWER_SECONDS });
+      const spoken = await this.d.voice.say(answer, Date.now(), {
+        free: true,
+        maxSeconds: ANSWER_SECONDS,
+        keepGoing: () => this.active,
+      });
       if (spoken) {
         if (line) line.text = spoken;
         this.d.logger.info(`[mouth] said in the lobby: ${spoken}`);
@@ -234,11 +265,14 @@ export class LobbyTalk {
   }
 }
 
-/** The caller's words from their call on: their lines since it, others' left out. */
+/** The caller's lines from their call on, others' left out. */
+export function callerLines(lines: readonly LobbyLine[], call: { index: number; speaker: string }): LobbyLine[] {
+  return lines.slice(call.index).filter((l) => !l.fromBot && l.speaker === call.speaker);
+}
+
+/** The caller's words from their call on. */
 export function callerWords(lines: readonly LobbyLine[], call: { index: number; speaker: string }): string {
-  return lines
-    .slice(call.index)
-    .filter((l) => !l.fromBot && l.speaker === call.speaker)
+  return callerLines(lines, call)
     .map((l) => l.text)
     .join(' ');
 }

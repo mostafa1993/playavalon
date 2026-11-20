@@ -108,6 +108,13 @@ async function main(): Promise<void> {
     talkingRms: TALKING_RMS,
     warn: (m) => log.warn(m),
   });
+  // Restarted (perhaps mid-game): the lobby is not ours to hear.
+  if (args.includes('--no-lobby')) lobby.stop();
+  const endLobby = (why: string) => {
+    if (!lobby.isActive()) return;
+    lobby.stop();
+    log.info(`${why}: no longer listening to the lobby`);
+  };
 
   const timerListener = new TimerListener(turns, { displayName: (identity) => nameOf(identity) });
   const discussionListener = new DiscussionListener(discussion, (identity) => nameOf(identity));
@@ -130,14 +137,13 @@ async function main(): Promise<void> {
         discussion.onAudioFrame(identity, data, sampleRate);
       },
       onTimerData: (payload) => {
-        // The game has begun: the lobby is over.
-        if (lobby.isActive()) {
-          lobby.stop();
-          log.info('the game has begun: no longer listening to the lobby');
-        }
+        endLobby('the game has begun');
         timerListener.onPayload(payload);
       },
-      onDiscussionTimerData: (payload) => discussionListener.onPayload(payload),
+      onDiscussionTimerData: (payload) => {
+        endLobby('the assassin discussion');
+        discussionListener.onPayload(payload);
+      },
     }
   );
   nameOf = (identity) => listener.displayNameFor(identity) || identity;

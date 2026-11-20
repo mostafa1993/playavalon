@@ -7,6 +7,6 @@ mode: smart
 voice: fa-IR-FaridNeural
 persona: >-
   Koorosh is confident and playful, a born storyteller who teases his friends and takes a joke well; he loves football and old Persian history. At the table he talks a lot, bluffs boldly and hates losing.
-call_names: [کوروش, کورش, کروش, کوروشم, koorosh, kourosh, kurosh]
+call_names: [کوروش, کورش, کروش, koorosh, kourosh, kurosh]
 brain:
   type: rule

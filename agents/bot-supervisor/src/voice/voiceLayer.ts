@@ -73,6 +73,15 @@ export function sentences(text: string): string[] {
   return (text.match(/[^.!?؟…]+[.!?؟…]*/g) ?? [text]).map((x) => x.trim()).filter(Boolean);
 }
 
+export interface SpeakOptions {
+  /** Outside the speaking timer (the assassin discussion, the lobby). */
+  free?: boolean;
+  /** Free speech's limit, from its start. */
+  maxSeconds?: number;
+  /** Checked before each sentence: false ends the speech there. */
+  keepGoing?: () => boolean;
+}
+
 export interface VoiceLayerOptions {
   roomCode: string;
   botName: string; // config name, e.g. 'alice'
@@ -314,10 +323,19 @@ export class VoiceLayer {
    * while the one before it plays. A slot's speech is held to the time left in
    * the slot that started at `startedAt`: it stops at a sentence that would run
    * past it, and stays quiet once the slot has passed. Free speech (`free`: the
-   * assassin discussion, outside the speaking timer) is held to `maxSeconds`
-   * from `startedAt`. Returns the words it spoke, or null.
+   * assassin discussion and the lobby, outside the speaking timer) is held to
+   * `maxSeconds` from `startedAt`; `keepGoing` false stops it before the next
+   * sentence. One speech at a time: a second call waits for the first.
+   * Returns the words it spoke, or null.
    */
-  async speak(source: AsyncIterable<string>, startedAt: number, opts: { free?: boolean; maxSeconds?: number } = {}): Promise<string | null> {
+  speak(source: AsyncIterable<string>, startedAt: number, opts: SpeakOptions = {}): Promise<string | null> {
+    const run = this.speaking.then(() => this.speakNow(source, startedAt, opts));
+    this.speaking = run.catch(() => null);
+    return run;
+  }
+  private speaking: Promise<unknown> = Promise.resolve();
+
+  private async speakNow(source: AsyncIterable<string>, startedAt: number, opts: SpeakOptions): Promise<string | null> {
     if (!this.room) return null;
     const mine = () => opts.free === true || this.currentActiveSpeaker === this.selfIdentity;
     const limit = opts.free ? (opts.maxSeconds ?? FREE_SPEECH_SECONDS) : SLOT_SECONDS - SLOT_MARGIN_SECONDS;
@@ -332,6 +350,10 @@ export class VoiceLayer {
         const pcm = await synthesize(this.env.azure, sentence, { voice: this.opts.voice, sampleRate: MOUTH_SAMPLE_RATE });
         await playing;
         if (playbackFailed) break;
+        if (opts.keepGoing && !opts.keepGoing()) {
+          this.opts.logger.info('[mouth] told to stop; ending the speech here');
+          break;
+        }
         if (!mine()) {
           this.opts.logger.warn(`[mouth] the slot passed ${spoken.length ? 'while speaking' : 'before the first sentence was ready'} — stopping`);
           break;
@@ -369,7 +391,7 @@ export class VoiceLayer {
   }
 
   /** Speak a ready text (see speak()). */
-  say(text: string, startedAt: number, opts: { free?: boolean; maxSeconds?: number } = {}): Promise<string | null> {
+  say(text: string, startedAt: number, opts: SpeakOptions = {}): Promise<string | null> {
     return this.speak(fromSentences(sentences(text)), startedAt, opts);
   }
 
