@@ -9,8 +9,9 @@
  *     enough bot processes are already spawned. If not, spawns more.
  *   - Spawned children use the existing cli/run.ts (one process per agent,
  *     per plan §4 — supabase-js auth is global per client).
- *   - Picks bots by the `order` field in each agents/bot-supervisor/configs/<name>.yaml.
- *     Lower order = picked first; alphabetical name tie-breaks.
+ *   - Picks the smart bots first, in random order (free ones before those
+ *     running for another room), then the rule bots by the `order` field in
+ *     agents/bot-supervisor/configs/<name>.yaml (pickBots.ts).
  *   - On room transition out of 'waiting' (game starts, room closes, etc.)
  *     the supervisor doesn't kill the bots — they're playing the game and
  *     handle their own exit via game_over detection.
@@ -38,6 +39,7 @@ import WebSocket from 'ws';
 import { makeLogger } from '../util/logger.js';
 import { ensureBot } from '../util/credentials.js';
 import { RoomRelay, type FromBot, type Heard, type ToBot } from './roomRelay.js';
+import { pickBots } from './pickBots.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUN_CLI_PATH = resolve(__dirname, '..', 'cli', 'run.ts');
@@ -272,15 +274,15 @@ async function reconcileOnce(supabase: SupabaseClient, configs: AgentConfigSumma
     const needed = room.agent_count - covered;
     if (needed <= 0) continue;
 
-    // Pick the next N config slots whose username isn't already in this room AND
-    // isn't currently in-flight for this room.
+    // N bots whose username isn't already in this room nor in flight for it.
     const alreadyUsernames = await getRoomBotUsernames(supabase, room.id);
     const inFlightUsernames = new Set(
       Array.from(spawned.values()).filter((s) => s.roomCode === room.code).map((s) => s.username),
     );
     const exclude = new Set([...alreadyUsernames, ...inFlightUsernames]);
     const eligible = configs.filter((c) => !exclude.has(c.username));
-    const toSpawn = eligible.slice(0, needed);
+    const busy = new Set(Array.from(spawned.values()).filter((s) => s.roomCode !== room.code).map((s) => s.username));
+    const toSpawn = pickBots(eligible, needed, busy);
 
     if (toSpawn.length < needed) {
       log.warn(`room ${room.code}: wanted ${needed} bots but only ${toSpawn.length} configs available (pool exhausted?)`);

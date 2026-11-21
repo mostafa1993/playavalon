@@ -4,7 +4,11 @@
  * to callbacks. The AI reviewer and the smart bots' room ears both listen
  * through it.
  *
- * It never publishes audio or video. It subscribes to audio tracks only.
+ * It never publishes audio or video. It subscribes to microphones only: with
+ * every track subscribed, each camera in the room is received and decoded for
+ * nothing (a table of eight cameras cost a CPU core per listener, and with the
+ * reviewer and a room's ears both listening the server ran out of CPU mid-game,
+ * 2026-11-20).
  */
 
 import {
@@ -12,6 +16,7 @@ import {
   RoomEvent,
   AudioStream,
   RemoteAudioTrack,
+  TrackKind,
   type RemoteTrack,
   type RemoteTrackPublication,
   type RemoteParticipant,
@@ -90,19 +95,22 @@ export class LiveKitListener {
       }
     );
 
+    // Microphones only, subscribed by hand (TrackSubscribed then consumes them).
+    room.on(RoomEvent.TrackPublished, (pub: RemoteTrackPublication) => {
+      if (pub.kind === TrackKind.KIND_AUDIO) pub.setSubscribed(true);
+    });
+
     await room.connect(this.opts.wsUrl, token, {
-      autoSubscribe: true,
+      autoSubscribe: false,
       dynacast: false,
     });
     this.room = room;
 
-    // Pre-populate identity map with participants already in the room.
+    // Participants already in the room: names, and their microphones.
     for (const p of room.remoteParticipants.values()) {
       this.registerParticipant(p.identity, p.name ?? '');
       for (const pub of p.trackPublications.values()) {
-        if (pub.track instanceof RemoteAudioTrack) {
-          this.consumeAudio(pub.track, p.identity);
-        }
+        if (pub.kind === TrackKind.KIND_AUDIO) pub.setSubscribed(true);
       }
     }
   }
